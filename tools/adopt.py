@@ -58,6 +58,7 @@ VERBATIM_DOCS = (
     "briefs.md",
     "evidence.md",
     "git-and-isolation.md",
+    "kickoff.md",
     "lifecycle.md",
     "reports.md",
     "state.md",

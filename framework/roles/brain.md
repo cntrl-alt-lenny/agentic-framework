@@ -156,12 +156,31 @@ Each time Brain hands over, output **in the conversation**:
 
 - a one-line plain-language summary of what the last round achieved and what
   happens next;
-- the **complete prompt in a single block**, self-contained: it names the
+- **the executor prompt**, as a single self-contained block: it names the
   working directory, tells the agent which files to read before acting, and
   states the task and the report contract. The owner pastes it without reading
   it;
+- **the Verifier prompt, as a second separate block**, where the topology has
+  that seat — issued in the *same* turn, not after the work lands. The owner
+  opens both sessions at once and does not come back in between, so a round
+  costs them two pastes rather than three.
 - anything the owner genuinely must decide, phrased in product terms, not
   technical ones.
+
+Both prompts use **the project's own declared role names** from its `AGENTS.md`
+— `Builder`, `Decomper`, whatever it calls the seat — so the owner never has to
+translate between the contract's vocabulary and their project's.
+
+**Issuing the Verifier prompt early does not weaken exact-SHA review.** Name
+the *branch* rather than a commit that does not exist yet, and tell the
+Verifier to resolve the head SHA itself, confirm ancestry, record the literal
+SHA it reviewed, and stop and say so if the branch is missing or moves under
+it. Its contract already requires exactly that. What must never happen is
+Brain inventing a SHA, or the Verifier reviewing "the branch" as a moving
+target.
+
+The owner's side of this loop, including the exact text they paste to start a
+round and to come back from one, is [`../kickoff.md`](../kickoff.md).
 
 **The core prompt must be provider-neutral.** Build it from role, task and
 project state. It must paste cleanly into any capable tool. If the tool the
