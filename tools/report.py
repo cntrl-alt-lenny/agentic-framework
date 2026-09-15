@@ -309,7 +309,16 @@ def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
 
 
 def _commit_for_ref(ref: str, cwd: str | Path | None = None) -> str | None:
-    return _git(["rev-parse", "--verify", ref + "^{commit}"], cwd=cwd)
+    candidates = [ref]
+    if not ref.startswith(("origin/", "refs/")):
+        candidates.append("origin/" + ref)
+    for candidate in candidates:
+        resolved = _git(
+            ["rev-parse", "--verify", candidate + "^{commit}"], cwd=cwd
+        )
+        if resolved:
+            return resolved
+    return None
 
 
 def _is_ancestor(base: str, head: str, cwd: str | Path | None = None) -> bool:

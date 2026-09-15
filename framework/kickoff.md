@@ -48,7 +48,8 @@ Then tell me, in plain English:
      prompt as a separate self-contained block I can paste; otherwise say that
      no Verifier prompt is needed.
 
-I will run those two in fresh sessions and come back when they report.
+I will run those prompts in fresh sessions as this project's topology requires
+and come back when they report.
 ```
 
 That is the entire kickoff. It names no tool, no model and no provider, and it
