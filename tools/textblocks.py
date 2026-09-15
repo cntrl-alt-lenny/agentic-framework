@@ -26,15 +26,19 @@ __all__ = ["logical_lines", "counterexample_blocks", "negated", "NEGATORS",
            "COUNTEREXAMPLE_OPEN", "COUNTEREXAMPLE_CLOSE"]
 
 #: A normative document sometimes needs to quote a banned form in order to
-#: prohibit it, or to name what a guard catches. Wrap it:
+#: prohibit it, or to name what a guard catches. Wrap it and declare each
+#: structural violation explicitly:
 #:
 #:     <!-- guard:counterexample -->
+#:     <!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
 #:     ... text that SHOULD be rejected ...
 #:     <!-- /guard:counterexample -->
 #:
-#: Findings inside are suppressed, but callers still get the blocks back so they
-#: can assert every block actually contains something the guard rejects. An
-#: exemption that protects nothing is a silent widening.
+#: The neutrality probe validates the declaration with the real scanner and the
+#: roles named there; it never guesses from surrounding prose. Findings inside
+#: are suppressed, but callers still get the blocks back so they can assert
+#: every block actually contains something the guard rejects. An exemption that
+#: protects nothing is a silent widening.
 COUNTEREXAMPLE_OPEN = "<!-- guard:counterexample -->"
 COUNTEREXAMPLE_CLOSE = "<!-- /guard:counterexample -->"
 

@@ -64,8 +64,12 @@ addressed to a provider-plus-role compound, and new branches carried a provider
 prefix.
 
 <!-- guard:counterexample -->
+<!-- guard:violation compound-lane roles=decomper text="Claude Decomper" -->
 Concretely: `Claude Decomper` and `Codex Decomper` treated as two lanes;
+<!-- guard:violation compound-lane roles=decomper text="Codex Decomper" -->
 `codex-scaffolder` as a queue name; `gemini/<task>` as a branch namespace; a
+<!-- guard:violation prefixed-lane roles=scaffolder text="codex-scaffolder" -->
+<!-- guard:violation branch-namespace roles=builder text="gemini/<task>" -->
 topology described as "2 Claude + 2 Codex workers".
 <!-- /guard:counterexample -->
 

@@ -22,16 +22,20 @@ failure catalogues record which tool actually ran. That is a record of events,
 never a lane definition. Callers pass only their *normative* surface.
 
 COUNTEREXAMPLE BLOCKS. A normative document sometimes needs to quote a banned
-form in order to prohibit it. Wrap it:
+form in order to prohibit it. Wrap it and declare the structural violation it
+demonstrates:
 
     <!-- guard:counterexample -->
+    <!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
     ... text that SHOULD be rejected ...
     <!-- /guard:counterexample -->
 
-Findings inside such a block are suppressed but still reported separately, so a
-caller can assert that every block actually contains something the scanner
-rejects. An exemption that protects nothing is a silent widening of the guard,
-and `ScanResult.inert_counterexamples()` exists to make that fail.
+The declaration names the exact offending text and the roles with which it is
+invalid. The probe runs that text through the real scanner with those declared
+roles, not the adopting project's roles. A missing, absent or unflagged
+declaration is inert. Findings inside such a block are suppressed by the outer
+scan but still reported separately, so `ScanResult.inert_counterexamples()` can
+make a useless exemption fail.
 """
 
 from __future__ import annotations
@@ -209,6 +213,10 @@ def scan(
     queue_re = re.compile(queue_pattern) if queue_pattern else None
     role_set = set(roles)
     branch_prefixes = role_set | {coordinator}
+    role_branch_re = re.compile(
+        r"(?<![\w])([a-z0-9][\w.+]*[-_]" + _role_alt(roles) + r")/"
+        r"[\w.<>-]+"
+    )
 
     result = ScanResult()
     blocks, suppressed = counterexample_blocks(text)
@@ -270,6 +278,19 @@ def scan(
                 f"<role>/<scope> for {sorted(branch_prefixes)}",
             )
 
+        # A branch token whose namespace itself prefixes a declared role is
+        # unambiguously provider-shaped even when prose omits the word
+        # "branch" (for example, ``claude-decomper/fix-123``). Keep the
+        # ordinary context requirement above for generic paths such as
+        # ``acme/some-scope``.
+        if not BRANCH_LINE.search(line):
+            for match in role_branch_re.finditer(line):
+                emit(
+                    n, "branch-namespace",
+                    f"branch prefix '{match.group(1)}/' is not a role; new "
+                    f"branches are <role>/<scope> for {sorted(branch_prefixes)}",
+                )
+
         if queue_re is not None:
             for stem in queue_re.findall(line):
                 if stem not in role_set:
@@ -306,67 +327,27 @@ def scan(
     return result
 
 
-# A counterexample may quote a specialist role that is not part of the
-# adopting project's topology. That is still a real provider-shaped example,
-# but the ordinary scan must remain keyed only to the project's declared roles.
-# Probe the marked body for role-shaped words only when checking whether its
-# exemption is honest. This is structural: no provider names or role catalogue
-# is embedded here.
-_COUNTEREXAMPLE_CONTEXT = re.compile(
-    r"\b(?:lane|lanes|role|roles|queue|branch|namespace|worker|workers|"
-    r"executor|executors|seat|seats|session|sessions)\b",
-    re.IGNORECASE,
-)
-_COUNTEREXAMPLE_COMPOUND = re.compile(
-    r"(?<![\w-])(?:[A-Z][\w.+]*\s+)+([A-Z][\w.+]*)\b"
-)
-_COUNTEREXAMPLE_PREFIXED = re.compile(
-    r"(?<![\w])([a-z0-9][\w.+]*)[-_]([a-z][\w.+]*)\b"
-)
-_COUNTEREXAMPLE_LANE_CUE = re.compile(
-    r"\bas\s+(?:a|the)\s+"
-    r"(?:lane|lanes|queue|queues|branch|branches|namespace|namespaces|"
-    r"role|roles|seat|seats)\b",
-    re.IGNORECASE,
+_COUNTEREXAMPLE_DECLARATION = re.compile(
+    r'^\s*<!--\s*guard:violation\s+'
+    r'(?P<rule>[a-z][a-z0-9-]*)\s+'
+    r'roles=(?P<roles>[a-z0-9][a-z0-9_-]*(?:\s*,\s*[a-z0-9][a-z0-9_-]*)*)\s+'
+    r'text="(?P<text>[^"]+)"\s*-->\s*$'
 )
 
 
-def _counterexample_roles(text: str, roles: Sequence[str]) -> tuple[str, ...]:
-    """Add role-shaped words found in an explicitly marked example.
-
-    The ordinary scanner cannot treat every capitalised noun as a role: the
-    caller's declared roles are the source of truth for live policy. A marked
-    counterexample is different. Its surrounding lane vocabulary identifies
-    the role-shaped token in forms such as ``SomeProvider Specialist`` or
-    ``someprovider-specialist``. The probe therefore checks that the example
-    is structurally rejected without recognising any provider by name.
-    """
-    candidates = list(roles)
-    seen = set(candidates)
-    for _, line in logical_lines(text):
-        if not _COUNTEREXAMPLE_CONTEXT.search(line):
-            continue
-        for match in _COUNTEREXAMPLE_COMPOUND.finditer(line):
-            candidate = match.group(1).lower()
-            if candidate not in seen:
-                candidates.append(candidate)
-                seen.add(candidate)
-        for match in _COUNTEREXAMPLE_PREFIXED.finditer(line):
-            explicit_lane_cue = bool(
-                _COUNTEREXAMPLE_LANE_CUE.search(line[match.end():])
+def _counterexample_declarations(text: str) -> list[tuple[str, tuple[str, ...], str]]:
+    """Parse exact declarations without inferring anything from nearby prose."""
+    declarations: list[tuple[str, tuple[str, ...], str]] = []
+    for line in text.splitlines():
+        match = _COUNTEREXAMPLE_DECLARATION.match(line)
+        if match:
+            declared_roles = tuple(
+                role.strip() for role in match.group("roles").split(",")
             )
-            # Backticks alone are not a lane signal: ordinary prose quotes
-            # compounds such as `well-known`. An unlisted specialist token is
-            # role-shaped only when the line explicitly assigns it a lane
-            # meaning ("as a queue", "as a branch namespace", etc.). Declared
-            # roles remain covered by the ordinary structural scan above.
-            if not explicit_lane_cue:
-                continue
-            suffix = match.group(2)
-            if suffix not in seen:
-                candidates.append(suffix)
-                seen.add(suffix)
-    return tuple(candidates)
+            declarations.append(
+                (match.group("rule"), declared_roles, match.group("text"))
+            )
+    return declarations
 
 
 def scan_counterexample(
@@ -378,28 +359,44 @@ def scan_counterexample(
     queue_pattern: str | None = None,
     max_lanes: int | None = None,
 ) -> list[Finding]:
-    """Check an explicitly marked counterexample for a real violation.
+    """Check declarations against the real scanner, independently of ``roles``.
 
-    First use the adopting project's declared roles. If that finds nothing,
-    make the narrow structural probe described by ``_counterexample_roles``.
-    A harmless marked block still produces no findings, so callers can retain
-    the fail-closed inert-counterexample check.
+    The old implementation guessed role-shaped tokens from surrounding words.
+    That cannot distinguish harmless prose from a provider-shaped lane. A block
+    is non-inert only when every declaration is present in the body and its
+    declared rule is emitted by ``scan`` with the declaration's roles.
     """
-    roles = tuple(roles)
-    findings = scan(
-        text, roles, source=source, coordinator=coordinator,
-        queue_pattern=queue_pattern, max_lanes=max_lanes,
-    ).findings
-    if findings:
-        return findings
-
-    probed_roles = _counterexample_roles(text, roles)
-    if probed_roles == roles:
+    del roles, coordinator, queue_pattern, max_lanes
+    declarations = _counterexample_declarations(text)
+    if any("guard:violation" in line for line in text.splitlines()) and not all(
+        _COUNTEREXAMPLE_DECLARATION.match(line)
+        for line in text.splitlines()
+        if "guard:violation" in line
+    ):
         return []
-    return scan(
-        text, probed_roles, source=source, coordinator=coordinator,
-        queue_pattern=queue_pattern, max_lanes=max_lanes,
-    ).findings
+    if not declarations:
+        return []
+
+    declaration_lines = {
+        line for line in text.splitlines()
+        if _COUNTEREXAMPLE_DECLARATION.match(line)
+    }
+    body = "\n".join(
+        line for line in text.splitlines() if line not in declaration_lines
+    )
+    findings: list[Finding] = []
+    for rule, declared_roles, offending_text in declarations:
+        if not offending_text or offending_text not in body:
+            return []
+        try:
+            result = scan(offending_text, declared_roles, source=source)
+        except ValueError:
+            return []
+        matching = [finding for finding in result.findings if finding.rule == rule]
+        if not matching:
+            return []
+        findings.extend(matching)
+    return findings
 
 
 def scan_adapter_blocks(text: str, *, source: str = "<text>") -> list[Finding]:

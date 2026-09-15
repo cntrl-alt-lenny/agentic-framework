@@ -6,9 +6,11 @@ and that every exemption must still match something real.
 
 Both guards share one exemption mechanism — the `guard:counterexample` block —
 so the honesty rule is checked once, jointly: **every block must be rejected by
-at least one guard.** A block caught by neither is either not a violation at all
-(so the document is teaching the wrong thing) or evidence that the rule which
-used to catch it has regressed.
+at least one guard.** Structural blocks declare their offending text and role
+set; the neutrality probe runs that declaration through the real scanner rather
+than guessing from nearby prose. A block caught by neither is either not a
+violation at all (so the document is teaching the wrong thing) or evidence that
+the rule which used to catch it has regressed.
 """
 
 from __future__ import annotations

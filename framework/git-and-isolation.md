@@ -70,6 +70,7 @@ branch** — never which provider ran it. A project may use a different scheme
 project structure and never from a provider.
 
 <!-- guard:counterexample -->
+<!-- guard:violation branch-namespace roles=builder text="Never: `claude/<task>`, `codex/<task>`, `gemini/<task>`, or any branch namespace" -->
 Never: `claude/<task>`, `codex/<task>`, `gemini/<task>`, or any branch namespace
 named after the tool that happened to run the round.
 <!-- /guard:counterexample -->
