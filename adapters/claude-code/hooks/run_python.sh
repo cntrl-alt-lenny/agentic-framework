@@ -5,10 +5,11 @@
 #
 # GENERIC ON PURPOSE. The script to run is an argument, not baked in, so one
 # shim serves every Python hook a project wires rather than needing a new
-# wrapper per hook. That shape is taken from a downstream project that had
-# already arrived at it independently while this repository still hardcoded a
-# single script -- the consuming repo was right, and this is now the canonical
-# copy so the next project inherits it instead of solving it again.
+# wrapper per hook. That shape is taken from edopro-retro-formats,
+# .claude/hooks/run_python.sh, which had already arrived at it independently
+# while this repository still hardcoded a single script -- the consuming repo
+# was right, and this is now the canonical copy so the next project inherits it
+# instead of solving it again.
 #
 # THE DEFECT THIS CLOSES. `settings.json` used to invoke one hardcoded
 # interpreter name directly. Which name resolves to a real Python 3 differs by

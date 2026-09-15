@@ -360,10 +360,14 @@ def _iter_files(paths: Sequence[str]) -> list["Path"]:
     out: list[Path] = []
     for raw in paths:
         p = Path(raw)
+        if not p.exists():
+            raise FileNotFoundError(raw)
         if p.is_dir():
             out += sorted(q for q in p.rglob("*.md") if q.is_file())
         elif p.is_file():
             out.append(p)
+        else:
+            raise OSError(f"not a regular file or directory: {raw}")
     return out
 
 
@@ -428,7 +432,11 @@ def main(argv: Sequence[str] | None = None) -> int:
               "would make every rule vacuous", file=sys.stderr)
         return 2
 
-    files = _iter_files(args.paths)
+    try:
+        files = _iter_files(args.paths)
+    except OSError as exc:
+        print(f"neutrality: cannot scan requested path: {exc}", file=sys.stderr)
+        return 2
     if not files:
         print("neutrality: no files matched; refusing to report success",
               file=sys.stderr)

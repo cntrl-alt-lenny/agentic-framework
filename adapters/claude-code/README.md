@@ -87,9 +87,10 @@ broken.
 
 The wrapper takes its target as an argument so one shim serves every Python
 hook a project wires, rather than needing a new wrapper per hook. That shape
-came from a downstream project that had already arrived at it while this
-adapter still hardcoded a single script; this is now the canonical copy, so
-the next project inherits it instead of solving it again.
+came from edopro-retro-formats, `.claude/hooks/run_python.sh`, which had already
+arrived at it while this adapter still hardcoded a single script; this is now
+the canonical copy, so the next project inherits it instead of solving it
+again.
 
 The wrapper tries `python3`, then `py -3` (Windows), then `python`, and tries
 each one *for real* rather than merely checking it exists — a name that

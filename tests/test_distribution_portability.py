@@ -59,6 +59,15 @@ def has_shebang(path: Path) -> bool:
         return False
 
 
+def is_git_text(path: str) -> bool:
+    result = subprocess.run(
+        ["git", "check-attr", "text", "--", path],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    )
+    value = result.stdout.rsplit(": ", 1)[-1].strip()
+    return value in {"set", "auto"}
+
+
 class TestLineEndingsArePinned(unittest.TestCase):
     """`text=auto` alone is not enough; it still checks out CRLF on Windows."""
 
@@ -92,6 +101,8 @@ class TestLineEndingsArePinned(unittest.TestCase):
         offenders = []
         for mode, path in tracked_files():
             if mode == "120000":  # symlink
+                continue
+            if not is_git_text(path):
                 continue
             full = ROOT / path
             try:
@@ -176,6 +187,19 @@ class TestScannersAreRunnableWithoutGlue(unittest.TestCase):
         )
         self.assertIn("routine-approval", proc.stdout)
 
+    def test_authority_rejects_an_inert_counterexample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "inert.md"
+            bad.write_text(
+                "<!-- guard:counterexample -->\n"
+                "The Builder executes one brief.\n"
+                "<!-- /guard:counterexample -->\n",
+                encoding="utf-8",
+            )
+            proc = self._run("authority.py", str(bad))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("counterexample block suppresses nothing", proc.stdout)
+
     def test_neutrality_scans_clean_and_exits_zero(self):
         proc = self._run(
             "neutrality.py", "framework/roles/", "--roles", "worker,verifier",
@@ -210,6 +234,19 @@ class TestScannersAreRunnableWithoutGlue(unittest.TestCase):
                     "a scan that matched no files must not exit 0; "
                     "'nothing was checked' is the unsafe case",
                 )
+
+    def test_both_reject_a_missing_path_alongside_a_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            valid = Path(tmp) / "valid.md"
+            missing = Path(tmp) / "missing.md"
+            valid.write_text("Worker never merges.\n", encoding="utf-8")
+            for script in ("authority.py", "neutrality.py"):
+                with self.subTest(script=script):
+                    args = [str(valid), str(missing)]
+                    if script == "neutrality.py":
+                        args += ["--roles", "worker"]
+                    proc = self._run(script, *args)
+                    self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

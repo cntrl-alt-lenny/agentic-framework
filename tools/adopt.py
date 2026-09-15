@@ -257,8 +257,13 @@ def build_plan(
             raise SystemExit(f"adopt: {exc}") from exc
         for src in adapter.source_files():
             rel = src.relative_to(src_dir).as_posix()
-            add(adapter.destination(rel), src.read_text(encoding="utf-8"),
-                executable=src.suffix == ".py")
+            with src.open("rb") as stream:
+                executable = stream.readline().startswith(b"#!")
+            add(
+                adapter.destination(rel),
+                src.read_text(encoding="utf-8"),
+                executable=executable,
+            )
         plan.notes += adapter_notes(adapter, workers=workers, verifier=verifier)
 
     plan.notes.append(
@@ -296,7 +301,11 @@ def apply_plan(plan: Plan) -> list[Path]:
     unset: list[Path] = []
     for dst, content, executable in plan.writes:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(content, encoding="utf-8")
+        # Disable platform newline translation explicitly. `Path.write_text`
+        # does not provide that guarantee on Python versions still supported by
+        # adopting projects, so normalize the source and write LF bytes here.
+        with dst.open("w", encoding="utf-8", newline="") as stream:
+            stream.write(content.replace("\r\n", "\n").replace("\r", "\n"))
         if executable:
             try:
                 dst.chmod(dst.stat().st_mode | 0o111)
@@ -362,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         for dst in unset:
             print(f"  git update-index --chmod=+x {dst.relative_to(target)}",
                   file=sys.stderr)
+        return 1
     print("\nadopt: done.")
     return 0
 
