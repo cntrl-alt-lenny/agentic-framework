@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,6 +69,16 @@ class TestDefaultAdoption(AdoptionCase):
         """
         self.assertTrue((self.target / "tools" / "report.py").is_file())
         self.assertTrue((self.target / "docs" / "agents" / "reports.md").is_file())
+
+    def test_shebang_tools_are_installed_executable(self):
+        for rel in (
+            "tools/authority.py",
+            "tools/neutrality.py",
+            "tools/textblocks.py",
+            "tools/report.py",
+        ):
+            with self.subTest(path=rel):
+                self.assertTrue((self.target / rel).stat().st_mode & 0o111)
 
     def test_history_is_not_copied(self):
         # The catalogue and case studies are this repository's evidence, not the
@@ -202,6 +213,15 @@ class TestTopologyOptions(AdoptionCase):
         self.assertTrue(adapter.is_file())
         self.assertIn("docs/agents/roles/worker.md", adapter.read_text(encoding="utf-8"))
 
+    def test_adapter_shebang_files_are_installed_executable(self):
+        self.assertEqual(run_adopt(self.target, "--adapter", "claude-code"), 0)
+        for rel in (
+            ".claude/hooks/run_python.sh",
+            ".claude/hooks/save_agent_reply.py",
+        ):
+            with self.subTest(path=rel):
+                self.assertTrue((self.target / rel).stat().st_mode & 0o111)
+
     def test_a_specialist_topology_still_gets_the_generic_executor_seat(self):
         self.assertEqual(
             run_adopt(self.target, "--adapter", "claude-code",
@@ -250,6 +270,32 @@ class TestSafety(AdoptionCase):
     def test_missing_target_is_refused(self):
         self.assertEqual(
             run_adopt(self.target / "does-not-exist"), 2
+        )
+
+    def test_adoption_fails_when_executable_bit_does_not_take(self):
+        plan = adopt.Plan(writes=[
+            (self.target / "hook", "#!/bin/sh\n", True),
+        ])
+        with mock.patch.object(adopt.os, "name", "nt"):
+            self.assertEqual(adopt.apply_plan(plan), [self.target / "hook"])
+
+    def test_real_mode_postcondition_rejects_a_nonexecutable_file(self):
+        path = self.target / "not-executable"
+        path.write_text("content\n", encoding="utf-8")
+        path.chmod(0o644)
+        self.assertFalse(adopt.executable_bit_took(path))
+
+    def test_adoption_writes_lf_without_path_write_text(self):
+        plan = adopt.Plan(writes=[
+            (self.target / "nested" / "script.sh", "#!/bin/sh\nrun\n", False),
+        ])
+        with mock.patch.object(
+            Path, "write_text", side_effect=AssertionError("use explicit LF I/O")
+        ):
+            self.assertEqual(adopt.apply_plan(plan), [])
+        self.assertEqual(
+            (self.target / "nested" / "script.sh").read_bytes(),
+            b"#!/bin/sh\nrun\n",
         )
 
 
