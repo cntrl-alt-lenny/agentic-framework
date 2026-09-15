@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import docset  # noqa: E402
 import neutrality  # noqa: E402
+import textblocks  # noqa: E402
 
 #: Declared once, in tools/docset.py, and imported everywhere else.
 ROLES = docset.ROLES
@@ -130,11 +131,43 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             "This role illustrates role-based delegation.\n",
             "Each branch uses a well-known best-practice layout.\n",
             "The role of a long-term plan is explained here.\n",
+            "A role-based queue is a well-known pattern.\n",
+            "The lane has a first-class namespace.\n",
+            "Use `well-known` names for each role.\n",
         ):
             with self.subTest(body=body):
-                self.assertEqual(
-                    neutrality.scan_counterexample(body, ("builder",)), []
+                self.assertEqual(neutrality.scan_counterexample(
+                    body, ("builder", "verifier")
+                ), [])
+
+    def test_counterexample_probe_catches_lane_syntax_beyond_declared_roles(self):
+        for body, rule in (
+            ("Hand it to the Acme Builder.\n", "compound-lane"),
+            ("Use the `codex-builder` queue.\n", "prefixed-lane"),
+            ("Cut `acme/some-scope` for this branch.\n", "branch-namespace"),
+            ("Use `codex-scaffolder` as a queue name.\n", "prefixed-lane"),
+        ):
+            with self.subTest(body=body):
+                findings = neutrality.scan_counterexample(
+                    body, ("builder", "verifier")
                 )
+                self.assertTrue(
+                    any(f.rule == rule for f in findings),
+                    f"{body!r} was not reported as {rule}: {findings}",
+                )
+
+    def test_framework_topologies_counterexample_is_noninert_for_builder_verifier(self):
+        text = (ROOT / "framework" / "topologies.md").read_text(encoding="utf-8")
+        blocks, _ = textblocks.counterexample_blocks(text)
+        self.assertTrue(blocks, "topologies.md must contain a counterexample block")
+        findings = [
+            finding
+            for _, body in blocks
+            for finding in neutrality.scan_counterexample(
+                body, ("builder", "verifier")
+            )
+        ]
+        self.assertTrue(findings, "topologies.md counterexample became inert")
 
     def test_scan_records_an_unlisted_specialist_counterexample_as_noninert(self):
         text = (

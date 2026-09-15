@@ -170,6 +170,7 @@ class TestTopologyOptions(AdoptionCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
     def test_unusual_single_role_adoption_runs_the_installed_guard(self):
+        """Coverage for a legal topology, not evidence of the blocker fix."""
         self.assertEqual(
             run_adopt(self.target, "--workers", "orthogonalist"),
             0,

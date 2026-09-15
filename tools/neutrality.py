@@ -323,7 +323,7 @@ _COUNTEREXAMPLE_PREFIXED = re.compile(
     r"(?<![\w])([a-z0-9][\w.+]*)[-_]([a-z][\w.+]*)\b"
 )
 _COUNTEREXAMPLE_LANE_CUE = re.compile(
-    r"\b(?:as\s+(?:a|the)\s+)?"
+    r"\bas\s+(?:a|the)\s+"
     r"(?:lane|lanes|queue|queues|branch|branches|namespace|namespaces|"
     r"role|roles|seat|seats)\b",
     re.IGNORECASE,
@@ -351,16 +351,15 @@ def _counterexample_roles(text: str, roles: Sequence[str]) -> tuple[str, ...]:
                 candidates.append(candidate)
                 seen.add(candidate)
         for match in _COUNTEREXAMPLE_PREFIXED.finditer(line):
-            token_is_marked = (
-                match.start() > 0
-                and line[match.start() - 1] == "`"
-                and match.end() < len(line)
-                and line[match.end()] == "`"
-            )
             explicit_lane_cue = bool(
                 _COUNTEREXAMPLE_LANE_CUE.search(line[match.end():])
             )
-            if not (token_is_marked or explicit_lane_cue):
+            # Backticks alone are not a lane signal: ordinary prose quotes
+            # compounds such as `well-known`. An unlisted specialist token is
+            # role-shaped only when the line explicitly assigns it a lane
+            # meaning ("as a queue", "as a branch namespace", etc.). Declared
+            # roles remain covered by the ordinary structural scan above.
+            if not explicit_lane_cue:
                 continue
             suffix = match.group(2)
             if suffix not in seen:
