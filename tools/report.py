@@ -327,8 +327,8 @@ def _fetch_branch(branch: str, cwd: str | Path | None = None) -> None:
     A Verifier may be in a separate clone, where the Builder's later push is
     not present in any local ref until it is fetched. A linked worktree may
     already have the local branch, and a repository without an ``origin`` may
-    be intentionally offline; both cases remain usable because the local
-    resolution below is still authoritative and fetch failure is retryable.
+    be intentionally offline; both cases remain usable because the local and
+    fetched remote refs are reconciled below and fetch failure is retryable.
     """
     remote_branch = branch
     if remote_branch.startswith("refs/remotes/origin/"):
@@ -351,6 +351,49 @@ def _fetch_branch(branch: str, cwd: str | Path | None = None) -> None:
         return
 
 
+def _branch_ref_names(branch: str) -> tuple[str, str]:
+    """Return the local and origin ref names for a branch argument."""
+    name = branch
+    if name.startswith("refs/remotes/origin/"):
+        name = name[len("refs/remotes/origin/"):]
+    elif name.startswith("refs/heads/"):
+        name = name[len("refs/heads/"):]
+    elif name.startswith("origin/"):
+        name = name[len("origin/"):]
+    return name, "origin/" + name
+
+
+def _exact_commit(ref: str, cwd: str | Path | None = None) -> str | None:
+    """Resolve exactly one ref, without falling back to another namespace."""
+    return _git(["rev-parse", "--verify", ref + "^{commit}"], cwd=cwd)
+
+
+def _delivery_branch_head(
+    branch: str, cwd: str | Path | None = None,
+) -> tuple[str | None, str | None]:
+    """Reconcile a local branch with the freshly fetched origin branch.
+
+    A stale local ref must not hide a newer remote head. A local branch ahead
+    of origin is valid for a linked Builder worktree, while divergence is
+    ambiguous and must remain retryable rather than selecting either side.
+    """
+    local_ref, remote_ref = _branch_ref_names(branch)
+    local = _exact_commit(local_ref, cwd)
+    remote = _exact_commit(remote_ref, cwd)
+    if local is None:
+        if remote is None:
+            return None, None
+        return remote, None
+    if remote is None or local == remote:
+        return local, None
+    if _is_ancestor(local, remote, cwd):
+        return remote, None
+    if _is_ancestor(remote, local, cwd):
+        return local, None
+    return None, (
+        f"not delivered yet: local branch '{local_ref}' at {local} diverges "
+        f"from fetched origin/{local_ref} at {remote}"
+    )
 def _is_ancestor(base: str, head: str, cwd: str | Path | None = None) -> bool:
     try:
         return subprocess.run(
@@ -382,7 +425,9 @@ def delivery_status(
     the same retryable "not delivered yet" state.
     """
     _fetch_branch(branch, cwd)
-    head = _commit_for_ref(branch, cwd)
+    head, conflict = _delivery_branch_head(branch, cwd)
+    if conflict:
+        return 1, conflict
     if head is None:
         return 1, f"not delivered yet: branch '{branch}' is not available"
     base_sha = _commit_for_ref(base, cwd)

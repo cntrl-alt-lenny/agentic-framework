@@ -30,6 +30,7 @@ import adopt  # noqa: E402
 KICKOFF = ROOT / "framework" / "kickoff.md"
 BRAIN = ROOT / "framework" / "roles" / "brain.md"
 VERIFIER = ROOT / "framework" / "roles" / "verifier.md"
+LIFECYCLE = ROOT / "framework" / "lifecycle.md"
 
 FENCED = re.compile(r"^```\n(.*?)^```", re.S | re.M)
 
@@ -83,6 +84,18 @@ class TestThePasteableBlocksAreUsable(unittest.TestCase):
             "no block covers coming back to Brain once the round has run",
         )
 
+    def test_the_owner_order_is_next_to_the_prompt_blocks(self):
+        text = " ".join(self.text.split())
+        self.assertIn("sends the Builder prompt first", text)
+        self.assertIn(
+            "sends the Verifier prompt only after the Builder has finished",
+            text,
+        )
+        self.assertIn(
+            "I sent the Verifier prompt only after the Builder finished",
+            text,
+        )
+
 
 class TestBrainStillIssuesBothPrompts(unittest.TestCase):
     """The regression this exists to prevent: silently going back to one."""
@@ -91,16 +104,26 @@ class TestBrainStillIssuesBothPrompts(unittest.TestCase):
         text = BRAIN.read_text(encoding="utf-8")
         self.assertIn("Verifier prompt", text)
         self.assertIn(
-            "same time", text,
-            "the Verifier prompt must be issued at the same time as the "
-            "executor prompt, or the owner is back to three round trips",
+            "same turn", text,
+            "Brain may prepare both prompt blocks in one response",
         )
+        self.assertIn("sends the Builder prompt first", text)
+        self.assertIn("only after the Builder has finished", text)
 
     def test_the_contract_makes_the_verifier_topology_conditional(self):
         text = " ".join(BRAIN.read_text(encoding="utf-8").split())
-        self.assertIn("Do not dispatch a Verifier prompt at all where the topology has no Verifier seat", text)
+        self.assertIn("Do not issue a Verifier prompt at all where the topology has no Verifier seat", text)
         self.assertIn("strictly ahead of the base", text)
         self.assertIn('"not delivered yet"', text)
+
+    def test_all_loop_documents_make_owner_order_explicit(self):
+        for path in (KICKOFF, BRAIN, LIFECYCLE, VERIFIER):
+            with self.subTest(path=path):
+                text = " ".join(path.read_text(encoding="utf-8").split())
+                self.assertIn("only after the Builder has finished", text)
+                self.assertNotIn("opens both sessions at once", text)
+                self.assertNotIn("starts both sessions at the same time", text)
+                self.assertNotIn("Verifier waits for mechanical delivery", text)
 
 
 class TestEarlyVerifierPromptsKeepExactShaDiscipline(unittest.TestCase):
@@ -227,6 +250,7 @@ class TestDeliveryCommand(unittest.TestCase):
         for clone in (builder, verifier):
             self._git(clone, "config", "user.email", "test@example.invalid")
             self._git(clone, "config", "user.name", "Test")
+        self._git(verifier, "branch", "worker/task", base)
 
         self._git(builder, "switch", "-c", "worker/task")
         self._git(builder, "switch", "main")
@@ -262,6 +286,49 @@ class TestDeliveryCommand(unittest.TestCase):
         after_push = self._check(verifier, base)
         self.assertEqual(after_push.returncode, 0, after_push.stdout + after_push.stderr)
         self.assertIn("delivered:", after_push.stdout)
+
+    def test_diverged_local_branch_is_retryable_and_explains_the_conflict(self):
+        tmp, seed, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        remote = Path(tmp.name) / "origin.git"
+        self._git(seed, "init", "--bare", "-q", str(remote))
+        self._git(seed, "remote", "add", "origin", str(remote))
+        self._git(seed, "push", "-q", "origin", "main")
+
+        builder = Path(tmp.name) / "builder"
+        verifier = Path(tmp.name) / "verifier"
+        for clone in (builder, verifier):
+            subprocess.run(
+                ["git", "clone", "-q", "-b", "main", str(remote), str(clone)],
+                check=True,
+            )
+            self._git(clone, "config", "user.email", "test@example.invalid")
+            self._git(clone, "config", "user.name", "Test")
+
+        self._git(builder, "switch", "-c", "worker/task")
+        (builder / "remote.txt").write_text("remote\n", encoding="utf-8")
+        self._git(builder, "add", "remote.txt")
+        self._git(builder, "commit", "-q", "-m", "remote delivery")
+        remote_head = self._git(builder, "rev-parse", "HEAD")
+        self._git(builder, "push", "-q", "-u", "origin", "worker/task")
+
+        self._git(verifier, "switch", "-c", "worker/task")
+        (verifier / "local.txt").write_text("local\n", encoding="utf-8")
+        self._git(verifier, "add", "local.txt")
+        self._git(verifier, "commit", "-q", "-m", "local divergence")
+        proc = self._check(verifier, base)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("diverges", proc.stdout)
+        self.assertIn(remote_head, proc.stdout)
+
+    def test_unreachable_remote_stays_retryable(self):
+        tmp, repo, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        self._git(repo, "remote", "add", "origin", str(Path(tmp.name) / "missing.git"))
+        proc = self._check(repo, base)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("not delivered yet", proc.stdout)
+        self.assertNotIn("Traceback", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

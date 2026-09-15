@@ -11,14 +11,16 @@ prompt".
    brief.
 3. **Brain hands the owner a ready-to-paste prompt.** Provider-neutral core; any
    tool-specific mechanics appended after it, marked optional.
-4. **Owner chooses a tool or model and pastes the prompt.**
+4. **Owner chooses a tool or model and pastes the Builder prompt first.** Where
+   the topology has a Verifier, Brain may provide its prompt in the same turn,
+   but labels it to be sent only after the Builder has finished.
 5. **Worker executes** in its own isolated checkout, commits, pushes its branch,
-   and reports. Where the topology has a Verifier, the owner starts both
-   sessions at the same time; the Verifier waits for the mechanical delivery
-   check before reviewing.
-6. **Owner relays completion** if nothing automates it. If the Verifier's
-   session ends first, it says **"not delivered yet"** and the owner pastes its
-   prompt again later.
+   and reports. The owner sends the Verifier prompt only after that Builder
+   delivery; the Verifier does not wait or poll for it.
+6. **Owner relays completion** if nothing automates it. If the mechanical check
+   does not establish delivery in the Verifier's session, it says **"not
+   delivered yet"** and the owner sends its prompt again once delivery is
+   available.
 7. **Brain inspects the exact repository state** — literal SHAs, the real diff,
    real validation output, CI at that SHA.
 8. **Verifier independently reviews the exact head SHA**, where the topology has

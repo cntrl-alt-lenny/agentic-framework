@@ -18,16 +18,16 @@ Brain ──> Builder ──> [Verifier] ──> Brain ──> …
   └── decides what is next, writes the prompts the topology needs
 ```
 
-Where the topology has a standing Verifier, Brain issues **both** the Builder
-prompt and the Verifier prompt in the same turn, and the owner opens both
-sessions at the same time without coming back in between. Where it does not,
-Brain issues only the Builder prompt. The Verifier waits for the Builder's
-mechanical delivery signal: a completion report whose task and head match the
-branch, and a branch strictly advanced beyond the base. It never reviews the
-base. The two sessions otherwise run independently; the Verifier does not read
-the Builder's report body before forming its own view. If delivery has not
-arrived within that Verifier session, it stops and says **"not delivered yet"**;
-the owner pastes the same Verifier prompt again later.
+Where the topology has a standing Verifier, Brain may issue **both** prompt
+blocks in the same turn, but it labels their order explicitly: the owner sends
+the Builder prompt first and sends the Verifier prompt only after the Builder
+has finished. Where there is no standing Verifier, Brain issues only the
+Builder prompt. The Verifier does not wait or poll for delivery: once its
+prompt is sent, it runs the mechanical check using a completion report whose
+task and head match the branch and a branch strictly advanced beyond the base.
+It never reviews the base. If delivery is not established, it stops and says
+**"not delivered yet"**; the owner sends the Verifier prompt again after the
+Builder has finished and delivery is available.
 
 ## 1. Starting Brain
 
@@ -54,6 +54,11 @@ I will run those prompts in fresh sessions as this project's topology requires
 and come back when they report.
 ```
 
+If there is a standing Verifier, send the Builder block first. Send the
+Verifier block only after the Builder has finished; preparing both blocks in
+one Brain response does not change that order. Do not rely on either session
+to wait or poll.
+
 That is the entire kickoff. It names no tool, no model and no provider, and it
 works on any seat that can read the repository and run git.
 
@@ -63,18 +68,21 @@ to a session with repository access rather than pasting state in by hand.
 
 ## 2. Running the Builder and the Verifier
 
-Paste each block Brain produced into its own fresh session, in its own
-checkout — see [`git-and-isolation.md`](git-and-isolation.md). If there is no
-standing Verifier seat, paste only the Builder block.
+Paste the Builder block Brain produced into its own fresh session and checkout
+first — see [`git-and-isolation.md`](git-and-isolation.md). If there is a
+standing Verifier seat, paste its separately labelled block only after the
+Builder has finished. If there is no standing Verifier seat, paste only the
+Builder block.
 
 The Verifier's prompt names the branch and base rather than a commit that may
 not exist yet. Its contract tells it to run the delivery check, which requires
 the Builder's report provenance and a branch strictly advanced beyond the base,
-then resolve the exact head SHA itself. If delivery is not established within
-its session, it stops and says **"not delivered yet"**; the owner pastes the
-Verifier prompt again later. That is what lets both sessions start at the same
-time without weakening exact-SHA discipline: the Verifier reviews one literal
-delivered commit, never the base merely because the branch exists.
+then resolve the exact head SHA itself. If delivery is not established in that
+session, it stops and says **"not delivered yet"**; the owner sends the same
+Verifier prompt again once the Builder has finished and delivery is available.
+The loop therefore never depends on a session choosing to wait or poll: the
+Verifier reviews one literal delivered commit, never the base merely because
+the branch exists.
 
 ## 3. Coming back to Brain
 
@@ -82,11 +90,12 @@ Return to the same Brain session — or a completely fresh one, which is the
 point of all this — and paste:
 
 ```
-The Builder has finished. If this project has a standing Verifier, the Verifier
-has also finished; if it said "not delivered yet", I pasted its prompt again
-later and waited for its review. Re-derive the current state and adjudicate the
-round: accept it and merge, or reject it with a corrective brief. Then give me
-the next prompt or prompts this topology needs.
+The Builder has finished. If this project has a standing Verifier, I sent the
+Verifier prompt only after the Builder finished; if it said "not delivered
+yet", I sent that prompt again once delivery was available and it has now
+finished. Re-derive the current state and adjudicate the round: accept it and
+merge, or reject it with a corrective brief. Then give me the next prompt or
+prompts this topology needs.
 ```
 
 Brain re-derives rather than trusting what it remembers, reads both reports as

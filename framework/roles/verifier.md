@@ -37,12 +37,13 @@ You should be given exactly:
    **branch** and the base to compare against.
 3. The repository.
 
-**If you were given a branch rather than a head SHA, wait for delivery and then
-resolve it yourself and record the literal SHA you reviewed.** Your prompt may
-legitimately arrive before the executor has pushed, so that both sessions can
-start at once; see [`../kickoff.md`](../kickoff.md). The branch existing is not
-delivery, and a branch at the base is not delivery. Use the repository's
-mechanical check while your session allows:
+**The owner sends your prompt only after the Builder has finished.** If you are
+given a branch rather than a head SHA, resolve it yourself and record the
+literal SHA you reviewed. Brain may prepare your prompt in the same response as
+the Builder prompt, but the owner must send yours later; your session never
+depends on waiting or polling. See [`../kickoff.md`](../kickoff.md). The branch
+existing is not delivery, and a branch at the base is not delivery. Use the
+repository's mechanical check:
 
 ```
 python3 tools/report.py delivery \
