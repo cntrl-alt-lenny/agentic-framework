@@ -366,7 +366,7 @@ def scan_counterexample(
     is non-inert only when every declaration is present in the body and its
     declared rule is emitted by ``scan`` with the declaration's roles.
     """
-    del roles, coordinator, queue_pattern, max_lanes
+    del roles
     declarations = _counterexample_declarations(text)
     if any("guard:violation" in line for line in text.splitlines()) and not all(
         _COUNTEREXAMPLE_DECLARATION.match(line)
@@ -389,7 +389,11 @@ def scan_counterexample(
         if not offending_text or offending_text not in body:
             return []
         try:
-            result = scan(offending_text, declared_roles, source=source)
+            result = scan(
+                body, declared_roles, source=source,
+                coordinator=coordinator, queue_pattern=queue_pattern,
+                max_lanes=max_lanes,
+            )
         except ValueError:
             return []
         matching = [finding for finding in result.findings if finding.rule == rule]

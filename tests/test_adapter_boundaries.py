@@ -11,6 +11,7 @@ So the shape is enforced: point at the contract, add launch mechanics, and stop.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -45,7 +46,14 @@ def adapter_role_files() -> list[Path]:
 
 
 def adapter_files() -> list[Path]:
-    return sorted(p for p in ADAPTERS.rglob("*") if p.is_file())
+    try:
+        output = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", "adapters"],
+            cwd=ROOT, stderr=subprocess.DEVNULL,
+        )
+        return sorted(ROOT / raw for raw in output.decode().split("\0") if raw)
+    except (OSError, subprocess.CalledProcessError):
+        return sorted(p for p in ADAPTERS.rglob("*") if p.is_file())
 
 
 class TestAdaptersExistAndAreScanned(unittest.TestCase):

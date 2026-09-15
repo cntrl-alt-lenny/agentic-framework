@@ -22,6 +22,26 @@ project."*
 The mechanical copy can be done by [`../tools/adopt.py`](../tools/adopt.py). The
 judgement cannot.
 
+## Counterexample declarations
+
+When normative text must quote a provider-shaped form in order to prohibit it,
+put the quote inside a `guard:counterexample` block and declare the exact
+structural violation it demonstrates. The declaration syntax is:
+
+<!-- guard:counterexample -->
+<!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
+Hand this to the Acme Builder.
+<!-- /guard:counterexample -->
+
+The rule is the scanner rule name, `roles=` is the comma-separated role set
+against which the example is invalid, and `text=` is the offending text that
+must occur in the block. The probe runs the block through the real structural
+scanner with the declared roles, independently of the adopting project's role
+set. A missing, malformed, absent, or unflagged declaration is inert. A
+declaration is a visible, reviewable claim, not a magic exemption: a made-up
+role in a declaration can make harmless prose appear to be a real violation,
+so review declarations as carefully as the text they exempt.
+
 ## Procedure
 
 ### 1. Read the framework first

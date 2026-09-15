@@ -65,6 +65,19 @@ class TestCounterexampleBlocksAreHonest(unittest.TestCase):
         ]
         self.assertEqual(inert, [], "\n".join(inert))
 
+    def test_every_tracked_markdown_counterexample_has_a_live_declaration(self):
+        """Every tracked block, including history, must prove its exemption."""
+        inert: list[str] = []
+        for path in docset.tracked_markdown_files():
+            rel = path.relative_to(ROOT).as_posix()
+            blocks, _ = textblocks.counterexample_blocks(
+                path.read_text(encoding="utf-8")
+            )
+            for line, body in blocks:
+                if not neutrality.scan_counterexample(body, ROLES):
+                    inert.append(f"{rel}:{line} — declaration probe is inert")
+        self.assertEqual(inert, [], "\n".join(inert))
+
     def test_removing_the_marker_would_make_the_document_fail(self):
         """The suppression is load-bearing, not decorative.
 

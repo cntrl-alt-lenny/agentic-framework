@@ -1,4 +1,6 @@
-# agentic-project-framework
+# agentic-framework
+
+The repository's presentation house standard is [standards/readme.md](standards/readme.md).
 
 An operating model for running a repository-based project where a human product
 owner directs the work and autonomous agents execute it — without the owner
@@ -100,8 +102,9 @@ Run `python -m unittest discover -s tests -t .`
   verbatim as a fixture. The phrases it must reject:
 
 <!-- guard:counterexample -->
-<!-- guard:violation authority roles=builder text="offer to merge" -->
+<!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
   > "offer to merge" · "execute on OK" · "merges on the human's OK" ·
+  > "Acme Builder" ·
   > "production-fire self-merge authority" · the owner named as the merge actor
 <!-- /guard:counterexample -->
 

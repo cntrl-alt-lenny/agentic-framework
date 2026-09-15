@@ -94,6 +94,9 @@ class TestCIRunsTheSameDiscovery(unittest.TestCase):
 
 
 class TestDocumentLinksResolve(unittest.TestCase):
+    def _tracked_paths(self) -> set[Path]:
+        return docset.tracked_paths()
+
     def _checkable(self) -> list[Path]:
         return [
             p for p in docset.all_documents()
@@ -105,6 +108,8 @@ class TestDocumentLinksResolve(unittest.TestCase):
 
     def test_every_relative_link_resolves(self):
         broken: list[str] = []
+        tracked = self._tracked_paths()
+        tracked_dirs = {path.parent for path in tracked}
         for path in self._checkable():
             rel = path.relative_to(ROOT).as_posix()
             # Fenced code blocks hold illustrative templates, not links.
@@ -113,7 +118,8 @@ class TestDocumentLinksResolve(unittest.TestCase):
                 clean = target.split("#", 1)[0]
                 if not clean:
                     continue
-                if not (path.parent / clean).resolve().exists():
+                resolved = (path.parent / clean).resolve()
+                if resolved not in tracked and resolved not in tracked_dirs:
                     broken.append(f"{rel} -> {target}")
         self.assertEqual(broken, [], "\n".join(broken))
 

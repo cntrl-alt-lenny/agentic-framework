@@ -322,6 +322,7 @@ class TestDeliveryCommand(unittest.TestCase):
         self.assertIn(remote_head, proc.stdout)
 
     def test_unreachable_remote_stays_retryable(self):
+        """Regression coverage: this passed before the fetch/reconciliation fix."""
         tmp, repo, base = self._repo()
         self.addCleanup(tmp.cleanup)
         self._git(repo, "remote", "add", "origin", str(Path(tmp.name) / "missing.git"))

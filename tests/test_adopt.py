@@ -90,6 +90,10 @@ class TestDefaultAdoption(AdoptionCase):
             with self.subTest(path=rel):
                 self.assertFalse((self.target / rel).exists(), rel)
 
+    def test_standards_are_not_copied(self):
+        """The repository's presentation reference is outside the framework copy."""
+        self.assertFalse((self.target / "standards").exists())
+
     def test_no_unresolved_placeholders(self):
         leftovers = []
         for path in self.target.rglob("*"):

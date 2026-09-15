@@ -78,6 +78,21 @@ def is_git_text(path: str, root: Path = ROOT) -> bool:
     return index_eol.startswith("i/") and index_eol != "i/-text"
 
 
+def committed_crlf_files(root: Path = ROOT) -> list[str]:
+    """The real committed-text CRLF guard, factored for fixture testing."""
+    offenders = []
+    for mode, path in tracked_files(root):
+        if mode == "120000" or not is_git_text(path, root):
+            continue
+        try:
+            blob = (root / path).read_bytes()
+        except OSError:
+            continue
+        if b"\r\n" in blob:
+            offenders.append(path)
+    return offenders
+
+
 class TestLineEndingsArePinned(unittest.TestCase):
     """`text=auto` alone is not enough; it still checks out CRLF on Windows."""
 
@@ -108,19 +123,7 @@ class TestLineEndingsArePinned(unittest.TestCase):
 
     def test_no_committed_file_contains_a_carriage_return(self):
         """The property `.gitattributes` exists to produce, checked directly."""
-        offenders = []
-        for mode, path in tracked_files():
-            if mode == "120000":  # symlink
-                continue
-            if not is_git_text(path):
-                continue
-            full = ROOT / path
-            try:
-                blob = full.read_bytes()
-            except OSError:
-                continue
-            if b"\r\n" in blob:
-                offenders.append(path)
+        offenders = committed_crlf_files()
         self.assertEqual(offenders, [], f"CRLF in committed files: {offenders}")
 
     def test_index_classification_does_not_call_binary_cr_bytes_text(self):
@@ -135,17 +138,15 @@ class TestLineEndingsArePinned(unittest.TestCase):
             subprocess.run(
                 ["git", "config", "user.name", "Tests"], cwd=repo, check=True,
             )
-            (repo / ".gitattributes").write_text(
-                "*.bin binary\n*.txt text eol=lf\n", encoding="utf-8"
-            )
+            (repo / ".gitattributes").write_text("*.bin text=auto\n", encoding="utf-8")
             (repo / "payload.bin").write_bytes(b"\x00\r\n\xff\x01")
             (repo / "notes.txt").write_bytes(b"line one\r\nline two\n")
             subprocess.run(
                 ["git", "add", "."], cwd=repo, check=True,
             )
 
-            self.assertFalse(is_git_text("payload.bin", repo))
-            self.assertTrue(is_git_text("notes.txt", repo))
+            self.assertEqual(committed_crlf_files(repo), ["notes.txt"])
+            self.assertNotIn("payload.bin", committed_crlf_files(repo))
 
 
 class TestShippedScriptsAreExecutable(unittest.TestCase):
