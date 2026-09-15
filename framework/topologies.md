@@ -91,10 +91,14 @@ one task are cheap and encouraged; they do not get a permanent seat.
 **A provider never creates a lane.** These are all defects, not topologies:
 
 <!-- guard:counterexample -->
+<!-- guard:violation compound-lane roles=decomper text="Claude Decomper" -->
 - `Claude Decomper` and `Codex Decomper` as two lanes — that is one Decomper,
   run twice.
+<!-- guard:violation compound-lane roles=decomper text="Codex Decomper" -->
 - A topology described as "two Claude workers plus two Codex workers".
+<!-- guard:violation prefixed-lane roles=scaffolder text="codex-scaffolder" -->
 - `codex-scaffolder` or `gemini-worker` as a queue or branch namespace.
+<!-- guard:violation prefixed-lane roles=worker text="gemini-worker" -->
 - A standing role created because a second tool was available.
 <!-- /guard:counterexample -->
 

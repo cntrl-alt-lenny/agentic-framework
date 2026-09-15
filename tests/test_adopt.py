@@ -169,6 +169,29 @@ class TestDefaultAdoption(AdoptionCase):
 
 
 class TestTopologyOptions(AdoptionCase):
+    def test_builder_verifier_adoption_runs_the_installed_guard(self):
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "builder", "--verifier"),
+            0,
+        )
+        proc = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            cwd=self.target, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_unusual_single_role_adoption_runs_the_installed_guard(self):
+        """Coverage for a legal topology, not evidence of the blocker fix."""
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "orthogonalist"),
+            0,
+        )
+        proc = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            cwd=self.target, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
     def test_specialists_and_verifier_reach_the_declared_role_set(self):
         self.assertEqual(
             run_adopt(self.target, "--workers", "decomper,scaffolder", "--verifier"),

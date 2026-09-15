@@ -100,6 +100,7 @@ Run `python -m unittest discover -s tests -t .`
   verbatim as a fixture. The phrases it must reject:
 
 <!-- guard:counterexample -->
+<!-- guard:violation authority roles=builder text="offer to merge" -->
   > "offer to merge" · "execute on OK" · "merges on the human's OK" ·
   > "production-fire self-merge authority" · the owner named as the merge actor
 <!-- /guard:counterexample -->

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import docset  # noqa: E402
 import neutrality  # noqa: E402
+import textblocks  # noqa: E402
 
 #: Declared once, in tools/docset.py, and imported everywhere else.
 ROLES = docset.ROLES
@@ -112,6 +113,167 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                     "unbalanced counterexample markers: an unclosed block "
                     "suppresses the rest of the file",
                 )
+
+    def test_counterexample_probe_handles_an_unlisted_specialist_role(self):
+        body = (
+            '<!-- guard:violation compound-lane roles=decomper '
+            'text="Claude Decomper" -->\n'
+            "- `Claude Decomper` and `Codex Decomper` as two lanes — that is "
+            "one Decomper, run twice.\n"
+        )
+        findings = neutrality.scan_counterexample(body, ("builder",))
+        self.assertTrue(
+            any(f.rule == "compound-lane" for f in findings),
+            "a marked example must be checked even when it quotes an unlisted "
+            "specialist role",
+        )
+
+    def test_counterexample_probe_still_leaves_harmless_text_inert(self):
+        for body in (
+            "Think of the follow-up as a queue of small tasks.\n",
+            "Keep the pre-push hook as a branch guard.\n",
+            "The e-mail list serves as a queue.\n",
+            "Store long-term notes as a branch of the wiki.\n",
+            "Treat well-known names as a role hint.\n",
+            "This role illustrates role-based delegation.\n",
+            "Each branch uses a well-known best-practice layout.\n",
+            "The role of a long-term plan is explained here.\n",
+            "A queue of ordinary tasks is drained overnight.\n",
+            "Namespace collisions are documented in the glossary.\n",
+            "The lane is a metaphor for sequence, not a standing seat.\n",
+            "Use `well-known` names in prose.\n",
+            "The queue records ordinary work items.\n",
+            "A branch of the documentation tree is useful.\n",
+            "Role-based access is described in the policy.\n",
+            "The namespace is reserved for examples.\n",
+            "The follow-up lane is a step in the process.\n",
+            "A well-known queue name appears in a quotation.\n",
+            "The long-term branch plan is archived.\n",
+            "This role's scope is intentionally narrow.\n",
+            "The pre-push branch guard is documented.\n",
+            "A task lane marks sequence in the diagram.\n",
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(neutrality.scan_counterexample(
+                    body, ("builder", "verifier")
+                ), [])
+
+    def test_counterexample_probe_catches_lane_syntax_beyond_declared_roles(self):
+        for body, rule in (
+            (
+                '<!-- guard:violation compound-lane roles=builder '
+                'text="Hand it to the Acme Builder." -->\n'
+                "Hand it to the Acme Builder.\n",
+                "compound-lane",
+            ),
+            (
+                '<!-- guard:violation prefixed-lane roles=builder '
+                'text="Use the `codex-builder` queue." -->\n'
+                "Use the `codex-builder` queue.\n",
+                "prefixed-lane",
+            ),
+            (
+                '<!-- guard:violation branch-namespace roles=builder '
+                'text="Cut `acme/some-scope` for this branch." -->\n'
+                "Cut `acme/some-scope` for this branch.\n",
+                "branch-namespace",
+            ),
+            (
+                '<!-- guard:violation prefixed-lane roles=scaffolder '
+                'text="Use `codex-scaffolder` as a queue name." -->\n'
+                "Use `codex-scaffolder` as a queue name.\n",
+                "prefixed-lane",
+            ),
+        ):
+            with self.subTest(body=body):
+                findings = neutrality.scan_counterexample(
+                    body, ("builder", "verifier")
+                )
+                self.assertTrue(
+                    any(f.rule == rule for f in findings),
+                    f"{body!r} was not reported as {rule}: {findings}",
+                )
+
+    def test_counterexample_declarations_cover_adversarial_real_violations(self):
+        cases = (
+            ("compound-lane", "builder", "Hand it to the Acme Builder."),
+            ("prefixed-lane", "builder", "Use the `codex-builder` queue."),
+            ("branch-namespace", "builder", "Cut `acme/some-scope` for this branch."),
+            ("prefixed-lane", "scaffolder", "Send the task to `codex-scaffolder`."),
+            ("prefixed-lane", "researcher", "Use the `gemini-researcher` queue."),
+            ("prefixed-lane", "researcher", "Route everything through the claude-researcher lane."),
+            ("prefixed-lane", "scaffolder", "Use the `codex-scaffolder` queue."),
+            ("branch-namespace", "decomper", "Cut `claude-decomper/fix-123` for this."),
+            ("compound-lane", "scaffolder", "Hand it to the Acme Scaffolder."),
+            ("compound-lane", "reviewer", "Send this to the Polaris Reviewer."),
+            ("prefixed-lane", "worker", "Use the `orbit-worker` queue."),
+            ("branch-namespace", "builder", "Create `nova/release` as a branch namespace."),
+            ("compound-lane", "researcher", "Hand it to the Polaris Researcher."),
+            ("compound-lane", "worker", "Route this to the Delta Worker."),
+            ("compound-lane", "decomper", "Assign the Acme Decomper."),
+            ("prefixed-lane", "verifier", "Use the `nebula-verifier` queue."),
+            ("prefixed-lane", "researcher", "Route it through the `orion-researcher` lane."),
+            ("prefixed-lane", "scaffolder", "Send it to the `atlas-scaffolder` queue."),
+            ("branch-namespace", "builder", "Cut `quasar-builder/issue-42` for this."),
+            ("branch-namespace", "researcher", "Create `atlas-researcher/design` as a branch namespace."),
+            ("prefixed-lane", "decomper", "Use the `lumen-decomper` lane."),
+            ("prefixed-lane", "verifier", "Send it to the `nova-verifier` queue."),
+        )
+        for rule, declared_roles, offending in cases:
+            declaration = (
+                f'<!-- guard:violation {rule} roles={declared_roles} '
+                f'text="{offending}" -->\n{offending}\n'
+            )
+            with self.subTest(offending=offending):
+                findings = neutrality.scan_counterexample(
+                    declaration, ("builder", "verifier")
+                )
+                self.assertTrue(
+                    any(f.rule == rule for f in findings),
+                    f"{offending!r} was not reported as {rule}: {findings}",
+                )
+
+    def test_counterexample_declaration_must_be_present_and_true(self):
+        cases = (
+            "Hand it to the Acme Builder.\n",
+            '<!-- guard:violation compound-lane roles=builder text="Absent Builder" -->\n'
+            "Hand it to the Acme Builder.\n",
+            '<!-- guard:violation prefixed-lane roles=builder text="Hand it to the Acme Builder." -->\n'
+            "Hand it to the Acme Builder.\n",
+            '<!-- guard:violation branch-namespace roles=builder text="The queue is ordinary." -->\n'
+            "The queue is ordinary.\n",
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                self.assertEqual(
+                    neutrality.scan_counterexample(body, ("builder", "verifier")),
+                    [],
+                )
+
+    def test_framework_topologies_counterexample_is_noninert_for_builder_verifier(self):
+        text = (ROOT / "framework" / "topologies.md").read_text(encoding="utf-8")
+        blocks, _ = textblocks.counterexample_blocks(text)
+        self.assertTrue(blocks, "topologies.md must contain a counterexample block")
+        findings = [
+            finding
+            for _, body in blocks
+            for finding in neutrality.scan_counterexample(
+                body, ("builder", "verifier")
+            )
+        ]
+        self.assertTrue(findings, "topologies.md counterexample became inert")
+
+    def test_scan_records_an_unlisted_specialist_counterexample_as_noninert(self):
+        text = (
+            "<!-- guard:counterexample -->\n"
+            '<!-- guard:violation compound-lane roles=decomper '
+            'text="Claude Decomper" -->\n'
+            "- `Claude Decomper` as a lane.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        result = neutrality.scan(text, ("builder",))
+        self.assertTrue(result.counterexamples[0].findings)
+        self.assertEqual(result.inert_counterexamples(), [])
 
     def test_adapters_do_not_redefine_the_contract(self):
         problems: list[str] = []

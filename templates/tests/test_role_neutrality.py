@@ -92,9 +92,10 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
     def test_counterexample_blocks_are_not_inert(self):
         """An exemption that protects nothing is a silent widening.
 
-        A `guard:counterexample` block must contain something at least one guard
-        rejects — otherwise either the text is not actually a violation, or the
-        rule that used to catch it has regressed.
+        A `guard:counterexample` block must declare offending text and roles
+        that the real structural scanner rejects — otherwise either the text is
+        not actually a violation, or the rule that used to catch it has
+        regressed.
         """
         inert: list[str] = []
         for path in normative_files():
@@ -104,7 +105,9 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             )
             for line, body in blocks:
                 caught = (
-                    neutrality.scan(body, ROLES, coordinator=COORDINATOR).findings
+                    neutrality.scan_counterexample(
+                        body, ROLES, coordinator=COORDINATOR
+                    )
                     or authority.scan(body)
                 )
                 if not caught:
