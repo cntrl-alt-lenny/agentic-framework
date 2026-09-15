@@ -38,11 +38,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def tracked_files() -> list[tuple[str, str]]:
+def tracked_files(root: Path = ROOT) -> list[tuple[str, str]]:
     """(mode, path) for every tracked file, straight from git's index."""
     out = subprocess.run(
         ["git", "ls-files", "-s"],
-        cwd=ROOT, capture_output=True, text=True, check=True,
+        cwd=root, capture_output=True, text=True, check=True,
     ).stdout
     entries = []
     for line in out.splitlines():
@@ -59,13 +59,23 @@ def has_shebang(path: Path) -> bool:
         return False
 
 
-def is_git_text(path: str) -> bool:
+def is_git_text(path: str, root: Path = ROOT) -> bool:
+    """Use Git's index EOL classification, not the configured text attribute.
+
+    ``git check-attr text`` reports the attribute value (often ``auto``), not
+    whether Git classified this particular blob as text. ``ls-files --eol``
+    reports that decision as ``i/-text`` for binary blobs and ``i/lf`` (or
+    another EOL kind) for text blobs.
+    """
     result = subprocess.run(
-        ["git", "check-attr", "text", "--", path],
-        cwd=ROOT, capture_output=True, text=True, check=True,
+        ["git", "ls-files", "--eol", "--", path],
+        cwd=root, capture_output=True, text=True, check=True,
     )
-    value = result.stdout.rsplit(": ", 1)[-1].strip()
-    return value in {"set", "auto"}
+    lines = result.stdout.splitlines()
+    if not lines:
+        return False
+    index_eol = lines[0].split(None, 1)[0]
+    return index_eol.startswith("i/") and index_eol != "i/-text"
 
 
 class TestLineEndingsArePinned(unittest.TestCase):
@@ -112,6 +122,30 @@ class TestLineEndingsArePinned(unittest.TestCase):
             if b"\r\n" in blob:
                 offenders.append(path)
         self.assertEqual(offenders, [], f"CRLF in committed files: {offenders}")
+
+    def test_index_classification_does_not_call_binary_cr_bytes_text(self):
+        """A binary blob may contain CRLF without being a text file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "tests@example.com"],
+                cwd=repo, check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Tests"], cwd=repo, check=True,
+            )
+            (repo / ".gitattributes").write_text(
+                "*.bin binary\n*.txt text eol=lf\n", encoding="utf-8"
+            )
+            (repo / "payload.bin").write_bytes(b"\x00\r\n\xff\x01")
+            (repo / "notes.txt").write_bytes(b"line one\r\nline two\n")
+            subprocess.run(
+                ["git", "add", "."], cwd=repo, check=True,
+            )
+
+            self.assertFalse(is_git_text("payload.bin", repo))
+            self.assertTrue(is_git_text("notes.txt", repo))
 
 
 class TestShippedScriptsAreExecutable(unittest.TestCase):

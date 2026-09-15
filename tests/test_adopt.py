@@ -70,6 +70,16 @@ class TestDefaultAdoption(AdoptionCase):
         self.assertTrue((self.target / "tools" / "report.py").is_file())
         self.assertTrue((self.target / "docs" / "agents" / "reports.md").is_file())
 
+    def test_shebang_tools_are_installed_executable(self):
+        for rel in (
+            "tools/authority.py",
+            "tools/neutrality.py",
+            "tools/textblocks.py",
+            "tools/report.py",
+        ):
+            with self.subTest(path=rel):
+                self.assertTrue((self.target / rel).stat().st_mode & 0o111)
+
     def test_history_is_not_copied(self):
         # The catalogue and case studies are this repository's evidence, not the
         # adopting project's — and they deliberately contain text the guards
@@ -263,8 +273,17 @@ class TestSafety(AdoptionCase):
         )
 
     def test_adoption_fails_when_executable_bit_does_not_take(self):
-        with mock.patch.object(adopt.os, "access", return_value=False):
-            self.assertEqual(run_adopt(self.target, "--hooks"), 1)
+        plan = adopt.Plan(writes=[
+            (self.target / "hook", "#!/bin/sh\n", True),
+        ])
+        with mock.patch.object(adopt.os, "name", "nt"):
+            self.assertEqual(adopt.apply_plan(plan), [self.target / "hook"])
+
+    def test_real_mode_postcondition_rejects_a_nonexecutable_file(self):
+        path = self.target / "not-executable"
+        path.write_text("content\n", encoding="utf-8")
+        path.chmod(0o644)
+        self.assertFalse(adopt.executable_bit_took(path))
 
     def test_adoption_writes_lf_without_path_write_text(self):
         plan = adopt.Plan(writes=[
