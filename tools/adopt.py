@@ -28,6 +28,7 @@ Re-running is therefore safe and idempotent.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -206,9 +207,17 @@ def build_plan(
             (TEMPLATES / f"docs/briefs/{sub}/.gitkeep").read_text(encoding="utf-8"))
 
     # Every module the installed test imports, or it fails on import in the
-    # target rather than guarding anything there.
+    # target rather than guarding anything there. These are executable tools:
+    # the shebang is a promise that an adopting project can run them directly,
+    # just like the adapter hooks below.
     for module in ("neutrality.py", "authority.py", "textblocks.py"):
-        add(f"tools/{module}", (ROOT / "tools" / module).read_text(encoding="utf-8"))
+        src = ROOT / "tools" / module
+        with src.open("rb") as stream:
+            executable = stream.readline().startswith(b"#!")
+        add(
+            f"tools/{module}", src.read_text(encoding="utf-8"),
+            executable=executable,
+        )
     # Without this, `unittest discover -s tests` refuses the directory and the
     # installed guard never runs at all. Caught by tests/test_adopt.py, which
     # runs the guard in the adopted tree rather than checking it exists.
@@ -222,7 +231,19 @@ def build_plan(
     # baseline every filesystem-capable role uses regardless of which tool runs
     # it, and it must exist even when no adapter is installed at all, since
     # that is the case for a provider this project has never seen.
-    add("tools/report.py", (ROOT / "tools" / "report.py").read_text(encoding="utf-8"))
+    report_src = ROOT / "tools" / "report.py"
+    with report_src.open("rb") as stream:
+        report_executable = stream.readline().startswith(b"#!")
+    add(
+        "tools/report.py", report_src.read_text(encoding="utf-8"),
+        executable=report_executable,
+    )
+
+    # Installed unconditionally: a project receives `#!/bin/sh` content from
+    # this framework whenever it takes the hooks or an adapter, and a CRLF
+    # checkout makes those inert. Cheap, and wrong to make conditional on
+    # remembering a flag.
+    add(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"))
 
     if hooks:
         add(".githooks/pre-push",
@@ -249,8 +270,13 @@ def build_plan(
             raise SystemExit(f"adopt: {exc}") from exc
         for src in adapter.source_files():
             rel = src.relative_to(src_dir).as_posix()
-            add(adapter.destination(rel), src.read_text(encoding="utf-8"),
-                executable=src.suffix == ".py")
+            with src.open("rb") as stream:
+                executable = stream.readline().startswith(b"#!")
+            add(
+                adapter.destination(rel),
+                src.read_text(encoding="utf-8"),
+                executable=executable,
+            )
         plan.notes += adapter_notes(adapter, workers=workers, verifier=verifier)
 
     plan.notes.append(
@@ -275,12 +301,45 @@ def render_plan(plan: Plan, target: Path) -> str:
     return "\n".join(out) or "  (nothing to do)"
 
 
-def apply_plan(plan: Plan) -> None:
+def executable_bit_took(path: Path) -> bool:
+    """Return whether this platform can represent an executable file mode.
+
+    Windows Python deliberately ignores ``X_OK`` and Windows ``chmod`` cannot
+    preserve POSIX execute bits. Treat that capability as absent explicitly;
+    otherwise a successful-looking adoption leaves a hook that Git will skip
+    after a later POSIX clone.
+    """
+    if os.name == "nt":
+        return False
+    try:
+        return bool(path.stat().st_mode & 0o111)
+    except OSError:
+        return False
+
+
+def apply_plan(plan: Plan) -> list[Path]:
+    """Write the plan. Returns the files whose executable bit did not take.
+
+    `chmod` is asked for, never assumed. On Windows it honours only the
+    read-only flag and silently discards execute bits, so the platform is
+    reported as unable to complete adoption instead of claiming success.
+    """
+    unset: list[Path] = []
     for dst, content, executable in plan.writes:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(content, encoding="utf-8")
+        # Disable platform newline translation explicitly. `Path.write_text`
+        # does not provide that guarantee on Python versions still supported by
+        # adopting projects, so normalize the source and write LF bytes here.
+        with dst.open("w", encoding="utf-8", newline="") as stream:
+            stream.write(content.replace("\r\n", "\n").replace("\r", "\n"))
         if executable:
-            dst.chmod(dst.stat().st_mode | 0o111)
+            try:
+                dst.chmod(dst.stat().st_mode | 0o111)
+            except OSError:
+                pass
+            if not executable_bit_took(dst):
+                unset.append(dst)
+    return unset
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -326,7 +385,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print("\nadopt: --dry-run; nothing written.")
         return 0
-    apply_plan(plan)
+    unset = apply_plan(plan)
+    if unset:
+        print(
+            "\nadopt: WARNING -- the executable bit did not take on these "
+            "files. This host cannot set it (Windows discards it silently), "
+            "so a POSIX clone would receive them inert. Fix before "
+            "committing:",
+            file=sys.stderr,
+        )
+        for dst in unset:
+            print(f"  git update-index --chmod=+x {dst.relative_to(target)}",
+                  file=sys.stderr)
+        return 1
     print("\nadopt: done.")
     return 0
 
