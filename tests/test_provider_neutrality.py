@@ -126,8 +126,15 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
         )
 
     def test_counterexample_probe_still_leaves_harmless_text_inert(self):
-        body = "- A harmless example of ordinary project prose.\n"
-        self.assertEqual(neutrality.scan_counterexample(body, ("builder",)), [])
+        for body in (
+            "This role illustrates role-based delegation.\n",
+            "Each branch uses a well-known best-practice layout.\n",
+            "The role of a long-term plan is explained here.\n",
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(
+                    neutrality.scan_counterexample(body, ("builder",)), []
+                )
 
     def test_scan_records_an_unlisted_specialist_counterexample_as_noninert(self):
         text = (
