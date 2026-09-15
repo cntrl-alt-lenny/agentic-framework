@@ -19,13 +19,15 @@ Brain ──> Builder ──> [Verifier] ──> Brain ──> …
 ```
 
 Where the topology has a standing Verifier, Brain issues **both** the Builder
-prompt and the Verifier prompt in the same turn, so the owner opens both
-sessions immediately without coming back in between. Where it does not, Brain
-issues only the Builder prompt. The Verifier waits for the Builder's mechanical
-delivery signal: a completion report whose task and head match the branch,
-and a branch strictly advanced beyond the base. It never reviews the base. The
-two sessions otherwise run independently; the Verifier does not read the
-Builder's report body before forming its own view.
+prompt and the Verifier prompt in the same turn, and the owner opens both
+sessions at the same time without coming back in between. Where it does not,
+Brain issues only the Builder prompt. The Verifier waits for the Builder's
+mechanical delivery signal: a completion report whose task and head match the
+branch, and a branch strictly advanced beyond the base. It never reviews the
+base. The two sessions otherwise run independently; the Verifier does not read
+the Builder's report body before forming its own view. If delivery has not
+arrived within that Verifier session, it stops and says **"not delivered yet"**;
+the owner pastes the same Verifier prompt again later.
 
 ## 1. Starting Brain
 

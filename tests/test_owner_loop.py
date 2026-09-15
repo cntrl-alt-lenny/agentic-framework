@@ -15,6 +15,7 @@ review a branch without pinning the commit it actually reviewed.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -203,6 +204,64 @@ class TestDeliveryCommand(unittest.TestCase):
         proc = self._check(repo, base)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("delivered:", proc.stdout)
+
+    def test_separate_clones_discover_delivery_only_after_builder_pushes(self):
+        """The fetch is exercised against a real bare remote and two clones."""
+        tmp, seed, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        remote = Path(tmp.name) / "origin.git"
+        self._git(seed, "init", "--bare", "-q", str(remote))
+        self._git(seed, "remote", "add", "origin", str(remote))
+        self._git(seed, "push", "-q", "origin", "main")
+
+        builder = Path(tmp.name) / "builder"
+        verifier = Path(tmp.name) / "verifier"
+        subprocess.run(
+            ["git", "clone", "-q", "-b", "main", str(remote), str(builder)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "clone", "-q", "-b", "main", str(remote), str(verifier)],
+            check=True,
+        )
+        for clone in (builder, verifier):
+            self._git(clone, "config", "user.email", "test@example.invalid")
+            self._git(clone, "config", "user.name", "Test")
+
+        self._git(builder, "switch", "-c", "worker/task")
+        self._git(builder, "switch", "main")
+        builder_checkout = builder / ".worktrees" / "builder"
+        self._git(builder, "worktree", "add", "-q", str(builder_checkout), "worker/task")
+        (builder_checkout / "change.txt").write_text(
+            "delivered\n", encoding="utf-8"
+        )
+        self._git(builder_checkout, "add", "change.txt")
+        self._git(builder_checkout, "commit", "-q", "-m", "deliver")
+        report = subprocess.run(
+            [
+                sys.executable, str(ROOT / "tools" / "report.py"), "write",
+                "--task", self.TASK,
+            ],
+            cwd=builder_checkout, input="Builder delivered.\n",
+            capture_output=True, text=True,
+        )
+        self.assertEqual(report.returncode, 0, report.stdout + report.stderr)
+
+        verifier_inbox = verifier / ".git" / "agent-inbox"
+        verifier_inbox.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            builder / ".git" / "agent-inbox" / "builder-latest.md",
+            verifier_inbox / "builder-latest.md",
+        )
+
+        before_push = self._check(verifier, base)
+        self.assertEqual(before_push.returncode, 1, before_push.stdout)
+        self.assertIn("not delivered yet", before_push.stdout)
+
+        self._git(builder_checkout, "push", "-q", "-u", "origin", "worker/task")
+        after_push = self._check(verifier, base)
+        self.assertEqual(after_push.returncode, 0, after_push.stdout + after_push.stderr)
+        self.assertIn("delivered:", after_push.stdout)
 
 
 if __name__ == "__main__":

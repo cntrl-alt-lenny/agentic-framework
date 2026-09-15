@@ -321,6 +321,36 @@ def _commit_for_ref(ref: str, cwd: str | Path | None = None) -> str | None:
     return None
 
 
+def _fetch_branch(branch: str, cwd: str | Path | None = None) -> None:
+    """Best-effort fetch of the named branch before resolving delivery.
+
+    A Verifier may be in a separate clone, where the Builder's later push is
+    not present in any local ref until it is fetched. A linked worktree may
+    already have the local branch, and a repository without an ``origin`` may
+    be intentionally offline; both cases remain usable because the local
+    resolution below is still authoritative and fetch failure is retryable.
+    """
+    remote_branch = branch
+    if remote_branch.startswith("refs/remotes/origin/"):
+        remote_branch = remote_branch[len("refs/remotes/origin/"):]
+    elif remote_branch.startswith("refs/heads/"):
+        remote_branch = remote_branch[len("refs/heads/"):]
+    elif remote_branch.startswith("origin/"):
+        remote_branch = remote_branch[len("origin/"):]
+    if remote_branch.startswith("refs/") or not remote_branch:
+        return
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet", "--no-tags", "origin", remote_branch],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return
+
+
 def _is_ancestor(base: str, head: str, cwd: str | Path | None = None) -> bool:
     try:
         return subprocess.run(
@@ -346,9 +376,12 @@ def delivery_status(
     Delivery is a conjunction, not a branch existence check: the named branch
     must resolve to a commit strictly after an ancestor base, and the shared
     inbox must contain the named role's report with matching task and HEAD
-    provenance. A missing report, a missing branch, or a branch still at the
-    base all return the same retryable "not delivered yet" state.
+    provenance. The named branch is fetched from ``origin`` first so this
+    check works in a separate Verifier clone as well as a linked worktree. A
+    missing report, a missing branch, or a branch still at the base all return
+    the same retryable "not delivered yet" state.
     """
+    _fetch_branch(branch, cwd)
     head = _commit_for_ref(branch, cwd)
     if head is None:
         return 1, f"not delivered yet: branch '{branch}' is not available"

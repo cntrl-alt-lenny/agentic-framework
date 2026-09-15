@@ -50,12 +50,15 @@ python3 tools/report.py delivery \
   --role <builder role> --task <brief identifier>
 ```
 
-That check requires the Builder's shared-inbox completion report to name the
-task and exact branch head, and requires the branch to be strictly ahead of an
-ancestor base. It reads provenance only; do not read the Builder's report body
-before pass one. If the check never returns `delivered` before your session
-ends, stop and say exactly **"not delivered yet"**. The owner pastes this
-prompt again later. When it returns `delivered`, continue with the exact-SHA
+That check fetches the named branch from `origin` before resolving it, so a
+Verifier in a separate clone can discover a Builder's later push as well as a
+Verifier in a linked worktree. It then requires the Builder's shared-inbox
+completion report to name the task and exact branch head, and requires the
+branch to be strictly ahead of an ancestor base. It reads provenance only; do
+not read the Builder's report body before pass one. If the check never returns
+`delivered` before your session ends, stop and say exactly **"not delivered
+yet"**. The owner pastes this prompt again later. When it returns `delivered`,
+continue with the exact-SHA
 discipline — you still review one literal commit, you just establish which one:
 
 - Resolve the delivered branch to a SHA, confirm the base is genuinely its ancestor, and
