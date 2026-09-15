@@ -37,17 +37,32 @@ You should be given exactly:
    **branch** and the base to compare against.
 3. The repository.
 
-**If you were given a branch rather than a head SHA, resolve it yourself and
-record the literal SHA you reviewed.** Your prompt may legitimately arrive
-before the executor has pushed, so that both sessions can start at once; see
-[`../kickoff.md`](../kickoff.md). That changes nothing about the discipline —
-you still review one exact commit, you just establish which one:
+**If you were given a branch rather than a head SHA, wait for delivery and then
+resolve it yourself and record the literal SHA you reviewed.** Your prompt may
+legitimately arrive before the executor has pushed, so that both sessions can
+start at once; see [`../kickoff.md`](../kickoff.md). The branch existing is not
+delivery, and a branch at the base is not delivery. Use the repository's
+mechanical check while your session allows:
 
-- Resolve the branch to a SHA, confirm the base is genuinely its ancestor, and
+```
+python3 tools/report.py delivery \
+  --branch <builder branch> --base <literal base SHA> \
+  --role <builder role> --task <brief identifier>
+```
+
+That check requires the Builder's shared-inbox completion report to name the
+task and exact branch head, and requires the branch to be strictly ahead of an
+ancestor base. It reads provenance only; do not read the Builder's report body
+before pass one. If the check never returns `delivered` before your session
+ends, stop and say exactly **"not delivered yet"**. The owner pastes this
+prompt again later. When it returns `delivered`, continue with the exact-SHA
+discipline — you still review one literal commit, you just establish which one:
+
+- Resolve the delivered branch to a SHA, confirm the base is genuinely its ancestor, and
   **put the literal SHA in your report**.
-- If the branch does not exist yet, say so and stop. That is a complete,
-  useful result — it means the executor has not pushed — and it is never a
-  reason to review the base, the default branch, or "the latest".
+- If delivery is not established, say **"not delivered yet"** and stop. That is
+  a complete, useful result — it means the executor has not delivered — and it
+  is never a reason to review the base, the default branch, or "the latest".
 - If the branch moves while you are working, your review belongs to the SHA
   you started from. Say which one, and that it may have been superseded.
 

@@ -4,23 +4,28 @@ The owner's side of the loop, written so a project can be picked up from
 **completely fresh sessions** with no conversation history anywhere.
 
 Everything else in this framework describes what the roles do. This describes
-what the *owner* does, and it is deliberately short: three things to paste, and
-nothing to remember between them.
+what the *owner* does, and it is deliberately short: two or three things to
+paste, depending on whether the project has a standing Verifier, and nothing to
+remember between them.
 
 ## The loop
 
 ```
-Brain ──> Builder ──> Verifier ──> Brain ──> …
-  │          │            │          │
-  │          └── does the work       └── adjudicates both, merges what it
-  │                       └── reviews it            accepts, starts the next round
-  └── decides what is next, writes both prompts
+Brain ──> Builder ──> [Verifier] ──> Brain ──> …
+  │          │             │              │
+  │          └── does the work            └── adjudicates, merges what it
+  │                        └── reviews delivered work  accepts, starts the next round
+  └── decides what is next, writes the prompts the topology needs
 ```
 
-Brain issues **both** the Builder prompt and the Verifier prompt in the same
-turn, so the owner can open both sessions immediately without coming back in
-between. The two run independently: the Verifier never sees the Builder's
-report before forming its own view, which is the whole reason the seat exists.
+Where the topology has a standing Verifier, Brain issues **both** the Builder
+prompt and the Verifier prompt in the same turn, so the owner opens both
+sessions immediately without coming back in between. Where it does not, Brain
+issues only the Builder prompt. The Verifier waits for the Builder's mechanical
+delivery signal: a completion report whose task and head match the branch,
+and a branch strictly advanced beyond the base. It never reviews the base. The
+two sessions otherwise run independently; the Verifier does not read the
+Builder's report body before forming its own view.
 
 ## 1. Starting Brain
 
@@ -39,7 +44,9 @@ Then tell me, in plain English:
   1. where the project actually stands;
   2. what the next round should be, and why that one;
   3. the Builder prompt, as a single self-contained block I can paste;
-  4. the Verifier prompt, as a separate self-contained block I can paste.
+  4. if and only if this project has a standing Verifier seat, the Verifier
+     prompt as a separate self-contained block I can paste; otherwise say that
+     no Verifier prompt is needed.
 
 I will run those two in fresh sessions and come back when they report.
 ```
@@ -54,16 +61,17 @@ to a session with repository access rather than pasting state in by hand.
 ## 2. Running the Builder and the Verifier
 
 Paste each block Brain produced into its own fresh session, in its own
-checkout — see [`git-and-isolation.md`](git-and-isolation.md). Nothing else is
-required of the owner here.
+checkout — see [`git-and-isolation.md`](git-and-isolation.md). If there is no
+standing Verifier seat, paste only the Builder block.
 
-The Verifier's prompt names the branch rather than a commit that may not exist
-yet, and its contract tells it to resolve the exact head SHA itself, confirm
-ancestry, and stop and say so if the branch is missing or has moved. That is
-what lets both sessions start at the same time without weakening the
-exact-SHA discipline in [`evidence.md`](evidence.md): the Verifier still
-reviews one literal commit, it just establishes which one rather than being
-told.
+The Verifier's prompt names the branch and base rather than a commit that may
+not exist yet. Its contract tells it to run the delivery check, which requires
+the Builder's report provenance and a branch strictly advanced beyond the base,
+then resolve the exact head SHA itself. If delivery is not established within
+its session, it stops and says **"not delivered yet"**; the owner pastes the
+Verifier prompt again later. That is what lets both sessions start at the same
+time without weakening exact-SHA discipline: the Verifier reviews one literal
+delivered commit, never the base merely because the branch exists.
 
 ## 3. Coming back to Brain
 
@@ -71,9 +79,11 @@ Return to the same Brain session — or a completely fresh one, which is the
 point of all this — and paste:
 
 ```
-The Builder and the Verifier have both finished. Re-derive the current state
-and adjudicate the round: accept it and merge, or reject it with a corrective
-brief. Then give me the next round's two prompts.
+The Builder has finished. If this project has a standing Verifier, the Verifier
+has also finished; if it said "not delivered yet", I pasted its prompt again
+later and waited for its review. Re-derive the current state and adjudicate the
+round: accept it and merge, or reject it with a corrective brief. Then give me
+the next prompt or prompts this topology needs.
 ```
 
 Brain re-derives rather than trusting what it remembers, reads both reports as

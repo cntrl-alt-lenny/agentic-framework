@@ -13,8 +13,12 @@ prompt".
    tool-specific mechanics appended after it, marked optional.
 4. **Owner chooses a tool or model and pastes the prompt.**
 5. **Worker executes** in its own isolated checkout, commits, pushes its branch,
-   and reports.
-6. **Owner relays completion** if nothing automates it.
+   and reports. Where the topology has a Verifier, the owner starts both
+   sessions at the same time; the Verifier waits for the mechanical delivery
+   check before reviewing.
+6. **Owner relays completion** if nothing automates it. If the Verifier's
+   session ends first, it says **"not delivered yet"** and the owner pastes its
+   prompt again later.
 7. **Brain inspects the exact repository state** — literal SHAs, the real diff,
    real validation output, CI at that SHA.
 8. **Verifier independently reviews the exact head SHA**, where the topology has

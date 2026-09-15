@@ -82,6 +82,7 @@ __all__ = [
     "head_sha",
     "write_report",
     "check_status",
+    "delivery_status",
 ]
 
 
@@ -307,6 +308,74 @@ def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
     )
 
 
+def _commit_for_ref(ref: str, cwd: str | Path | None = None) -> str | None:
+    return _git(["rev-parse", "--verify", ref + "^{commit}"], cwd=cwd)
+
+
+def _is_ancestor(base: str, head: str, cwd: str | Path | None = None) -> bool:
+    try:
+        return subprocess.run(
+            ["git", "merge-base", "--is-ancestor", base, head],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode == 0
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def delivery_status(
+    *,
+    branch: str,
+    base: str,
+    role: str,
+    task: str,
+    cwd: str | Path | None = None,
+) -> tuple[int, str]:
+    """Check whether a Builder has delivered this task for Verifier review.
+
+    Delivery is a conjunction, not a branch existence check: the named branch
+    must resolve to a commit strictly after an ancestor base, and the shared
+    inbox must contain the named role's report with matching task and HEAD
+    provenance. A missing report, a missing branch, or a branch still at the
+    base all return the same retryable "not delivered yet" state.
+    """
+    head = _commit_for_ref(branch, cwd)
+    if head is None:
+        return 1, f"not delivered yet: branch '{branch}' is not available"
+    base_sha = _commit_for_ref(base, cwd)
+    if base_sha is None:
+        return 1, f"not delivered yet: base '{base}' is not available"
+    if head == base_sha:
+        return 1, f"not delivered yet: branch '{branch}' is still at the base"
+    if not _is_ancestor(base_sha, head, cwd):
+        return 1, (
+            f"not delivered yet: base {base_sha} is not an ancestor of "
+            f"branch '{branch}' at {head}"
+        )
+
+    latest = git_common_dir(cwd) / "agent-inbox" / f"{role}-latest.md"
+    if not latest.is_file():
+        return 1, f"not delivered yet: no report for role '{role}'"
+    try:
+        provenance = _parse_header(latest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        provenance = None
+    if provenance is None:
+        return 1, f"not delivered yet: report for role '{role}' has no header"
+    if provenance.role != role or provenance.task != task:
+        return 1, (
+            f"not delivered yet: report provenance does not match role '{role}' "
+            f"and task '{task}'"
+        )
+    if provenance.head != head:
+        return 1, (
+            f"not delivered yet: report head={provenance.head} does not match "
+            f"branch '{branch}' at {head}"
+        )
+    return 0, f"delivered: role={role} task={task} branch={branch} head={head}"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -335,6 +404,19 @@ def main(argv: list[str] | None = None) -> int:
         help="checkout to check from (default: the current directory)",
     )
 
+    delivery_p = sub.add_parser(
+        "delivery",
+        help="check whether a role delivered work for exact-SHA review",
+    )
+    delivery_p.add_argument("--branch", required=True)
+    delivery_p.add_argument("--base", required=True)
+    delivery_p.add_argument("--role", required=True)
+    delivery_p.add_argument("--task", required=True)
+    delivery_p.add_argument(
+        "--cwd", default=None,
+        help="repository checkout to inspect (default: current directory)",
+    )
+
     args = ap.parse_args(argv)
 
     if args.command == "write":
@@ -350,6 +432,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         try:
             code, message = check_status(args.cwd)
+        except ReportError as exc:
+            print(f"report: {exc}", file=sys.stderr)
+            return 3
+        print(message)
+        return code
+
+    if args.command == "delivery":
+        try:
+            code, message = delivery_status(
+                branch=args.branch,
+                base=args.base,
+                role=args.role,
+                task=args.task,
+                cwd=args.cwd,
+            )
         except ReportError as exc:
             print(f"report: {exc}", file=sys.stderr)
             return 3

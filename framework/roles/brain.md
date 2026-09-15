@@ -107,9 +107,11 @@ what was observed, as a log rather than a ranking.
    state the question, not the answer you expect.
 4. **Hand the owner a ready-to-paste prompt.** This is a required output, not an
    optional courtesy — see *Handing off* below.
-5. **Dispatch a Verifier** where the topology has one, once the work exists,
-   giving it the brief, the literal base SHA and the literal head SHA — and
-   **not** the executor's report on its first pass.
+5. **Dispatch a Verifier** where the topology has one, at the same time as the
+   Builder prompt, giving it the brief identifier, the literal base SHA and the
+   Builder branch. The Verifier waits for mechanical delivery, then resolves
+   and reviews exactly the delivered head. Do not dispatch a Verifier prompt at
+   all where the topology has no Verifier seat.
 6. **Read every report as evidence, not verdict.** Then independently inspect:
    - the exact base and head SHA, and the ancestry between them;
    - the real diff, not its description;
@@ -173,11 +175,12 @@ translate between the contract's vocabulary and their project's.
 
 **Issuing the Verifier prompt early does not weaken exact-SHA review.** Name
 the *branch* rather than a commit that does not exist yet, and tell the
-Verifier to resolve the head SHA itself, confirm ancestry, record the literal
-SHA it reviewed, and stop and say so if the branch is missing or moves under
-it. Its contract already requires exactly that. What must never happen is
-Brain inventing a SHA, or the Verifier reviewing "the branch" as a moving
-target.
+Verifier to wait for the mechanical delivery check: the Builder's completion
+report must match the task and branch head, and the branch must be strictly
+ahead of the base. It then records the literal SHA it reviewed. If delivery is
+not established within its session, it stops with **"not delivered yet"** so the
+owner can paste the same prompt later. What must never happen is Brain
+inventing a SHA, or the Verifier reviewing "the branch" as a moving target.
 
 The owner's side of this loop, including the exact text they paste to start a
 round and to come back from one, is [`../kickoff.md`](../kickoff.md).

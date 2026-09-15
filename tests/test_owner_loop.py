@@ -15,7 +15,9 @@ review a branch without pinning the commit it actually reviewed.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -71,7 +73,8 @@ class TestThePasteableBlocksAreUsable(unittest.TestCase):
     def test_the_starting_block_asks_for_both_prompts(self):
         start = next(b for b in self.blocks if "You are the Brain" in b)
         self.assertIn("Builder prompt", start)
-        self.assertIn("Verifier prompt", start)
+        self.assertIn("if and only if this project has a standing Verifier", start)
+        self.assertIn("no Verifier prompt is needed", start)
 
     def test_a_returning_block_exists_so_the_owner_need_not_improvise(self):
         self.assertTrue(
@@ -87,10 +90,16 @@ class TestBrainStillIssuesBothPrompts(unittest.TestCase):
         text = BRAIN.read_text(encoding="utf-8")
         self.assertIn("Verifier prompt", text)
         self.assertIn(
-            "same* turn", text,
-            "the Verifier prompt must be issued in the same turn as the "
+            "same time", text,
+            "the Verifier prompt must be issued at the same time as the "
             "executor prompt, or the owner is back to three round trips",
         )
+
+    def test_the_contract_makes_the_verifier_topology_conditional(self):
+        text = " ".join(BRAIN.read_text(encoding="utf-8").split())
+        self.assertIn("Do not dispatch a Verifier prompt at all where the topology has no Verifier seat", text)
+        self.assertIn("strictly ahead of the base", text)
+        self.assertIn('"not delivered yet"', text)
 
 
 class TestEarlyVerifierPromptsKeepExactShaDiscipline(unittest.TestCase):
@@ -119,12 +128,81 @@ class TestEarlyVerifierPromptsKeepExactShaDiscipline(unittest.TestCase):
         )
 
     def test_a_missing_branch_stops_the_review_rather_than_widening_it(self):
-        self.assertIn("does not exist yet", self.text)
+        self.assertIn("not delivered yet", self.text)
         self.assertIn(
             "never a reason to review the base", self.text,
             "a Verifier that falls back to the default branch when the work "
             "has not landed reports on the wrong thing",
         )
+
+
+class TestDeliveryCommand(unittest.TestCase):
+    """The Verifier gate must distinguish branch existence from delivery."""
+
+    TASK = "round-002"
+
+    def _git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip()
+
+    def _repo(self) -> tuple[tempfile.TemporaryDirectory, Path, str]:
+        tmp = tempfile.TemporaryDirectory()
+        repo = Path(tmp.name)
+        self._git(repo, "init", "-q", "-b", "main")
+        self._git(repo, "config", "user.email", "test@example.invalid")
+        self._git(repo, "config", "user.name", "Test")
+        (repo / "README.md").write_text("base\n", encoding="utf-8")
+        self._git(repo, "add", "README.md")
+        self._git(repo, "commit", "-q", "-m", "base")
+        return tmp, repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _check(self, repo: Path, base: str):
+        return subprocess.run(
+            [
+                sys.executable, str(ROOT / "tools" / "report.py"), "delivery",
+                "--branch", "worker/task", "--base", base,
+                "--role", "builder", "--task", self.TASK,
+            ],
+            cwd=repo, capture_output=True, text=True,
+        )
+
+    def test_not_yet_pushed_branch_is_not_delivered(self):
+        tmp, repo, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        proc = self._check(repo, base)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("not delivered yet", proc.stdout)
+
+    def test_pushed_at_base_branch_is_not_delivered(self):
+        tmp, repo, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        self._git(repo, "branch", "worker/task", base)
+        proc = self._check(repo, base)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("still at the base", proc.stdout)
+
+    def test_report_and_advanced_branch_are_delivered(self):
+        tmp, repo, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        self._git(repo, "branch", "worker/task", base)
+        builder = repo / ".worktrees" / "builder"
+        self._git(repo, "worktree", "add", "-q", str(builder), "worker/task")
+        (builder / "change.txt").write_text("delivered\n", encoding="utf-8")
+        self._git(builder, "add", "change.txt")
+        self._git(builder, "commit", "-q", "-m", "deliver")
+        report = subprocess.run(
+            [
+                sys.executable, str(ROOT / "tools" / "report.py"), "write",
+                "--task", self.TASK,
+            ],
+            cwd=builder, input="Builder delivered.\n", capture_output=True, text=True,
+        )
+        self.assertEqual(report.returncode, 0, report.stdout + report.stderr)
+        proc = self._check(repo, base)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("delivered:", proc.stdout)
 
 
 if __name__ == "__main__":
