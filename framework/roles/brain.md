@@ -107,9 +107,15 @@ what was observed, as a log rather than a ranking.
    state the question, not the answer you expect.
 4. **Hand the owner a ready-to-paste prompt.** This is a required output, not an
    optional courtesy — see *Handing off* below.
-5. **Dispatch a Verifier** where the topology has one, once the work exists,
-   giving it the brief, the literal base SHA and the literal head SHA — and
-   **not** the executor's report on its first pass.
+5. **Prepare the Verifier prompt** where the topology has one, in the same
+   Brain response as the Builder prompt, but label the order next to the
+   prompts: the owner sends the Builder prompt first and sends the Verifier
+   prompt only after the Builder has finished. The Verifier prompt gives it the
+   brief identifier, literal base SHA and Builder branch. The Verifier does not
+   wait or poll; once sent, it runs the mechanical delivery check and either
+   reviews exactly the delivered head or stops with **"not delivered yet"**.
+   Do not issue a Verifier prompt at all where the topology has no Verifier
+   seat.
 6. **Read every report as evidence, not verdict.** Then independently inspect:
    - the exact base and head SHA, and the ancestry between them;
    - the real diff, not its description;
@@ -156,12 +162,34 @@ Each time Brain hands over, output **in the conversation**:
 
 - a one-line plain-language summary of what the last round achieved and what
   happens next;
-- the **complete prompt in a single block**, self-contained: it names the
+- **the executor prompt**, as a single self-contained block: it names the
   working directory, tells the agent which files to read before acting, and
   states the task and the report contract. The owner pastes it without reading
   it;
+- **the Verifier prompt, as a second separate block**, where the topology has
+  that seat — prepared in the *same* Brain turn, but labelled "send only after
+  the Builder has finished". The owner sends the Builder prompt first and the
+  Verifier prompt later, so the order is explicit and never depends on a
+  session choosing to wait.
 - anything the owner genuinely must decide, phrased in product terms, not
   technical ones.
+
+Both prompts use **the project's own declared role names** from its `AGENTS.md`
+— `Builder`, `Decomper`, whatever it calls the seat — so the owner never has to
+translate between the contract's vocabulary and their project's.
+
+**Preparing the Verifier prompt early does not weaken exact-SHA review.** Name
+the *branch* rather than a commit that does not exist yet, and tell the owner
+to send the Verifier prompt only after the Builder has finished. The prompt's
+mechanical delivery check requires the Builder's completion report to match the
+task and branch head, and the branch to be strictly ahead of the base. It then
+records the literal SHA it reviewed. If delivery is not established in its
+session, it stops with **"not delivered yet"** so the owner can send the same
+prompt again once delivery is available. What must never happen is Brain
+inventing a SHA, or the Verifier reviewing "the branch" as a moving target.
+
+The owner's side of this loop, including the exact text they paste to start a
+round and to come back from one, is [`../kickoff.md`](../kickoff.md).
 
 **The core prompt must be provider-neutral.** Build it from role, task and
 project state. It must paste cleanly into any capable tool. If the tool the

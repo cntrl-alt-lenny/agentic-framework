@@ -32,8 +32,43 @@ be correct under any permutation. What has actually been shown to do the work is
 You should be given exactly:
 
 1. The **brief** the work was done against.
-2. The **base SHA** and the **head SHA**.
+2. The range to review: either the **base SHA** and the **head SHA**
+   literally, or — when your prompt was written before the work landed — the
+   **branch** and the base to compare against.
 3. The repository.
+
+**The owner sends your prompt only after the Builder has finished.** If you are
+given a branch rather than a head SHA, resolve it yourself and record the
+literal SHA you reviewed. Brain may prepare your prompt in the same response as
+the Builder prompt, but the owner must send yours later; your session never
+depends on waiting or polling. See [`../kickoff.md`](../kickoff.md). The branch
+existing is not delivery, and a branch at the base is not delivery. Use the
+repository's mechanical check:
+
+```
+python3 tools/report.py delivery \
+  --branch <builder branch> --base <literal base SHA> \
+  --role <builder role> --task <brief identifier>
+```
+
+That check fetches the named branch from `origin` before resolving it, so a
+Verifier in a separate clone can discover a Builder's later push as well as a
+Verifier in a linked worktree. It then requires the Builder's shared-inbox
+completion report to name the task and exact branch head, and requires the
+branch to be strictly ahead of an ancestor base. It reads provenance only; do
+not read the Builder's report body before pass one. If the check never returns
+`delivered` before your session ends, stop and say exactly **"not delivered
+yet"**. The owner pastes this prompt again later. When it returns `delivered`,
+continue with the exact-SHA
+discipline — you still review one literal commit, you just establish which one:
+
+- Resolve the delivered branch to a SHA, confirm the base is genuinely its ancestor, and
+  **put the literal SHA in your report**.
+- If delivery is not established, say **"not delivered yet"** and stop. That is
+  a complete, useful result — it means the executor has not delivered — and it
+  is never a reason to review the base, the default branch, or "the latest".
+- If the branch moves while you are working, your review belongs to the SHA
+  you started from. Say which one, and that it may have been superseded.
 
 You should **not** be given the executor's completion report on your first pass.
 If you were given it anyway, do not read it until pass one is finished.
