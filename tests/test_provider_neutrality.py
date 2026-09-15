@@ -113,6 +113,32 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                     "suppresses the rest of the file",
                 )
 
+    def test_counterexample_probe_handles_an_unlisted_specialist_role(self):
+        body = (
+            "- `Claude Decomper` and `Codex Decomper` as two lanes — that is "
+            "one Decomper, run twice.\n"
+        )
+        findings = neutrality.scan_counterexample(body, ("builder",))
+        self.assertTrue(
+            any(f.rule == "compound-lane" for f in findings),
+            "a marked example must be checked even when it quotes an unlisted "
+            "specialist role",
+        )
+
+    def test_counterexample_probe_still_leaves_harmless_text_inert(self):
+        body = "- A harmless example of ordinary project prose.\n"
+        self.assertEqual(neutrality.scan_counterexample(body, ("builder",)), [])
+
+    def test_scan_records_an_unlisted_specialist_counterexample_as_noninert(self):
+        text = (
+            "<!-- guard:counterexample -->\n"
+            "- `Claude Decomper` as a lane.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        result = neutrality.scan(text, ("builder",))
+        self.assertTrue(result.counterexamples[0].findings)
+        self.assertEqual(result.inert_counterexamples(), [])
+
     def test_adapters_do_not_redefine_the_contract(self):
         problems: list[str] = []
         for path in docset.normative_files():

@@ -48,6 +48,7 @@ __all__ = [
     "ScanResult",
     "GRAMMAR_QUALIFIERS",
     "scan",
+    "scan_counterexample",
     "scan_adapter_blocks",
     "adapter_policy_hits",
 ]
@@ -290,7 +291,7 @@ def scan(
                     )
 
     for start, body in blocks:
-        inner = scan(
+        inner = scan_counterexample(
             body, roles,
             source=f"{source}#counterexample@{start}",
             coordinator=coordinator,
@@ -298,10 +299,90 @@ def scan(
             max_lanes=max_lanes,
         )
         result.counterexamples.append(
-            Counterexample(source, start, body, tuple(inner.findings))
+            Counterexample(source, start, body, tuple(inner))
         )
 
     return result
+
+
+# A counterexample may quote a specialist role that is not part of the
+# adopting project's topology. That is still a real provider-shaped example,
+# but the ordinary scan must remain keyed only to the project's declared roles.
+# Probe the marked body for role-shaped words only when checking whether its
+# exemption is honest. This is structural: no provider names or role catalogue
+# is embedded here.
+_COUNTEREXAMPLE_CONTEXT = re.compile(
+    r"\b(?:lane|lanes|role|roles|queue|branch|namespace|worker|workers|"
+    r"executor|executors|seat|seats|session|sessions)\b",
+    re.IGNORECASE,
+)
+_COUNTEREXAMPLE_COMPOUND = re.compile(
+    r"(?<![\w-])(?:[A-Z][\w.+]*\s+)+([A-Z][\w.+]*)\b"
+)
+_COUNTEREXAMPLE_PREFIXED = re.compile(
+    r"(?<![\w])([a-z0-9][\w.+]*)[-_]([a-z][\w.+]*)\b"
+)
+
+
+def _counterexample_roles(text: str, roles: Sequence[str]) -> tuple[str, ...]:
+    """Add role-shaped words found in an explicitly marked example.
+
+    The ordinary scanner cannot treat every capitalised noun as a role: the
+    caller's declared roles are the source of truth for live policy. A marked
+    counterexample is different. Its surrounding lane vocabulary identifies
+    the role-shaped token in forms such as ``SomeProvider Specialist`` or
+    ``someprovider-specialist``. The probe therefore checks that the example
+    is structurally rejected without recognising any provider by name.
+    """
+    candidates = list(roles)
+    seen = set(candidates)
+    for _, line in logical_lines(text):
+        if not _COUNTEREXAMPLE_CONTEXT.search(line):
+            continue
+        for match in _COUNTEREXAMPLE_COMPOUND.finditer(line):
+            candidate = match.group(1).lower()
+            if candidate not in seen:
+                candidates.append(candidate)
+                seen.add(candidate)
+        for match in _COUNTEREXAMPLE_PREFIXED.finditer(line):
+            suffix = match.group(2)
+            if suffix not in seen:
+                candidates.append(suffix)
+                seen.add(suffix)
+    return tuple(candidates)
+
+
+def scan_counterexample(
+    text: str,
+    roles: Iterable[str],
+    *,
+    source: str = "<text>",
+    coordinator: str = "brain",
+    queue_pattern: str | None = None,
+    max_lanes: int | None = None,
+) -> list[Finding]:
+    """Check an explicitly marked counterexample for a real violation.
+
+    First use the adopting project's declared roles. If that finds nothing,
+    make the narrow structural probe described by ``_counterexample_roles``.
+    A harmless marked block still produces no findings, so callers can retain
+    the fail-closed inert-counterexample check.
+    """
+    roles = tuple(roles)
+    findings = scan(
+        text, roles, source=source, coordinator=coordinator,
+        queue_pattern=queue_pattern, max_lanes=max_lanes,
+    ).findings
+    if findings:
+        return findings
+
+    probed_roles = _counterexample_roles(text, roles)
+    if probed_roles == roles:
+        return []
+    return scan(
+        text, probed_roles, source=source, coordinator=coordinator,
+        queue_pattern=queue_pattern, max_lanes=max_lanes,
+    ).findings
 
 
 def scan_adapter_blocks(text: str, *, source: str = "<text>") -> list[Finding]:

@@ -104,7 +104,9 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             )
             for line, body in blocks:
                 caught = (
-                    neutrality.scan(body, ROLES, coordinator=COORDINATOR).findings
+                    neutrality.scan_counterexample(
+                        body, ROLES, coordinator=COORDINATOR
+                    )
                     or authority.scan(body)
                 )
                 if not caught:
