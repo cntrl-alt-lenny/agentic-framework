@@ -29,6 +29,16 @@ be correct under any permutation. What has actually been shown to do the work is
 
 ## Your inputs
 
+Before reading any input, run the first-action checkout check named by the
+prompt:
+
+```
+python3 tools/checkout.py --seat verifier
+```
+
+If it fails, report the current and expected checkout and stop. Do not review
+from the wrong checkout.
+
 You should be given exactly:
 
 1. The **brief** the work was done against.
@@ -37,26 +47,27 @@ You should be given exactly:
    **branch** and the base to compare against.
 3. The repository.
 
-**The owner sends your prompt only after the Builder has finished.** If you are
+**The owner sends your prompt only after the executor has finished.** If you are
 given a branch rather than a head SHA, resolve it yourself and record the
 literal SHA you reviewed. Brain may prepare your prompt in the same response as
-the Builder prompt, but the owner must send yours later; your session never
+the executor prompt, but the owner must send yours later; your session never
 depends on waiting or polling. See [`../kickoff.md`](../kickoff.md). The branch
 existing is not delivery, and a branch at the base is not delivery. Use the
 repository's mechanical check:
 
 ```
 python3 tools/report.py delivery \
-  --branch <builder branch> --base <literal base SHA> \
-  --role <builder role> --task <brief identifier>
+  --branch <executor branch> --base <literal base SHA> \
+  --role <executor role> --task <brief identifier>
 ```
 
-That check fetches the named branch from `origin` before resolving it, so a
-Verifier in a separate clone can discover a Builder's later push as well as a
-Verifier in a linked worktree. It then requires the Builder's shared-inbox
-completion report to name the task and exact branch head, and requires the
-branch to be strictly ahead of an ancestor base. It reads provenance only; do
-not read the Builder's report body before pass one. If the check never returns
+That check fetches the named branch from `origin` before resolving it. A
+Verifier must run from a linked worktree; a separate clone is coordinator-only
+because its completion-report inbox is private and cannot establish delivery
+for another seat. The check requires the executor's shared-inbox completion
+report to name the task and exact branch head, and requires the branch to be
+strictly ahead of an ancestor base. It reads provenance only; do not read the
+executor's report body before pass one. If the check never returns
 `delivered` before your session ends, stop and say exactly **"not delivered
 yet"**. The owner pastes this prompt again later. When it returns `delivered`,
 continue with the exact-SHA

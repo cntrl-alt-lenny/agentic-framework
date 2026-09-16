@@ -47,8 +47,10 @@ python3 tools/report.py write --task <this brief's identifier> <<'REPORT'
 REPORT
 ```
 
-`--task` is required — usually the brief's filename. Nothing else needs
-supplying: the destination and your role tag are both derived from the
+`--task` is required. It is the stable `Brief-ID:` value in the brief, assigned
+when Brain writes it and unchanged while the brief moves from `active.md` into
+`delivered/` or `archive/`; it is never the literal filename `active.md`.
+Nothing else needs supplying: the destination and your role tag are both derived from the
 checkout you are in, never from anything you assert. See `tools/report.py`
 at the project root for the mechanism and why each guarantee holds; the
 essentials:
@@ -58,7 +60,8 @@ essentials:
   one clone, and never version-controlled.
 - Your role tag is derived from *which checkout you are in*, per
   [`git-and-isolation.md`](git-and-isolation.md): a linked worktree's own
-  name, or `coordinator` for the primary checkout. Two concurrently-active
+  name, or `brain` for the primary checkout. Older `coordinator-latest.md`
+  files remain a readable compatibility fallback. Two concurrently-active
   roles have two different checkouts, so they write to two different files
   by construction — this relies on the isolation invariant, the same way
   every other role-per-checkout guarantee in this framework does.

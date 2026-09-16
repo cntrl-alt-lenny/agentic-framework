@@ -35,6 +35,30 @@ on a new machine reaches the same layout with the same commands.
 
 `.worktrees/` is ignored by git.
 
+Every role prompt starts with the shipped mechanical check:
+
+```bash
+python3 tools/checkout.py --seat <seat named in the prompt>
+```
+
+It passes for the primary coordinating checkout and for a linked worktree at
+`.worktrees/<role>`, and fails with the current and expected locations when a
+seat is claimed from the wrong checkout.
+
+A separate clone has the same shape as the primary checkout, so it can only
+ever be **the coordinating seat** — leave its `framework.checkout-seat` unset,
+or explicitly set it to the coordinator's own name. It cannot host any other
+role. [`reports.md`](reports.md)'s shared completion-report inbox is
+`<git-common-dir>/agent-inbox/`, which is the *same directory only for
+worktrees of one clone* — a genuinely separate `git clone` has its own private
+git-common-dir, so a report written there is invisible to a delivery check run
+from anywhere else. Assigning a non-coordinator seat to a separate clone would
+therefore look accepted by the checkout check and then silently fail every
+delivery check run from a different checkout — `tools/checkout.py` refuses
+this outright: setting `framework.checkout-seat` to anything other than the
+coordinator on a clone-shaped checkout is a hard error, not a mis-tag. Use a
+linked worktree for every role except the coordinator.
+
 Git worktrees share one object database and one remote, so a fetch or push from
 any is visible to the others. They do **not** share a working directory or index:
 one role cannot check out a branch another is sitting on, and one role switching
@@ -53,10 +77,13 @@ already holds, so creating these *on* a branch only works while nobody else
 happens to be there — exactly the sort of setup step that works once and then
 fails confusingly six months later.
 
-**Any mechanism providing equivalent isolation is acceptable** — separate clones,
-a tool's own per-session sandbox, containers. What is not acceptable is two
-concurrent agents in one checkout, or a provider-specific layout being treated as
-the rule rather than as one implementation of it.
+**Any mechanism providing equivalent isolation is acceptable** — a tool's own
+per-session sandbox, containers, an unconventionally-named linked worktree.
+What is not acceptable is two concurrent agents in one checkout, or a
+provider-specific layout being treated as the rule rather than as one
+implementation of it. A genuinely separate clone satisfies the *isolation*
+invariant (no shared working directory) but not the *reporting* one — see
+above — so it is acceptable only for the coordinating seat.
 
 ## Branch naming
 

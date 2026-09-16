@@ -24,8 +24,10 @@ owner, is in [`docs/agents/CONSTITUTION.md`](docs/agents/CONSTITUTION.md). It is
 stated once there rather than restated — and drifted — here.
 
 **The owner's interface is conversation, not the repository.** Their loop is:
-ask what's next → receive one ready-to-paste prompt → paste it into whichever
-tool they choose → say it finished → receive the outcome and the next prompt. If
+ask what's next → receive one ready-to-paste executor prompt and, where the
+topology has a Verifier, one separately labelled Verifier prompt to send later
+→ paste them in the stated order → say it finished → receive the outcome and the
+next prompt. If
 a step would require them to open a repository file or run a git command, that is
 a defect in this setup, not a task for them.
 
@@ -126,8 +128,8 @@ rehydrates, writes one brief, hands the owner a ready-to-paste prompt, the work
 comes back, Brain independently inspects the exact SHA, adjudicates, merges what
 it accepts, and reports in plain English.
 
-**The owner's involvement in a routine round is pasting one prompt and reading
-one summary.**
+**The owner's involvement in a routine round is pasting the stated prompt(s) in
+order and reading one summary.**
 
 ## Where to look
 

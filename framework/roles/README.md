@@ -79,7 +79,9 @@ Contracts state capabilities, never model names.
 > vendor.
 
 Which model actually ran a seat, and what was observed, belongs in a project's
-own notes as a **log, not a ranking** — see [`../state.md`](../state.md).
+own notes as a **log, not a ranking**. An adopting project keeps its durable
+state in `docs/state.md`; the framework repository's author guidance is not
+copied into the project.
 
 ## Conveniences must fail loudly
 

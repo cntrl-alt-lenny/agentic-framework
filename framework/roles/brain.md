@@ -78,6 +78,16 @@ what was observed, as a log rather than a ranking.
 
 ## Startup sequence — every session, in order
 
+Before step 1, run the first-action checkout check:
+
+```
+python3 tools/checkout.py --seat brain
+```
+
+If it fails, stop and report the current and expected checkout. Every prompt
+Brain writes for another seat must put that seat's corresponding checkout check
+before its first other instruction.
+
 1. **Read the project's own rules first.** Its `AGENTS.md` and whatever
    project-specification document it names. They outrank everything below.
 2. **Read the durable state document.** It is deliberately short. Treat every
@@ -109,7 +119,7 @@ what was observed, as a log rather than a ranking.
    optional courtesy — see *Handing off* below.
 5. **Prepare the Verifier prompt** where the topology has one, in the same
    Brain response as the Builder prompt, but label the order next to the
-   prompts: the owner sends the Builder prompt first and sends the Verifier
+   prompts: the owner sends the executor prompt first and sends the Verifier
    prompt only after the Builder has finished. The Verifier prompt gives it the
    brief identifier, literal base SHA and Builder branch. The Verifier does not
    wait or poll; once sent, it runs the mechanical delivery check and either

@@ -33,6 +33,20 @@ SHAs. A chat assistant without file access cannot satisfy this contract.
 
 ## Before starting
 
+Before any other action, run the first-action checkout check named by the
+prompt:
+
+```bash
+python3 tools/checkout.py --seat <the executor seat named in the prompt>
+```
+
+If it fails, do not read, edit, commit or report work from that checkout. Say
+where the session is and where that seat must run. A linked worktree derives
+the seat from `.worktrees/<role>`. A separate clone can only ever be the
+coordinating seat — its completion-report inbox is private to that clone, so
+no other role can be hosted there; see
+[`../git-and-isolation.md`](../git-and-isolation.md).
+
 1. **Read the project's coordination document** (usually `AGENTS.md`) and any
    project-specification document it names. They outrank convenience, and they
    outrank your brief where the two conflict — if they do conflict, say so and

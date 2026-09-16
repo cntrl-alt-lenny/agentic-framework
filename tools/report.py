@@ -40,8 +40,10 @@ Guarantees this module is responsible for, and how:
     `git-and-isolation.md` puts one role per checkout; a linked worktree's own
     directory name already matches its role, and the primary checkout — where
     `--git-dir` and `--git-common-dir` coincide, which holds regardless of what
-    either directory is called — is the coordinating role, tagged
-    `coordinator` rather than guessed from a project's own name for that seat.
+    either directory is called — is the coordinating role, tagged `brain`
+    rather than guessed from a project's own name for that seat. A separate
+    clone is coordinator-only because its inbox is private. Readers keep
+    compatibility with older `coordinator-latest.md` reports.
   * **Writes atomically.** Write to a temp file beside the target, then
     `os.replace`, which is an atomic rename on both POSIX and Windows within one
     filesystem. A reader never observes a half-written report.
@@ -70,9 +72,19 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+# `checkout.py` ships in this same `tools/` directory on every install --
+# `adopt.py` adds both files unconditionally, as a matched pair, never one
+# without the other. Importing it (rather than reimplementing its seat
+# derivation here) is what makes role identity a SINGLE derivation both
+# tools/checkout.py's first-action check and this writer use; see
+# `checkout.checkout_seat`'s docstring and `git-and-isolation.md`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import checkout as _checkout  # noqa: E402
 
 __all__ = [
     "ReportError",
@@ -81,6 +93,7 @@ __all__ = [
     "role_tag",
     "head_sha",
     "write_report",
+    "latest_report_provenance",
     "check_status",
     "delivery_status",
 ]
@@ -126,20 +139,22 @@ def git_common_dir(cwd: str | Path | None = None) -> Path:
 
 
 def role_tag(cwd: str | Path | None = None) -> str:
-    """This checkout's role, derived structurally -- see the module docstring."""
-    toplevel = _git(["rev-parse", "--show-toplevel"], cwd=cwd)
-    if not toplevel:
-        raise ReportError(
-            "not inside a git repository, or git is unavailable"
-        )
-    git_dir = _git(["rev-parse", "--git-dir"], cwd=cwd)
-    common_dir = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
-    is_primary = (
-        git_dir is not None
-        and common_dir is not None
-        and _resolve(git_dir, cwd) == _resolve(common_dir, cwd)
-    )
-    role = "coordinator" if is_primary else Path(toplevel).name
+    """This checkout's role, derived structurally -- see the module docstring.
+
+    Delegates to `checkout.checkout_seat` -- the exact function
+    `tools/checkout.py`'s first-action check calls -- rather than
+    re-deriving the seat here. Two independent implementations of the same
+    rule drift; a linked worktree outside `.worktrees/` must resolve to the same
+    seat whichever tool asks. A separate clone is coordinator-only and any
+    non-coordinator `framework.checkout-seat` assignment is rejected before a
+    report can be written. `coordinator="brain"` names the pre-seat
+    compatibility tag: readers still fall back to `coordinator-latest.md`
+    below.
+    """
+    try:
+        role = _checkout.checkout_seat(cwd, coordinator="brain")
+    except _checkout.CheckoutError as exc:
+        raise ReportError(str(exc)) from exc
     return "".join(c for c in role if c.isalnum() or c in "-_") or "unknown"
 
 
@@ -162,11 +177,9 @@ README = """# agent-inbox
 Auto-populated by `tools/report.py`, called either directly by a role's own
 contract or by a provider-specific convenience hook that calls the same
 writer. Each `<role>-latest.md` holds the most recent completion report from
-the matching checkout. `coordinator-latest.md` is the coordinating role's own
-report, from the project's primary checkout -- tagged `coordinator` rather
-than the project's name, and rather than whatever this project calls that
-role, because the role tag is derived from checkout structure, never
-self-reported or read from `AGENTS.md`.
+the matching checkout. `brain-latest.md` is the coordinating role's own
+report, from the project's primary checkout. The old `coordinator-latest.md`
+filename remains readable for reports written by an earlier adoption.
 
 **A missing or stale file means UNKNOWN, never that a task did not happen or
 that a review did not run.** Not every role runs this command every round --
@@ -181,10 +194,28 @@ Not under version control: this lives inside git's own directory.
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    """Write-then-rename, so a reader never observes a partially-written file."""
+    """Write-then-rename, retrying Windows' sharing violation briefly.
+
+    Ported from edopro-retro-formats, `tools/report.py`, whose report writer
+    handles a reader holding the destination open.
+    """
     tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
     tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
+    deadline = time.monotonic() + 5.0
+    delay = 0.005
+    while True:
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                try:
+                    tmp.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.05)
 
 
 def _seed_readme(inbox: Path) -> None:
@@ -277,21 +308,49 @@ def _parse_header(text: str) -> Provenance | None:
     )
 
 
-def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
-    """Is the latest report for THIS checkout's role still fresh?
+def latest_report_provenance(cwd: str | Path | None = None) -> Provenance | None:
+    """This checkout's own latest report header, if one exists and is readable.
 
     "This checkout's role" -- the same auto-derivation `write_report` uses, so
-    a reader compares against the correct file without ever naming a role by
-    hand. Returns (exit_code, message): 0 fresh, 1 stale (checkout has moved
-    since the report was written), 2 no report found for this role.
+    a caller reads the correct file without ever naming a role by hand. Used
+    by `check_status` below, and by a provider hook (see
+    `adapters/claude-code/hooks/save_agent_reply.py`) that must tell a report
+    the agent already wrote for its current work apart from one it did not.
+    Returns ``None`` when no report exists yet, or an existing file's header
+    cannot be read at all -- both ordinary, not errors.
     """
     role = role_tag(cwd)
     inbox = git_common_dir(cwd) / "agent-inbox"
     latest = inbox / f"{role}-latest.md"
+    if role == "brain" and not latest.is_file():
+        legacy = inbox / "coordinator-latest.md"
+        if legacy.is_file():
+            latest = legacy
+    if not latest.is_file():
+        return None
+    try:
+        return _parse_header(latest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
+    """Is the latest report for THIS checkout's role still fresh?
+
+    Returns (exit_code, message): 0 fresh, 1 stale (checkout has moved since
+    the report was written), 2 no report found for this role.
+    """
+    role = role_tag(cwd)
+    inbox = git_common_dir(cwd) / "agent-inbox"
+    latest = inbox / f"{role}-latest.md"
+    if role == "brain" and not latest.is_file():
+        legacy = inbox / "coordinator-latest.md"
+        if legacy.is_file():
+            latest = legacy
     if not latest.is_file():
         return 2, f"no report found for role '{role}' at {latest}"
 
-    provenance = _parse_header(latest.read_text(encoding="utf-8"))
+    provenance = latest_report_provenance(cwd)
     current = head_sha(cwd)
     if provenance is None or provenance.head is None:
         return 1, f"{latest} has no readable provenance header; treat as stale"
@@ -324,8 +383,8 @@ def _commit_for_ref(ref: str, cwd: str | Path | None = None) -> str | None:
 def _fetch_branch(branch: str, cwd: str | Path | None = None) -> None:
     """Best-effort fetch of the named branch before resolving delivery.
 
-    A Verifier may be in a separate clone, where the Builder's later push is
-    not present in any local ref until it is fetched. A linked worktree may
+    A Verifier must use a linked worktree; a separate clone is coordinator-only
+    because its completion-report inbox is private. A linked worktree may
     already have the local branch, and a repository without an ``origin`` may
     be intentionally offline; both cases remain usable because the local and
     fetched remote refs are reconciled below and fetch failure is retryable.
@@ -374,7 +433,7 @@ def _delivery_branch_head(
     """Reconcile a local branch with the freshly fetched origin branch.
 
     A stale local ref must not hide a newer remote head. A local branch ahead
-    of origin is valid for a linked Builder worktree, while divergence is
+    of origin is valid for a linked executor worktree, while divergence is
     ambiguous and must remain retryable rather than selecting either side.
     """
     local_ref, remote_ref = _branch_ref_names(branch)
@@ -414,15 +473,16 @@ def delivery_status(
     task: str,
     cwd: str | Path | None = None,
 ) -> tuple[int, str]:
-    """Check whether a Builder has delivered this task for Verifier review.
+    """Check whether an executor has delivered this task for Verifier review.
 
     Delivery is a conjunction, not a branch existence check: the named branch
     must resolve to a commit strictly after an ancestor base, and the shared
     inbox must contain the named role's report with matching task and HEAD
-    provenance. The named branch is fetched from ``origin`` first so this
-    check works in a separate Verifier clone as well as a linked worktree. A
-    missing report, a missing branch, or a branch still at the base all return
-    the same retryable "not delivered yet" state.
+    provenance. The named branch is fetched from ``origin`` first; a Verifier
+    performs this check from a linked worktree, while separate clones remain
+    coordinator-only because their inboxes are private. A missing report, a
+    missing branch, or a branch still at the base all return the same retryable
+    "not delivered yet" state.
     """
     _fetch_branch(branch, cwd)
     head, conflict = _delivery_branch_head(branch, cwd)

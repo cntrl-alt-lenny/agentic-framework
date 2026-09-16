@@ -137,12 +137,29 @@ def _role_alt(roles: Sequence[str]) -> str:
     return "|".join(re.escape(r) for r in sorted(roles, key=len, reverse=True))
 
 
+#: One qualifier word. A dot is part of the word only when it is immediately
+#: followed by another word character -- a version- or domain-shaped token
+#: such as "Acme.io" or "Gpt5.6" -- never when it is followed by whitespace or
+#: end of word. That keeps a genuine sentence-ending period ("Verifier. That
+#: Builder" -- two ordinary role mentions, not a provider-shaped lane) from
+#: being absorbed into the preceding word, while still letting a dotted
+#: provider-shaped qualifier match as one token. Hyphens are deliberately
+#: EXCLUDED: an ordinary capitalised English compound adjective ("Self-
+#: contained Builder", "Follow-up Builder") must not be forced into one
+#: qualifier "word" that then fails the grammar check just because it isn't a
+#: dictionary word -- a hyphen here breaks tokenisation the same way one did
+#: on main, so the compound never becomes a candidate at all.
+_QUALIFIER_WORD = r"[A-Z][\w+]*(?:\.\w[\w+]*)*"
+
+
 def _compound_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
     """`<Proper Noun> <Role>` — binding a proper noun to a role makes a lane
     out of the qualifier. Anything that is not plain English grammar is treated
     as a proper noun, i.e. a provider, and rejected."""
     caps = "|".join(re.escape(r.capitalize()) for r in sorted(roles, key=len, reverse=True))
-    return re.compile(r"(?<![\w-])((?:[A-Z][\w.+]*\s+){1,3})(" + caps + r")\b")
+    return re.compile(
+        r"(?<![\w-])((?:" + _QUALIFIER_WORD + r"\s+){1,3})(" + caps + r")\b"
+    )
 
 
 def _prefixed_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
@@ -215,7 +232,7 @@ def scan(
     role_set = set(roles)
     branch_prefixes = role_set | {coordinator}
     role_branch_re = re.compile(
-        r"(?<![\w])([a-z0-9][\w.+]*[-_]" + _role_alt(roles) + r")/"
+        r"(?<![\w-])((?:[a-z0-9][\w.+]*[-_])?(?:" + _role_alt(roles) + r"))/"
         r"[\w.<>-]+"
     )
 
@@ -297,6 +314,8 @@ def scan(
         # ``acme/some-scope``.
         if not BRANCH_LINE.search(line):
             for match in role_branch_re.finditer(line):
+                if match.group(1) in branch_prefixes:
+                    continue
                 emit(
                     n, "branch-namespace",
                     f"branch prefix '{match.group(1)}/' is not a role; new "

@@ -21,10 +21,10 @@ prompt".
    does not establish delivery in the Verifier's session, it says **"not
    delivered yet"** and the owner sends its prompt again once delivery is
    available.
-7. **Brain inspects the exact repository state** — literal SHAs, the real diff,
-   real validation output, CI at that SHA.
-8. **Verifier independently reviews the exact head SHA**, where the topology has
+7. **Verifier independently reviews the exact head SHA**, where the topology has
    one, without the executor's report on its first pass.
+8. **Brain inspects the exact repository state** — literal SHAs, the real diff,
+   real validation output, CI at that SHA.
 9. **Brain adjudicates.** Reject with a corrective brief, or accept.
 10. **On acceptance, Brain merges.**
 11. **Brain summarizes in plain English** and updates durable state.

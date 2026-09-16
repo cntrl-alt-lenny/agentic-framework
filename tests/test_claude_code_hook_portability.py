@@ -48,6 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import adopt  # noqa: E402
+import report  # noqa: E402
 
 IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".pytest_cache")
 
@@ -185,7 +186,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("python3",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py3", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(latest.is_file(), "no report written with python3 present")
         self.assertIn("Final reply text.", latest.read_text(encoding="utf-8"))
 
@@ -200,7 +201,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("python",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py-only", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(
             latest.is_file(),
             "no report written with only `python` on PATH; a fix that only "
@@ -212,7 +213,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("py",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py-launcher", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(latest.is_file(), "the `py` launcher candidate was not tried")
 
     def test_original_hardcoded_command_would_have_failed_here(self):
@@ -248,7 +249,7 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
         )
         inbox = inbox_dir(self.target)
         self.assertFalse(
-            (inbox / "coordinator-latest.md").exists(),
+            (inbox / "brain-latest.md").exists(),
             "a report was written despite no interpreter being available",
         )
         health = inbox / "claude-code-health.md"
@@ -261,7 +262,7 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
 
     def test_the_health_marker_and_a_role_report_are_never_confused(self):
         """A cold Brain must be able to tell these apart by filename alone."""
-        for name in ("coordinator-latest.md", "worker-latest.md", "verifier-latest.md"):
+        for name in ("brain-latest.md", "worker-latest.md", "verifier-latest.md"):
             self.assertNotEqual(name, "claude-code-health.md")
 
     def test_absence_of_the_health_file_proves_nothing(self):
@@ -277,11 +278,11 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
 class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
     """Item 8: the primary checkout is not named after a role."""
 
-    def test_the_primary_checkout_is_tagged_coordinator(self):
+    def test_the_primary_checkout_is_tagged_brain(self):
         path_dir = make_interpreter_dir(extra_names=("python3",))
         run_launcher(self.target, path_dir=path_dir, session_id="primary", sh=self.sh)
         inbox = inbox_dir(self.target)
-        self.assertTrue((inbox / "coordinator-latest.md").is_file())
+        self.assertTrue((inbox / "brain-latest.md").is_file())
         # The defect this replaces: tagged with the project's own directory
         # name, which is `self.target.name` here.
         self.assertFalse(
@@ -314,7 +315,7 @@ class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
             (inbox / "worker-latest.md").is_file(),
             "a linked worktree named 'worker' must produce worker-latest.md",
         )
-        self.assertFalse((inbox / "coordinator-latest.md").exists())
+        self.assertFalse((inbox / "brain-latest.md").exists())
 
 
 class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
@@ -375,31 +376,34 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
             "a python3-only PATH; this does not reproduce the incident",
         )
         self.assertFalse(
-            (inbox_dir(target) / "coordinator-latest.md").exists(),
+            (inbox_dir(target) / "brain-latest.md").exists(),
             "the pre-fix command produced a report despite naming an "
             "interpreter absent from PATH; the reproduction is not faithful",
         )
 
     def test_the_old_role_tag_names_the_project_not_the_role(self):
-        """The role-tag fix now lives in `tools/report.py`, not this hook.
+        """The role-tag derivation now lives in `tools/checkout.py`, not this
+        hook, and not `tools/report.py` either.
 
-        `save_agent_reply.py` has been converged onto that shared writer -- see
-        `framework/reports.md` -- so reproducing the original defect means
-        mutating the mechanism it now delegates to, not the hook itself. This
-        is also the strongest proof the convergence is real: a regression in
-        the shared module breaks the Claude Code path too, exactly because
-        there is no longer a second implementation to be independently
-        correct.
+        `save_agent_reply.py` converges onto `tools/report.py`'s
+        `write_report` (see `framework/reports.md`), and `role_tag` in turn
+        converges onto `checkout.checkout_seat` -- the same derivation
+        `tools/checkout.py`'s first-action check uses -- so there is exactly
+        one place a role's identity is computed at all (see
+        `framework/git-and-isolation.md`). Reproducing the original defect
+        therefore means mutating `checkout_seat` itself, which is also the
+        strongest proof the convergence is real: a regression in the shared
+        derivation breaks the Claude Code path too, exactly because there is
+        no longer a second implementation to be independently correct.
         """
-        report_path = self.repo / "tools" / "report.py"
-        text = report_path.read_text(encoding="utf-8")
-        # Restore the exact pre-fix derivation this replaced.
-        marker = (
-            'role = "coordinator" if is_primary else Path(toplevel).name'
-        )
-        self.assertIn(marker, text, "fixture out of sync with tools/report.py")
-        text = text.replace(marker, "role = Path(toplevel).name")
-        report_path.write_text(text, encoding="utf-8")
+        checkout_path = self.repo / "tools" / "checkout.py"
+        text = checkout_path.read_text(encoding="utf-8")
+        # Restore the exact pre-fix derivation this replaced: every checkout,
+        # including the primary one, tagged by its own directory name.
+        marker = "    return coordinator"
+        self.assertIn(marker, text, "fixture out of sync with tools/checkout.py")
+        text = text.replace(marker, "    return top.name")
+        checkout_path.write_text(text, encoding="utf-8")
 
         target = self._adopted_target()
         path_dir = make_interpreter_dir(extra_names=("python3",))
@@ -411,7 +415,218 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
             "reverting the role-tag fix should reproduce project-named "
             "reports from the primary checkout",
         )
-        self.assertFalse((inbox / "coordinator-latest.md").exists())
+        self.assertFalse((inbox / "brain-latest.md").exists())
+
+
+class TestHookNeverOverwritesTheAgentsOwnReport(HookHarness):
+    """The reported incident, in a real adopted project on 2026-09-16: the
+    agent wrote its own completion report, with the real brief identifier,
+    moments before the session ended. The Stop hook then unconditionally
+    replaced it with a session-id-tagged mirror of the same final reply, and
+    the delivery check that depends on the real task identifier started
+    reporting "not delivered yet" even though the work had, in fact, landed.
+    """
+
+    def test_the_own_report_check_never_crashes_the_hook(self):
+        """A checkout the seat-derivation check itself refuses (see
+        `tools/checkout.py`'s hard-error path for a separate clone assigned a
+        non-coordinator seat) must still leave the hook exiting 0, never
+        raising past `_agent_already_reported_this_work` uncaught -- a
+        session must never fail to end over this, the same as every other
+        failure mode this hook is documented to swallow.
+
+        Invokes the hook script directly with the interpreter, bypassing
+        `run_python.sh`: that wrapper always exits 0 itself (trying further
+        interpreter candidates and finally a health marker on any non-zero
+        exit), which would make this test pass vacuously whether or not the
+        hook script's own `main()` actually crashed.
+        """
+        subprocess.run(
+            ["git", "config", "--local", "framework.checkout-seat", "researcher"],
+            cwd=self.target, check=True,
+        )
+        transcript = self.target / "transcript-misconfigured.jsonl"
+        transcript.write_text(TRANSCRIPT, encoding="utf-8")
+        payload = json.dumps({
+            "transcript_path": str(transcript), "session_id": "misconfigured",
+        })
+        proc = subprocess.run(
+            [sys.executable, ".claude/hooks/save_agent_reply.py"],
+            cwd=self.target, input=payload, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+    def test_a_fresh_self_written_report_is_left_alone(self):
+        report.write_report(
+            "Round-008 complete. Fixed the neutrality regression.",
+            task="round-008-real-brief", cwd=self.target, source="cli",
+        )
+        latest = inbox_dir(self.target) / "brain-latest.md"
+        before = latest.read_text(encoding="utf-8")
+
+        path_dir = make_interpreter_dir(extra_names=("python3",))
+        proc = run_launcher(
+            self.target, path_dir=path_dir, session_id="post-report", sh=self.sh
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        after = latest.read_text(encoding="utf-8")
+        self.assertEqual(
+            after, before,
+            "the hook overwrote a report the agent had just written itself "
+            "for the current work -- this is the reported incident",
+        )
+        self.assertIn("task=round-008-real-brief", after)
+        self.assertNotIn("Final reply text.", after)
+
+    def test_a_stale_self_written_report_from_an_older_head_is_still_captured(self):
+        report.write_report(
+            "An earlier task's report, at an earlier head.",
+            task="round-007-old-brief", cwd=self.target, source="cli",
+        )
+        # Advance HEAD: the existing report is no longer for "this work".
+        (self.target / "advance.txt").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "advance.txt"], cwd=self.target, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "advance"], cwd=self.target, check=True)
+
+        path_dir = make_interpreter_dir(extra_names=("python3",))
+        proc = run_launcher(
+            self.target, path_dir=path_dir, session_id="post-advance", sh=self.sh
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        after = (inbox_dir(self.target) / "brain-latest.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "Final reply text.", after,
+            "a stale report from an older head must not permanently block "
+            "the hook's fallback capture -- a session that ends with "
+            "nothing self-reported for the new work must still leave a trace",
+        )
+        self.assertIn("task=claude-code-session:post-advance", after)
+
+    def test_the_hooks_own_previous_mirror_can_still_be_overwritten(self):
+        path_dir = make_interpreter_dir(extra_names=("python3",))
+        run_launcher(self.target, path_dir=path_dir, session_id="first-mirror", sh=self.sh)
+        latest = inbox_dir(self.target) / "brain-latest.md"
+        first = latest.read_text(encoding="utf-8")
+        self.assertIn("task=claude-code-session:first-mirror", first)
+
+        # A second Stop event in the same session, same HEAD, no commit in
+        # between: the only report on file is this hook's own prior mirror,
+        # which is never "the agent's own report" and must stay overwritable.
+        transcript = self.target / "transcript-second-mirror.jsonl"
+        transcript.write_text(
+            "\n".join((
+                json.dumps({"role": "user", "message": {"role": "user", "content": "more"}}),
+                json.dumps({
+                    "role": "assistant",
+                    "message": {"role": "assistant",
+                                "content": [{"type": "text", "text": "Updated final reply."}]},
+                }),
+            )),
+            encoding="utf-8",
+        )
+        payload = json.dumps({
+            "transcript_path": str(transcript), "session_id": "first-mirror",
+        })
+        proc = subprocess.run(
+            [self.sh, ".claude/hooks/run_python.sh", ".claude/hooks/save_agent_reply.py"],
+            cwd=self.target, input=payload, capture_output=True, text=True,
+            env={"PATH": str(path_dir), "HOME": str(self.target)},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        after = latest.read_text(encoding="utf-8")
+        self.assertIn(
+            "Updated final reply.", after,
+            "the hook must still be able to overwrite its own earlier mirror",
+        )
+
+    def test_the_log_file_gains_no_entry_when_the_hook_defers(self):
+        report.write_report(
+            "Round-008 complete.", task="round-008-real-brief",
+            cwd=self.target, source="cli",
+        )
+        log = inbox_dir(self.target) / "brain-log.md"
+        before = log.read_text(encoding="utf-8") if log.is_file() else ""
+
+        path_dir = make_interpreter_dir(extra_names=("python3",))
+        proc = run_launcher(
+            self.target, path_dir=path_dir, session_id="deferred", sh=self.sh
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        after = log.read_text(encoding="utf-8") if log.is_file() else ""
+        self.assertEqual(
+            after, before,
+            "deferring to the agent's own report must not still append a "
+            "spurious log entry for the transcript mirror the hook chose "
+            "not to write",
+        )
+
+
+class TestTheOverwriteDefectReproducesAgainstTheReportedShape(unittest.TestCase):
+    """Red-before-green for the 2026-09-16 incident: restore the hook's
+    unconditional overwrite and prove it clobbers the agent's own report."""
+
+    def setUp(self):
+        self.sh = require_sh()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name) / "repo"
+        shutil.copytree(ROOT, self.repo, ignore=IGNORE)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _adopted_target(self) -> Path:
+        target = Path(self._tmp.name) / "target"
+        target.mkdir()
+        init_repo(target)
+        proc = subprocess.run(
+            [sys.executable, str(self.repo / "tools" / "adopt.py"),
+             str(target), "--project", "Hook Test", "--adapter", "claude-code"],
+            cwd=self.repo, capture_output=True, text=True,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        return target
+
+    def test_the_old_unconditional_overwrite_clobbers_the_agents_own_report(self):
+        hook_path = (
+            self.repo / "adapters" / "claude-code" / "hooks" / "save_agent_reply.py"
+        )
+        text = hook_path.read_text(encoding="utf-8")
+        marker = (
+            '    if _agent_already_reported_this_work():\n'
+            '        return 0\n\n'
+            '    transcript = event.get("transcript_path")'
+        )
+        self.assertIn(marker, text, "fixture out of sync with the hook")
+        hook_path.write_text(
+            text.replace(marker, '    transcript = event.get("transcript_path")'),
+            encoding="utf-8",
+        )
+
+        target = self._adopted_target()
+        report.write_report(
+            "The agent's own real report, with the real brief identifier.",
+            task="round-008-real-brief", cwd=target, source="cli",
+        )
+        latest = inbox_dir(target) / "brain-latest.md"
+        before = latest.read_text(encoding="utf-8")
+
+        path_dir = make_interpreter_dir(extra_names=("python3",))
+        proc = run_launcher(target, path_dir=path_dir, session_id="regress", sh=self.sh)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        after = latest.read_text(encoding="utf-8")
+        self.assertNotEqual(
+            after, before,
+            "the pre-fix hook unexpectedly left the report alone; this does "
+            "not reproduce the incident",
+        )
+        self.assertNotIn(
+            "task=round-008-real-brief", after,
+            "the pre-fix hook unexpectedly preserved the real brief "
+            "identifier; this does not reproduce the incident",
+        )
 
 
 if __name__ == "__main__":

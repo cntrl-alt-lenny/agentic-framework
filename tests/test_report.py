@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -90,8 +91,8 @@ class TestGitCommonDirResolvesFromAnyWorktree(RepoCase):
 class TestRoleTagIsStructuralNotSelfReported(RepoCase):
     """No CLI flag, no provider metadata -- see the module docstring for why."""
 
-    def test_the_primary_checkout_is_coordinator(self):
-        self.assertEqual(report.role_tag(self.repo), "coordinator")
+    def test_the_primary_checkout_is_brain(self):
+        self.assertEqual(report.role_tag(self.repo), "brain")
 
     def test_a_linked_worktree_is_tagged_with_its_own_directory_name(self):
         worker = add_worktree(self.repo, ".worktrees/worker")
@@ -129,14 +130,14 @@ class TestRoleTagIsStructuralNotSelfReported(RepoCase):
 class TestWriteReportBehaviour(RepoCase):
     def test_writes_latest_and_appends_log(self):
         path = report.write_report("Body text.", task="001-brief", cwd=self.repo)
-        self.assertEqual(path, self.inbox() / "coordinator-latest.md")
+        self.assertEqual(path, self.inbox() / "brain-latest.md")
         self.assertIn("Body text.", path.read_text(encoding="utf-8"))
 
         report.write_report("Second body.", task="002-brief", cwd=self.repo)
-        log = (self.inbox() / "coordinator-log.md").read_text(encoding="utf-8")
+        log = (self.inbox() / "brain-log.md").read_text(encoding="utf-8")
         self.assertIn("Body text.", log)
         self.assertIn("Second body.", log)
-        latest = (self.inbox() / "coordinator-latest.md").read_text(encoding="utf-8")
+        latest = (self.inbox() / "brain-latest.md").read_text(encoding="utf-8")
         self.assertIn("Second body.", latest)
         self.assertNotIn("Body text.", latest, "latest must be overwritten, not appended")
 
@@ -184,7 +185,7 @@ class TestNonClobberAcrossConcurrentLanes(RepoCase):
         inbox = self.inbox()
         self.assertIn("Worker's own", (inbox / "worker-latest.md").read_text())
         self.assertIn("Verifier's own", (inbox / "verifier-latest.md").read_text())
-        self.assertIn("Coordinator's own", (inbox / "coordinator-latest.md").read_text())
+        self.assertIn("Coordinator's own", (inbox / "brain-latest.md").read_text())
 
     def test_a_later_write_from_one_lane_never_touches_another_lanes_file(self):
         worker = add_worktree(self.repo, ".worktrees/worker")
@@ -215,7 +216,7 @@ class TestWritesAreAtomic(RepoCase):
 
     def test_a_stalled_temp_file_does_not_disturb_the_visible_report(self):
         report.write_report("Original, complete report.", task="a", cwd=self.repo)
-        latest = self.inbox() / "coordinator-latest.md"
+        latest = self.inbox() / "brain-latest.md"
         original = latest.read_text(encoding="utf-8")
 
         # Simulate a write that has started but not yet reached `os.replace` --
@@ -230,6 +231,25 @@ class TestWritesAreAtomic(RepoCase):
         finally:
             stalled_tmp.unlink()
 
+    def test_windows_style_sharing_violation_is_retried(self):
+        target = self.inbox() / "retry.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        real_replace = report.os.replace
+
+        calls = [0]
+
+        def replace_once_then_real(source, destination):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise PermissionError("busy")
+            return real_replace(source, destination)
+
+        with mock.patch.object(
+            report.os, "replace", side_effect=replace_once_then_real
+        ):
+            report._atomic_write(target, "complete\n")
+        self.assertEqual(target.read_text(encoding="utf-8"), "complete\n")
+
     def test_readers_during_concurrent_writes_never_see_torn_content(self):
         """Best-effort race amplification, kept as a second, weaker signal.
 
@@ -238,7 +258,7 @@ class TestWritesAreAtomic(RepoCase):
         so this still runs, at a size and count chosen to make a torn read
         likely if the write were not atomic.
         """
-        latest = self.inbox() / "coordinator-latest.md"
+        latest = self.inbox() / "brain-latest.md"
         markers = [f"MARK-{i}-" + ("x" * 5000) for i in range(6)]
         stop = threading.Event()
         observed_bad: list[str] = []
@@ -258,13 +278,27 @@ class TestWritesAreAtomic(RepoCase):
                 if body and body not in markers:
                     observed_bad.append(body[:80])
 
-        t = threading.Thread(target=reader)
+        t = threading.Thread(target=reader, daemon=True)
         t.start()
-        for m in markers:
-            report.write_report(m, task="race", cwd=self.repo)
-        stop.set()
-        t.join(timeout=5)
+        try:
+            for m in markers:
+                report.write_report(m, task="race", cwd=self.repo)
+        finally:
+            stop.set()
+            t.join(timeout=5)
         self.assertEqual(observed_bad, [], "a torn (partially-written) report was observed")
+
+    def test_an_old_coordinator_report_remains_readable(self):
+        inbox = self.inbox()
+        inbox.mkdir(parents=True, exist_ok=True)
+        (inbox / "coordinator-latest.md").write_text(
+            "<!-- captured now role=coordinator task=old head="
+            f"{commit_head_sha(self.repo)} source=old -->\n\nLegacy.\n",
+            encoding="utf-8",
+        )
+        code, message = report.check_status(self.repo)
+        self.assertEqual(code, 0, message)
+        self.assertIn("fresh", message)
 
 
 class TestStalenessDetection(RepoCase):
@@ -377,7 +411,7 @@ class TestCLI(RepoCase):
     def test_write_from_stdin(self):
         proc = self._run(["write", "--task", "cli-task"], stdin="CLI report body.\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = self.inbox() / "coordinator-latest.md"
+        latest = self.inbox() / "brain-latest.md"
         self.assertIn("CLI report body.", latest.read_text(encoding="utf-8"))
 
     def test_write_from_file(self):
@@ -385,7 +419,7 @@ class TestCLI(RepoCase):
         src.write_text("File-sourced report.\n", encoding="utf-8")
         proc = self._run(["write", "--task", "cli-task", "--file", str(src)])
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = self.inbox() / "coordinator-latest.md"
+        latest = self.inbox() / "brain-latest.md"
         self.assertIn("File-sourced report.", latest.read_text(encoding="utf-8"))
 
     def test_write_without_task_fails_loudly(self):
