@@ -189,6 +189,11 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(latest.is_file(), "no report written with python3 present")
         self.assertIn("Final reply text.", latest.read_text(encoding="utf-8"))
+        fallback = report.find_report(
+            role="brain", task="claude-code-session:py3", cwd=self.target
+        )
+        self.assertIsNotNone(fallback)
+        self.assertIn("Final reply text.", fallback.read_text(encoding="utf-8"))
 
     def test_only_bare_python_on_path_still_produces_a_report(self):
         """The actual reported incident's mirror image.
