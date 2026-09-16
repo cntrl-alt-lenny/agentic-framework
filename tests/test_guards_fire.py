@@ -25,12 +25,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".pytest_cache")
-
-
 def copy_repo(dest: Path) -> Path:
     target = dest / "repo"
-    shutil.copytree(ROOT, target, ignore=IGNORE)
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "-z"], cwd=ROOT
+    ).decode().split("\0")
+    for raw in tracked:
+        if not raw:
+            continue
+        src = ROOT / raw
+        dst = target / raw
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst, follow_symlinks=False)
     # The copied tree is a test repository, not an arbitrary filesystem tree.
     # Give tracked-path guards an index so later mutations remain untracked and
     # cannot silently redefine the repository surface.
