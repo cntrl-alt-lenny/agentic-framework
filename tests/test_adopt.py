@@ -400,5 +400,79 @@ class TestVerbatimDocsStayInSync(unittest.TestCase):
                 )
 
 
+class TestInstalledCheckoutSuiteRunsFromAnyRoleWorktree(unittest.TestCase):
+    """`templates/tests/test_checkout.py` is installed into every adopted
+    project's own test suite, so it must pass wherever that suite is
+    actually run from -- the primary, coordinating checkout, and every
+    role's own linked worktree (e.g. `.worktrees/worker`) alike. A prior
+    version hardcoded the coordinating seat `brain` as the one to claim,
+    which made `python3 -m unittest discover` fail outright the moment it
+    was run from a role worktree -- see `framework/git-and-isolation.md` for
+    why that is the normal, expected place to run it from.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.target = Path(self._tmp.name)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.target, check=True)
+        (self.target / ".seed").write_text("seed\n", encoding="utf-8")
+        subprocess.run(["git", "add", ".seed"], cwd=self.target, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=self.target, check=True)
+        self.assertEqual(run_adopt(self.target, "--workers", "worker"), 0)
+        subprocess.run(["git", "add", "-A"], cwd=self.target, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "adopt"], cwd=self.target, check=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.worker = self.target / ".worktrees" / "worker"
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(self.worker), "HEAD"],
+            cwd=self.target, check=True, capture_output=True,
+        )
+
+    def _run_installed_suite(self, cwd: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-m", "unittest", "tests.test_checkout"],
+            cwd=cwd, capture_output=True, text=True,
+        )
+
+    def test_passes_from_the_primary_checkout(self):
+        proc = self._run_installed_suite(self.target)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_passes_from_a_role_worktree(self):
+        proc = self._run_installed_suite(self.worker)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_the_pre_fix_hardcoded_seat_fails_from_a_role_worktree(self):
+        """Red-before-green: the exact regression this closes, reproduced by
+        restoring the one line the fix replaced -- claiming the hardcoded
+        seat `brain` instead of this checkout's own, structurally-derived
+        seat -- rather than by asserting against a description of it.
+        """
+        marker = "self.actual_seat = checkout.checkout_seat(ROOT)"
+        for cwd in (self.target, self.worker):
+            installed = cwd / "tests" / "test_checkout.py"
+            text = installed.read_text(encoding="utf-8")
+            self.assertIn(marker, text, "fixture out of sync with the template")
+            installed.write_text(
+                text.replace(marker, 'self.actual_seat = "brain"'),
+                encoding="utf-8",
+            )
+
+        # The primary checkout IS the coordinator, so hardcoding "brain" is
+        # still correct there -- this is not a vacuous mutation.
+        proc = self._run_installed_suite(self.target)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        proc = self._run_installed_suite(self.worker)
+        self.assertNotEqual(
+            proc.returncode, 0,
+            "the pre-fix hardcoded seat unexpectedly passed from a role "
+            "worktree; this does not reproduce the incident",
+        )
+        self.assertIn("seat=brain", proc.stdout + proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
