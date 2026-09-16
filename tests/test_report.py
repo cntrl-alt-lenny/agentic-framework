@@ -177,6 +177,19 @@ class TestWriteReportBehaviour(RepoCase):
             "old%20brief",
         )
 
+    def test_legacy_space_tasks_are_recovered_between_header_delimiters(self):
+        inbox = self.inbox()
+        inbox.mkdir(parents=True, exist_ok=True)
+        sha = commit_head_sha(self.repo)
+        (inbox / "brain-latest.md").write_text(
+            f"<!-- captured now role=brain task=legacy space brief head={sha} source=old -->\n\n"
+            "Legacy spaced report.\n", encoding="utf-8",
+        )
+        found = report.find_report(
+            role="brain", task="legacy space brief", cwd=self.repo
+        )
+        self.assertEqual(found, inbox / "brain-latest.md")
+
     def test_format_two_round_trips_encoded_and_literal_percent_tasks(self):
         for task in ("brief with spaces", "new%20brief", "hook:session/42"):
             report.write_report("body", task=task, cwd=self.repo)

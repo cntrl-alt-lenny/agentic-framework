@@ -75,6 +75,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import time
@@ -365,6 +366,17 @@ def _parse_header(text: str) -> Provenance | None:
         if "=" in part:
             key, _, value = part.partition("=")
             fields[key] = value
+    # The legacy writer did not encode spaces in a task. Recover that exact
+    # value from the stable delimiters that follow it instead of treating the
+    # first word as the whole task. The greedy task group deliberately uses
+    # the final ``head=... source=...`` pair, matching the writer's layout.
+    legacy_task = re.search(
+        r"\stask=(.*)\shead=(\S+)\ssource=(\S+)\s*$", inner
+    )
+    if legacy_task:
+        fields["task"] = legacy_task.group(1)
+        fields["head"] = legacy_task.group(2)
+        fields["source"] = legacy_task.group(3)
     encoded_task = fields.get("task")
     try:
         parsed_task = (
