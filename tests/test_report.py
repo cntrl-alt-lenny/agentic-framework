@@ -128,6 +128,12 @@ class TestRoleTagIsStructuralNotSelfReported(RepoCase):
 
 
 class TestWriteReportBehaviour(RepoCase):
+    def test_archive_path_uses_the_checkout_role_rule(self):
+        for role in ("Builder", "vérifier", "bad?role", "con"):
+            with self.subTest(role=role):
+                with self.assertRaisesRegex(report.ReportError, "invalid role name"):
+                    report._archive_path(self.inbox(), role, "brief")
+
     def test_writes_latest_and_appends_log(self):
         path = report.write_report("Body text.", task="001-brief", cwd=self.repo)
         self.assertEqual(path, self.inbox() / "brain-latest.md")
