@@ -34,7 +34,13 @@ own contract knows the brief. The report this hook writes is therefore tagged
 with the session id, not a brief id, which is honest about what this path
 actually knows rather than guessing. A role that writes its own report via its
 contract supplies the real task identifier; this hook is the fallback for
-sessions that end without having done that.
+sessions that end without having done that — and only the fallback: if the
+checkout already holds a report at the CURRENT head that the agent wrote
+itself (any source other than this hook's own), this hook leaves it alone
+rather than overwriting the real brief identifier with a session-id mirror.
+See ``_agent_already_reported_this_work`` below for exactly what "current"
+and "itself" mean, including the stale-report case that must still be
+captured.
 
 Requirements: python and git — reached through ``run_python.sh``'s
 wrapper, which tries the Python 3 this host actually has rather than one
@@ -94,6 +100,45 @@ def _last_assistant_text(transcript_path: Path) -> str | None:
     return "\n".join(parts).strip() or None
 
 
+#: Tags a report this hook itself wrote, as opposed to one the agent wrote by
+#: following its own contract (`tools/report.py write`, called directly --
+#: source defaults to "cli" there). Only that distinction, not mere presence
+#: of a report, decides whether this hook may overwrite it; see
+#: `_agent_already_reported_this_work` below.
+_HOOK_SOURCE = "claude-code-stop-hook"
+
+
+def _agent_already_reported_this_work() -> bool:
+    """True when this checkout already holds a report for its CURRENT work
+    that the agent wrote itself, which this hook must never replace.
+
+    "For its current work" means the report's ``head=`` matches this
+    checkout's HEAD right now. A report from an EARLIER head -- the agent
+    finished a prior task, moved on, and has not written one for the new
+    HEAD yet -- is stale for this work and this hook must still capture
+    something, exactly as if no report existed at all; that is what actually
+    happened in the reported incident's mirror image (a session that ends
+    with no self-written report must not stay silent forever because an old
+    one is lying around). A report this same hook wrote earlier in the
+    session (``source`` tagged `_HOOK_SOURCE`) is only ever this hook's own
+    prior mirror, never the agent's real report, so it is fine to overwrite
+    even when fresh.
+
+    Never raises: this hook must never fail to end over its own check, and an
+    unreadable checkout here is exactly the ordinary "no report yet" case --
+    fall through to the fallback capture, same as `write_report` failing
+    later would.
+    """
+    try:
+        current_head = _report.head_sha()
+        existing = _report.latest_report_provenance()
+    except _report.ReportError:
+        return False
+    if existing is None or current_head is None or existing.head is None:
+        return False
+    return existing.head == current_head and existing.source != _HOOK_SOURCE
+
+
 def main() -> int:
     if _report is None:
         return 0
@@ -107,6 +152,9 @@ def main() -> int:
     try:
         event = json.loads(raw)
     except json.JSONDecodeError:
+        return 0
+
+    if _agent_already_reported_this_work():
         return 0
 
     transcript = event.get("transcript_path")
@@ -124,7 +172,7 @@ def main() -> int:
     task = f"claude-code-session:{session_id}" if session_id else "unspecified"
 
     try:
-        _report.write_report(text, task=task, source="claude-code-stop-hook")
+        _report.write_report(text, task=task, source=_HOOK_SOURCE)
     except _report.ReportError:
         return 0
 
