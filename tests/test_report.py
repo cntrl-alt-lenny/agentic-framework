@@ -150,7 +150,36 @@ class TestWriteReportBehaviour(RepoCase):
         self.assertIn("task=007-fix-thing", header)
         self.assertIn(f"head={sha}", header)
         self.assertIn("source=unit-test", header)
+        self.assertIn("format=2", header)
         self.assertRegex(header, r"captured \d{4}-\d{2}-\d{2}T")
+
+    def test_legacy_percent_sequences_are_literal_not_decoded(self):
+        """An old writer's ``%20`` is the task text, not an encoded space."""
+        inbox = self.inbox()
+        inbox.mkdir(parents=True, exist_ok=True)
+        sha = commit_head_sha(self.repo)
+        (inbox / "brain-latest.md").write_text(
+            f"<!-- captured now role=brain task=old%20brief head={sha} source=old -->\n\n"
+            "Legacy percent report.\n", encoding="utf-8",
+        )
+        found = report.find_report(
+            role="brain", task="old%20brief", cwd=self.repo
+        )
+        self.assertEqual(found, inbox / "brain-latest.md")
+        self.assertEqual(
+            report._parse_header(found.read_text(encoding="utf-8")).task,
+            "old%20brief",
+        )
+
+    def test_format_two_round_trips_encoded_and_literal_percent_tasks(self):
+        for task in ("brief with spaces", "new%20brief", "hook:session/42"):
+            report.write_report("body", task=task, cwd=self.repo)
+            found = report.find_report(role="brain", task=task, cwd=self.repo)
+            self.assertIsNotNone(found)
+            self.assertEqual(
+                report._parse_header(found.read_text(encoding="utf-8")).task,
+                task,
+            )
 
     def test_empty_text_is_refused(self):
         with self.assertRaises(report.ReportError):

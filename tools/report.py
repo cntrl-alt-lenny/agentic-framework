@@ -162,7 +162,10 @@ def role_tag(cwd: str | Path | None = None) -> str:
         role = _checkout.checkout_seat(cwd, coordinator="brain")
     except _checkout.CheckoutError as exc:
         raise ReportError(str(exc)) from exc
-    return "".join(c for c in role if c.isalnum() or c in "-_") or "unknown"
+    try:
+        return _checkout.validate_role_name(role)
+    except _checkout.CheckoutError as exc:
+        raise ReportError(str(exc)) from exc
 
 
 def head_sha(cwd: str | Path | None = None) -> str | None:
@@ -237,14 +240,15 @@ def _seed_readme(inbox: Path) -> None:
 
 def _header(*, role: str, task: str, sha: str, source: str, stamp: str) -> str:
     # Header fields are space-delimited for compatibility with existing
-    # reports. Percent-encoding keeps arbitrary free-text task IDs in one
-    # field, while leaving ordinary IDs byte-for-byte compatible with older
-    # report.py readers.
+    # reports.  Format 2 makes the task encoding unambiguous: readers decode
+    # only headers carrying this marker.  A header without it is a literal
+    # legacy header, because main's older writer stored percent sequences as
+    # written.
     # ``:`` remains literal for compatibility with the hook's historical
     # session-tagged task values; it is not used as a filesystem key.
     encoded_task = quote(task, safe="-._~:")
     return (
-        f"<!-- captured {stamp} role={role} task={encoded_task} head={sha} "
+        f"<!-- captured {stamp} format=2 role={role} task={encoded_task} head={sha} "
         f"source={source} -->\n\n"
     )
 
@@ -266,11 +270,10 @@ def _task_key(task: str) -> str:
 
 
 def _archive_path(inbox: Path, role: str, task: str) -> Path:
-    if not role or any(
-        c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
-        for c in role
-    ):
-        raise ReportError(f"invalid report role '{role}'")
+    try:
+        _checkout.validate_role_name(role)
+    except _checkout.CheckoutError as exc:
+        raise ReportError(str(exc)) from exc
     return inbox / "by-task" / role / f"{_task_key(task)}.md"
 
 
@@ -364,7 +367,11 @@ def _parse_header(text: str) -> Provenance | None:
             fields[key] = value
     encoded_task = fields.get("task")
     try:
-        parsed_task = unquote(encoded_task) if encoded_task is not None else None
+        parsed_task = (
+            unquote(encoded_task)
+            if encoded_task is not None and fields.get("format") == "2"
+            else encoded_task
+        )
     except (UnicodeDecodeError, ValueError):
         parsed_task = None
     return Provenance(

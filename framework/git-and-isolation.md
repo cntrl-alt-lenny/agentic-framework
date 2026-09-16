@@ -35,6 +35,14 @@ on a new machine reaches the same layout with the same commands.
 
 `.worktrees/` is ignored by git.
 
+Role names used for linked-worktree directories are portable checkout names:
+lowercase ASCII, starting with a letter, followed by lowercase letters,
+digits, `-` or `_`, and not a Windows device name such as `con` or `prn`.
+`tools/checkout.py` applies this rule as the first-action check, and the
+completion-report writer applies the same rule before using a role in an inbox
+path. An invalid name fails early with its current location and the naming
+rule; it is not silently rewritten into another role.
+
 Every role prompt starts with the shipped mechanical check:
 
 ```bash

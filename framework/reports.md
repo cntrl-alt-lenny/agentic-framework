@@ -70,14 +70,32 @@ essentials:
   time, and a timestamp — `python3 tools/report.py status` compares that SHA
   against the checkout's current HEAD and says whether the report is still
   fresh, so a reader does not parse the header by hand.
-- The task identifier is a free-text Brief-ID. It must not have leading or
-  trailing whitespace; other characters are percent-encoded in the header and
-  represented by a fixed SHA-256 filesystem key under
-  `by-task/<role>/<sha256-of-brief>.md`. This prevents path traversal, Windows
-  filename problems, overlong filenames, and case-folding collisions. A
-  repeated write for the same role and Brief-ID replaces that task's file with
-  the newest report; different Brief-IDs remain separately readable. The
+- The task identifier is the exact, stable `Brief-ID` value. It must not have
+  leading or trailing whitespace. New headers carry `format=2` and
+  percent-encode the task in the space-delimited header; readers decode only
+  those marked headers. A header without the marker is a legacy header and its
+  task field is literal, including any percent sequences. This explicit marker
+  is important: the same text must not mean two different Brief-IDs depending
+  on which writer produced it. Both forms use a fixed SHA-256 filesystem key
+  under `by-task/<role>/<sha256-of-brief>.md`, preventing path traversal,
+  Windows filename problems, overlong filenames, and case-folding collisions.
+  A repeated write for the same role and Brief-ID replaces that task's file
+  with the newest report; different Brief-IDs remain separately readable. The
   append-only `<role>-log.md` remains a human audit trail.
+
+  The older reader understands ordinary task IDs written by this version when
+  they contain no characters that need encoding. It does not understand the
+  `format=2` decoding convention for IDs containing spaces or other encoded
+  characters; the current reader remains backward-compatible with old literal
+  headers. The Claude Code session fallback uses `claude-code-session:<id>`,
+  which remains a valid task value.
+
+- Role names are portable checkout names: lowercase ASCII, starting with a
+  letter, then only lowercase letters, digits, `-` or `_`, excluding Windows
+  device names. `tools/checkout.py` rejects any other linked-worktree name
+  before work starts, and `tools/report.py` uses the same validator before it
+  derives an inbox path. This prevents case-folding collisions and names that
+  cannot be represented on Windows.
 
 ### This is a contract requirement, not a convenience
 

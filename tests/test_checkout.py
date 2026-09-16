@@ -56,6 +56,16 @@ class TestCheckoutCheck(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(role, message)
 
+    def test_nonportable_role_names_are_refused_before_work_starts(self):
+        """Checkout identity and report paths must share one portable rule."""
+        for role in ("vérifier", "Builder", "bad?role", "con"):
+            with self.subTest(role=role):
+                path = self._worktree(role)
+                code, message = checkout.check(role, path)
+                self.assertEqual(code, 1)
+                self.assertIn("invalid role name", message)
+                self.assertIn(role, message)
+
     def test_unassigned_separate_clone_is_the_coordinating_seat(self):
         clone = Path(self.tmp.name) / "separate-clone"
         subprocess.run(["git", "clone", "-q", str(self.repo), str(clone)], check=True)

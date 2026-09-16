@@ -25,6 +25,7 @@ does not change the repository and reports both locations when it fails.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,36 @@ from pathlib import Path
 
 class CheckoutError(Exception):
     """The current directory is not a usable Git checkout."""
+
+
+_ROLE_NAME = re.compile(r"[a-z][a-z0-9_-]*\Z")
+_WINDOWS_DEVICE_NAMES = {
+    "con", "prn", "aux", "nul",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+
+
+def validate_role_name(role: str) -> str:
+    """Return a role name safe for checkout identity and inbox paths.
+
+    Role names are deliberately a portable, case-sensitive subset shared by
+    Git, POSIX and Windows: lowercase ASCII, starting with a letter, followed
+    by lowercase letters, digits, ``-`` or ``_``.  Rejecting uppercase names
+    also prevents two roles from colliding on a case-insensitive filesystem;
+    rejecting Windows device names keeps a name valid when an adopting project
+    is later used on Windows.
+    """
+    if not isinstance(role, str) or not _ROLE_NAME.fullmatch(role):
+        raise CheckoutError(
+            f"invalid role name {role!r}; use lowercase ASCII letters, digits, "
+            "'-' or '_' and start with a letter"
+        )
+    if role in _WINDOWS_DEVICE_NAMES:
+        raise CheckoutError(
+            f"invalid role name {role!r}; it is reserved by Windows"
+        )
+    return role
 
 
 def _git(args: list[str], cwd: str | Path | None = None) -> str | None:
@@ -73,6 +104,10 @@ def checkout_seat(cwd: str | Path | None = None, *, coordinator: str = "brain") 
     This is the single derivation `tools/report.py`'s ``role_tag`` also uses,
     so the two can never disagree about which seat owns a checkout.
     """
+    try:
+        coordinator = validate_role_name(coordinator)
+    except CheckoutError:
+        raise
     top_raw = _git(["rev-parse", "--show-toplevel"], cwd)
     git_dir_raw = _git(["rev-parse", "--git-dir"], cwd)
     common_dir_raw = _git(["rev-parse", "--git-common-dir"], cwd)
@@ -81,7 +116,7 @@ def checkout_seat(cwd: str | Path | None = None, *, coordinator: str = "brain") 
     top = _path(top_raw, cwd)
     is_primary = _path(git_dir_raw, cwd) == _path(common_dir_raw, cwd)
     if not is_primary:
-        return top.name
+        return validate_role_name(top.name)
     assigned = _git(["config", "--local", "--get", "framework.checkout-seat"], cwd)
     if assigned and assigned != coordinator:
         raise CheckoutError(
@@ -100,6 +135,7 @@ def check(
 ) -> tuple[int, str]:
     """Return zero only when ``seat`` owns the current checkout."""
     try:
+        validate_role_name(seat)
         top_raw = _git(["rev-parse", "--show-toplevel"], cwd)
         if not top_raw:
             raise CheckoutError("not inside a Git repository")
