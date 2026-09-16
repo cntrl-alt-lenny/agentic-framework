@@ -69,6 +69,23 @@ resembles proof.
 
 ## Guards must actually guard
 
+### Counterexample declarations
+
+When a normative document quotes a banned form, enclose it in a
+`guard:counterexample` block and declare the exact structural violation:
+
+<!-- guard:counterexample -->
+<!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
+Hand this to the Acme Builder.
+<!-- /guard:counterexample -->
+
+The declaration syntax is `guard:violation RULE roles=ROLE[,ROLE...] text="TEXT"`.
+`RULE` is the scanner rule, `roles=` names the roles against which the text is
+invalid, and `text=` names the offending text that must be present and must be
+the text the scanner flags. This is a visible, reviewable claim, not a magic
+exemption: a made-up role can make harmless prose appear to violate a rule, so
+review declarations as carefully as the text they exempt.
+
 - **Test behaviour, not installation.** A hook existing in the tree is not proof
   it blocks anything. A check's name is not proof of what it checks.
 - **Avoid proxy guards.** A guard that tests something easier than the real

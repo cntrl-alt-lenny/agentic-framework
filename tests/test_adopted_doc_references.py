@@ -142,7 +142,7 @@ class TestCopiedDocumentsOnlyLinkToCopiedDocuments(unittest.TestCase):
     def test_every_relative_link_targets_a_document_that_is_also_copied(self):
         copied = {(ROOT / "framework" / rel).resolve() for rel in copied_docs()}
         # A link may name a directory of copied documents, e.g. `roles/`.
-        copied_dirs = {p.parent for p in copied}
+        copied_dirs = docset.tracked_directories(copied)
         problems: list[str] = []
         for rel in copied_docs():
             path = ROOT / "framework" / rel

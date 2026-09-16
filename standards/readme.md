@@ -83,7 +83,7 @@ Word counts measured 2026-09-15.
 |---|---|---|---|
 | gx-spirit-caller | 399 | Replace the two hand-typed badges ("PASS × 3", "27/27 × 3") with live ones fed by `progress-badge.yml` | CI · live match progress · Nintendo DS · license |
 | edopro-retro-formats | 471 | Add a banner; otherwise closest to the target | CI · Python 3.10+ · license |
-| agentic-framework | 933 | Add a banner and a header; trim; the title still says `agentic-project-framework` | CI · Python · license |
+| agentic-framework | 933 | Add a banner and a header; trim; align the landing page with this standard | CI · Python · license |
 | edopro-hd-cards | 998 | Trim; update old repository names in the README, badges and the app's update URL | release · build · Windows · Python 3.11+ · license |
 | mgs-mc-modkit | 1,950 | Trim hard; switch badges from `for-the-badge` to `flat`; license unrecognised | release · CI · Steam Deck · Windows · license |
 | edopro-next | 2,011 | Keep the hero opening; move the rest into `docs/`; license unrecognised | CI · early development · Qt 6 · license |

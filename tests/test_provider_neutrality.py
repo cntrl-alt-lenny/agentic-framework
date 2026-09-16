@@ -74,7 +74,9 @@ class TestScopeSplitIsHonest(unittest.TestCase):
     def test_new_framework_documents_are_scanned_by_default(self):
         scanned = {p.resolve() for p in docset.normative_files()}
         exempt = {p.resolve() for p in docset.historical_files()}
-        for path in (ROOT / "framework").rglob("*.md"):
+        for path in docset.tracked_markdown_files():
+            if ROOT / "framework" not in path.parents:
+                continue
             with self.subTest(path=path.name):
                 self.assertIn(path.resolve(), scanned | exempt)
 
@@ -249,6 +251,16 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                     neutrality.scan_counterexample(body, ("builder", "verifier")),
                     [],
                 )
+
+    def test_counterexample_declaration_must_match_its_own_finding(self):
+        body = (
+            '<!-- guard:violation compound-lane roles=builder text="harmless" -->\n'
+            "This is harmless prose.\n"
+            "Hand it to the Acme Builder.\n"
+        )
+        self.assertEqual(
+            neutrality.scan_counterexample(body, ("builder", "verifier")), []
+        )
 
     def test_framework_topologies_counterexample_is_noninert_for_builder_verifier(self):
         text = (ROOT / "framework" / "topologies.md").read_text(encoding="utf-8")

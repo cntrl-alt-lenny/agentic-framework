@@ -83,6 +83,22 @@ def tracked_markdown_files() -> list[Path]:
     )
 
 
+def tracked_directories(paths: set[Path] | None = None) -> set[Path]:
+    """Directories that contain tracked content at any depth."""
+    paths = tracked_paths() if paths is None else {
+        path.resolve() for path in paths
+    }
+    directories: set[Path] = set()
+    for path in paths:
+        current = path.parent
+        while current == ROOT or ROOT in current.parents:
+            directories.add(current)
+            if current == ROOT:
+                break
+            current = current.parent
+    return directories
+
+
 def historical_files() -> list[Path]:
     tracked = tracked_paths()
     return [ROOT / rel for rel in HISTORICAL if (ROOT / rel).resolve() in tracked]

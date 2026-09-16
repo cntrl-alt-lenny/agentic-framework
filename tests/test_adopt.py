@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import adopt  # noqa: E402
+import docset  # noqa: E402
 
 
 def run_adopt(target: Path, *extra: str) -> int:
@@ -340,7 +341,11 @@ class TestVerbatimDocsStayInSync(unittest.TestCase):
         """
         copied = set(adopt.VERBATIM_DOCS)
         excluded = set(adopt.NOT_COPIED)
-        for path in sorted((ROOT / "framework").rglob("*.md")):
+        tracked = docset.tracked_paths()
+        for path in sorted(
+            p for p in tracked
+            if p.suffix == ".md" and ROOT / "framework" in p.parents
+        ):
             rel = path.relative_to(ROOT / "framework").as_posix()
             with self.subTest(doc=rel):
                 self.assertTrue(

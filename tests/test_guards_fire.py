@@ -31,6 +31,11 @@ IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".pytest_cache")
 def copy_repo(dest: Path) -> Path:
     target = dest / "repo"
     shutil.copytree(ROOT, target, ignore=IGNORE)
+    # The copied tree is a test repository, not an arbitrary filesystem tree.
+    # Give tracked-path guards an index so later mutations remain untracked and
+    # cannot silently redefine the repository surface.
+    subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
     return target
 
 
@@ -115,6 +120,7 @@ class TestNeutralityGuardFires(MutationCase):
             self.assertEqual(rc, 0, out)
 
             (tree / "NOTES.md").write_text("# Notes\n\nSomething.\n", encoding="utf-8")
+            subprocess.run(["git", "add", "NOTES.md"], cwd=tree, check=True)
             rc, out = run_module(tree, self.MODULE)
             self.assertNotEqual(
                 rc, 0, "a document outside every scanned directory was classified "
@@ -133,6 +139,7 @@ class TestNeutralityGuardFires(MutationCase):
             (tree / "framework" / "notes.md").write_text(
                 "# Notes\n\nThe Worker executes one brief.\n", encoding="utf-8"
             )
+            subprocess.run(["git", "add", "framework/notes.md"], cwd=tree, check=True)
             rc, out = run_module(tree, self.MODULE)
             self.assertEqual(rc, 0, f"a clean new policy document was rejected:\n{out}")
 
@@ -252,6 +259,21 @@ class TestAdapterInstallLayoutGuardFires(MutationCase):
     """
 
     MODULE = "tests.test_adapter_install_layout"
+
+    def test_untracked_valid_and_invalid_adapters_do_not_abort_the_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = copy_repo(Path(tmp))
+            valid = tree / "adapters" / "untracked-valid"
+            invalid = tree / "adapters" / "untracked-invalid"
+            valid.mkdir()
+            invalid.mkdir()
+            (valid / "adapter.json").write_text(
+                '{"tool":"valid","install_root":".valid"}\n',
+                encoding="utf-8",
+            )
+            (invalid / "adapter.json").write_text("{not json\n", encoding="utf-8")
+            rc, out = run_module(tree, self.MODULE)
+            self.assertEqual(rc, 0, out)
 
     def test_the_name_derived_destination_is_caught(self):
         self.assert_guard_fires(

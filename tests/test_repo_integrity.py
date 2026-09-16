@@ -60,7 +60,11 @@ class TestEveryTestFileIsCollected(unittest.TestCase):
         return found
 
     def test_no_test_file_is_silently_skipped(self):
-        on_disk = {f"tests.{p.stem}" for p in (ROOT / "tests").glob("test_*.py")}
+        on_disk = {
+            f"tests.{p.stem}" for p in docset.tracked_paths()
+            if p.parent == ROOT / "tests" and p.name.startswith("test_")
+            and p.suffix == ".py"
+        }
         discovered = self._discovered_modules()
         missing = sorted(on_disk - discovered)
         self.assertEqual(
@@ -109,7 +113,7 @@ class TestDocumentLinksResolve(unittest.TestCase):
     def test_every_relative_link_resolves(self):
         broken: list[str] = []
         tracked = self._tracked_paths()
-        tracked_dirs = {path.parent for path in tracked}
+        tracked_dirs = docset.tracked_directories(tracked)
         for path in self._checkable():
             rel = path.relative_to(ROOT).as_posix()
             # Fenced code blocks hold illustrative templates, not links.
@@ -122,6 +126,18 @@ class TestDocumentLinksResolve(unittest.TestCase):
                 if resolved not in tracked and resolved not in tracked_dirs:
                     broken.append(f"{rel} -> {target}")
         self.assertEqual(broken, [], "\n".join(broken))
+
+    def test_tracked_directories_include_content_at_any_depth(self):
+        """A folder link is valid when tracked content exists several levels below."""
+        tracked = {
+            ROOT / "framework" / "deep" / "file.md",
+            ROOT / "framework" / "several" / "levels" / "deep.md",
+        }
+        directories = docset.tracked_directories(tracked)
+        self.assertIn(ROOT / "framework" / "deep", directories)
+        self.assertIn(ROOT / "framework" / "several", directories)
+        self.assertIn(ROOT / "framework" / "several" / "levels", directories)
+        self.assertNotIn(ROOT / "framework" / "empty", directories)
 
     def test_the_link_check_can_fail(self):
         """Red before green: the pattern must actually match a broken link."""
