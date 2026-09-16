@@ -5,14 +5,20 @@ Run this as the first action in every role prompt::
 
     python3 tools/checkout.py --seat <seat>
 
-A linked worktree at ``.worktrees/<role>`` belongs to its final path component.
-An ordinary primary checkout or separate clone is the coordinating seat unless
-the owner assigns a separate clone a local, untracked Git setting with::
+A linked worktree belongs to its final path component, whatever that is --
+``.worktrees/<role>`` is the convention, but any linked-worktree layout works.
+An ordinary primary checkout or separate clone is the coordinating seat; that
+is the ONLY seat a separate clone can ever hold, because the shared
+completion-report inbox (see ``../framework/reports.md``) lives inside
+``git rev-parse --git-common-dir``, which a separate clone never shares with
+any other checkout. Assigning it a non-coordinator seat with::
 
     git config --local framework.checkout-seat <seat>
 
-Git gives a separate clone the same structural shape as the primary checkout,
-so that local assignment is the only honest way to distinguish it. The command
+is therefore a hard error here, not a silent mis-tag: the checkout check would
+pass, a report would land in that clone's own private inbox, and every
+delivery check run from anywhere else would report "not delivered yet"
+forever. Use a linked worktree for any role but the coordinator. The command
 does not change the repository and reports both locations when it fails.
 """
 
@@ -45,15 +51,48 @@ def _path(raw: str, cwd: str | Path | None) -> Path:
 
 
 def checkout_seat(cwd: str | Path | None = None, *, coordinator: str = "brain") -> str:
-    """Return the seat structurally assigned to ``cwd``."""
+    """Return the seat structurally assigned to ``cwd``.
+
+    A LINKED WORKTREE (its private git-dir differs from the repository's
+    shared git-common-dir) is tagged by its own directory name, whatever that
+    name is -- `.worktrees/<role>` is the documented convention, but
+    `git-and-isolation.md` also allows "any mechanism providing equivalent
+    isolation", so an unconventional worktree layout is still a distinct,
+    nameable seat rather than silently falling back to the coordinator.
+
+    A PRIMARY CHECKOUT and a SEPARATE CLONE are structurally identical --
+    both have git-dir == git-common-dir -- so only the local
+    ``framework.checkout-seat`` marker can tell them apart. A SEPARATE CLONE
+    can only ever BE the coordinating seat: its git-common-dir, and therefore
+    its completion-report inbox (see ``../framework/reports.md``), is private
+    to it, so a report written under any other seat name would be invisible
+    to a delivery check run from anywhere else. Assigning it a
+    non-coordinator seat is therefore a hard error here rather than a silent
+    mis-tag -- see the module docstring.
+
+    This is the single derivation `tools/report.py`'s ``role_tag`` also uses,
+    so the two can never disagree about which seat owns a checkout.
+    """
     top_raw = _git(["rev-parse", "--show-toplevel"], cwd)
-    if not top_raw:
+    git_dir_raw = _git(["rev-parse", "--git-dir"], cwd)
+    common_dir_raw = _git(["rev-parse", "--git-common-dir"], cwd)
+    if not top_raw or not git_dir_raw or not common_dir_raw:
         raise CheckoutError("not inside a Git repository")
     top = _path(top_raw, cwd)
-    if top.parent.name == ".worktrees" and top.name:
+    is_primary = _path(git_dir_raw, cwd) == _path(common_dir_raw, cwd)
+    if not is_primary:
         return top.name
     assigned = _git(["config", "--local", "--get", "framework.checkout-seat"], cwd)
-    return assigned or coordinator
+    if assigned and assigned != coordinator:
+        raise CheckoutError(
+            f"framework.checkout-seat={assigned!r} is set on {top}, a "
+            f"separate clone -- not supported. A separate clone's shared "
+            f"completion-report inbox is private to it, so a report written "
+            f"under that seat would be invisible to a delivery check run "
+            f"from any other checkout. Use a linked worktree instead: "
+            f"git worktree add --detach .worktrees/{assigned} <base-branch>"
+        )
+    return coordinator
 
 
 def check(

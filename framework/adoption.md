@@ -136,18 +136,19 @@ One isolated checkout per concurrently-active role. See
 
 Adoption ensures `.worktrees/` is present in `.gitignore`, appending one entry
 only when neither `.worktrees/` nor `/.worktrees/` is already present. It never
-rewrites or reorders an existing ignore file. For a separate clone, assign its
-seat once before launching a role because Git gives a separate clone the same
-shape as the primary checkout:
+rewrites or reorders an existing ignore file. Launch every role but the
+coordinator from a linked worktree:
 
 ```bash
-git config --local framework.checkout-seat <role>
+git worktree add --detach .worktrees/<role> <default-branch>
 python3 tools/checkout.py --seat <role>
 ```
 
 The check is the first action in every role prompt. A linked worktree derives
-its seat from `.worktrees/<role>`; the primary checkout and an unassigned clone
-are the coordinating seat.
+its seat from `.worktrees/<role>`. A separate clone can only ever be the
+coordinating seat -- its `framework.checkout-seat` must stay unset or name the
+coordinator -- because its completion-report inbox is private to it; see
+[`git-and-isolation.md`](git-and-isolation.md).
 
 ### 7. Make the guard real
 

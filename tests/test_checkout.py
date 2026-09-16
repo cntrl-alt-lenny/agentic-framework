@@ -56,13 +56,49 @@ class TestCheckoutCheck(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(role, message)
 
-    def test_separate_clone_uses_local_assignment_because_it_looks_primary(self):
+    def test_unassigned_separate_clone_is_the_coordinating_seat(self):
         clone = Path(self.tmp.name) / "separate-clone"
         subprocess.run(["git", "clone", "-q", str(self.repo), str(clone)], check=True)
         self.assertEqual(checkout.check("brain", clone)[0], 0)
+        code, message = checkout.check("researcher", clone)
+        self.assertEqual(code, 1)
+
+    def test_separate_clone_cannot_be_assigned_a_non_coordinator_seat(self):
+        """A separate clone's completion-report inbox is private to it.
+
+        Reports written by `role_tag` (`tools/report.py`) into a non-shared
+        `git-common-dir` are invisible to a delivery check run from any other
+        checkout -- see `framework/git-and-isolation.md`. Granting the seat
+        here anyway would pass the checkout check and then silently fail
+        every downstream delivery check, which is exactly the mis-tag this
+        must refuse instead of committing. Both the seat it names, and the
+        coordinator itself, must fail while the clone carries this setting --
+        the clone is unusable until the setting is removed or corrected.
+        """
+        clone = Path(self.tmp.name) / "separate-clone"
+        subprocess.run(["git", "clone", "-q", str(self.repo), str(clone)], check=True)
         git(clone, "config", "--local", "framework.checkout-seat", "researcher")
-        self.assertEqual(checkout.check("researcher", clone)[0], 0)
-        self.assertEqual(checkout.check("brain", clone)[0], 1)
+
+        code, message = checkout.check("researcher", clone)
+        self.assertEqual(code, 1)
+        self.assertIn("not supported", message)
+        self.assertIn("researcher", message)
+
+        code, message = checkout.check("brain", clone)
+        self.assertEqual(
+            code, 1,
+            "a misconfigured clone must not quietly pass as the coordinator "
+            "either -- the stray setting must be resolved, not ignored",
+        )
+        self.assertIn("not supported", message)
+
+    def test_separate_clone_explicitly_assigned_the_coordinator_seat_passes(self):
+        """Explicitly naming the coordinator is not the same as misassigning
+        a role; it must keep working exactly like the unassigned case."""
+        clone = Path(self.tmp.name) / "separate-clone"
+        subprocess.run(["git", "clone", "-q", str(self.repo), str(clone)], check=True)
+        git(clone, "config", "--local", "framework.checkout-seat", "brain")
+        self.assertEqual(checkout.check("brain", clone)[0], 0)
 
 
 if __name__ == "__main__":

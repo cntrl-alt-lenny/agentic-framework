@@ -76,6 +76,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+# `checkout.py` ships in this same `tools/` directory on every install --
+# `adopt.py` adds both files unconditionally, as a matched pair, never one
+# without the other. Importing it (rather than reimplementing its seat
+# derivation here) is what makes role identity a SINGLE derivation both
+# tools/checkout.py's first-action check and this writer use; see
+# `checkout.checkout_seat`'s docstring and `git-and-isolation.md`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import checkout as _checkout  # noqa: E402
+
 __all__ = [
     "ReportError",
     "Provenance",
@@ -83,6 +92,7 @@ __all__ = [
     "role_tag",
     "head_sha",
     "write_report",
+    "latest_report_provenance",
     "check_status",
     "delivery_status",
 ]
@@ -128,22 +138,21 @@ def git_common_dir(cwd: str | Path | None = None) -> Path:
 
 
 def role_tag(cwd: str | Path | None = None) -> str:
-    """This checkout's role, derived structurally -- see the module docstring."""
-    toplevel = _git(["rev-parse", "--show-toplevel"], cwd=cwd)
-    if not toplevel:
-        raise ReportError(
-            "not inside a git repository, or git is unavailable"
-        )
-    git_dir = _git(["rev-parse", "--git-dir"], cwd=cwd)
-    common_dir = _git(["rev-parse", "--git-common-dir"], cwd=cwd)
-    is_primary = (
-        git_dir is not None
-        and common_dir is not None
-        and _resolve(git_dir, cwd) == _resolve(common_dir, cwd)
-    )
-    # `coordinator` was the pre-seat compatibility tag. Brain is the actual
-    # coordinating seat; readers still fall back to coordinator-latest below.
-    role = "brain" if is_primary else Path(toplevel).name
+    """This checkout's role, derived structurally -- see the module docstring.
+
+    Delegates to `checkout.checkout_seat` -- the exact function
+    `tools/checkout.py`'s first-action check calls -- rather than
+    re-deriving the seat here. Two independent implementations of the same
+    rule drift; a linked worktree outside `.worktrees/`, or a separate clone
+    assigned via `framework.checkout-seat`, must resolve to the same seat
+    whichever tool asks. `coordinator="brain"` names the pre-seat
+    compatibility tag: readers still fall back to `coordinator-latest.md`
+    below.
+    """
+    try:
+        role = _checkout.checkout_seat(cwd, coordinator="brain")
+    except _checkout.CheckoutError as exc:
+        raise ReportError(str(exc)) from exc
     return "".join(c for c in role if c.isalnum() or c in "-_") or "unknown"
 
 
@@ -297,13 +306,37 @@ def _parse_header(text: str) -> Provenance | None:
     )
 
 
+def latest_report_provenance(cwd: str | Path | None = None) -> Provenance | None:
+    """This checkout's own latest report header, if one exists and is readable.
+
+    "This checkout's role" -- the same auto-derivation `write_report` uses, so
+    a caller reads the correct file without ever naming a role by hand. Used
+    by `check_status` below, and by a provider hook (see
+    `adapters/claude-code/hooks/save_agent_reply.py`) that must tell a report
+    the agent already wrote for its current work apart from one it did not.
+    Returns ``None`` when no report exists yet, or an existing file's header
+    cannot be read at all -- both ordinary, not errors.
+    """
+    role = role_tag(cwd)
+    inbox = git_common_dir(cwd) / "agent-inbox"
+    latest = inbox / f"{role}-latest.md"
+    if role == "brain" and not latest.is_file():
+        legacy = inbox / "coordinator-latest.md"
+        if legacy.is_file():
+            latest = legacy
+    if not latest.is_file():
+        return None
+    try:
+        return _parse_header(latest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
     """Is the latest report for THIS checkout's role still fresh?
 
-    "This checkout's role" -- the same auto-derivation `write_report` uses, so
-    a reader compares against the correct file without ever naming a role by
-    hand. Returns (exit_code, message): 0 fresh, 1 stale (checkout has moved
-    since the report was written), 2 no report found for this role.
+    Returns (exit_code, message): 0 fresh, 1 stale (checkout has moved since
+    the report was written), 2 no report found for this role.
     """
     role = role_tag(cwd)
     inbox = git_common_dir(cwd) / "agent-inbox"
@@ -315,7 +348,7 @@ def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
     if not latest.is_file():
         return 2, f"no report found for role '{role}' at {latest}"
 
-    provenance = _parse_header(latest.read_text(encoding="utf-8"))
+    provenance = latest_report_provenance(cwd)
     current = head_sha(cwd)
     if provenance is None or provenance.head is None:
         return 1, f"{latest} has no readable provenance header; treat as stale"

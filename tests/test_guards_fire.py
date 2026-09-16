@@ -408,18 +408,21 @@ class TestClaudeCodeHookPortabilityGuardFires(MutationCase):
         )
 
     def test_reverting_the_role_tag_to_the_worktree_basename_is_caught(self):
-        """The role-tag logic now lives in `tools/report.py`.
+        """The role-tag logic now lives in `tools/checkout.py`'s
+        `checkout_seat`, not `tools/report.py` -- see
+        `framework/git-and-isolation.md`'s "single derivation" requirement.
 
-        `save_agent_reply.py` delegates entirely -- see
-        `framework/reports.md` -- so this mutates the shared module, proving a
-        regression there breaks the Claude Code path too rather than being
-        caught only by whichever test happens to still duplicate the check.
+        `save_agent_reply.py` delegates entirely, through `tools/report.py`'s
+        `role_tag`, to that one function -- see `framework/reports.md` -- so
+        this mutates the shared derivation, proving a regression there breaks
+        the Claude Code path too rather than being caught only by whichever
+        test happens to still duplicate the check.
         """
         self.assert_guard_fires(
-            path="tools/report.py",
+            path="tools/checkout.py",
             mutate=lambda body: body.replace(
-                'role = "brain" if is_primary else Path(toplevel).name',
-                'role = Path(toplevel).name',
+                "    return coordinator",
+                "    return top.name",
             ),
             module=self.MODULE, expect="brain",
             why="the primary checkout is named after the project, not the "
