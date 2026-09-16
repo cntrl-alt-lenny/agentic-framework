@@ -107,6 +107,35 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(neutrality.scan(text, ROLES).findings, [])
 
+    def test_dotted_qualifiers_before_roles_are_rejected(self):
+        cases = (
+            "Hand the brief to the Mosaic.io Builder.",
+            "Route the result to the Rho7.4 Verifier after review.",
+            "The North Star.dev Researcher owns the evidence note.",
+            "Use the Ember2.0 Scaffolder for this setup step.",
+            "A Quartz.site Worker wrote the first draft.",
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                findings = neutrality.scan(text, ROLES).findings
+                self.assertTrue(
+                    any(f.rule == "compound-lane" for f in findings),
+                    f"dotted provider-shaped qualifier was not rejected: {text}",
+                )
+
+    def test_capitalised_hyphenated_compounds_before_roles_are_clean(self):
+        cases = (
+            "Self-contained Builder prompts are short.",
+            "The Follow-up Builder brief is ready.",
+            "Keep the Cross-team Verifier note nearby.",
+            "A North-facing Worker checklist is useful.",
+            "Use the Post-review Researcher summary.",
+            "The High-level Scaffolder guidance is ordinary prose.",
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertEqual(neutrality.scan(text, ROLES).findings, [])
+
     def test_no_provider_shaped_lane_identity(self):
         problems: list[str] = []
         for path in docset.normative_files():

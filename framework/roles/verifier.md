@@ -61,12 +61,13 @@ python3 tools/report.py delivery \
   --role <executor role> --task <brief identifier>
 ```
 
-That check fetches the named branch from `origin` before resolving it, so a
-Verifier in a separate clone can discover an executor's later push as well as a
-Verifier in a linked worktree. It then requires the executor's shared-inbox
-completion report to name the task and exact branch head, and requires the
-branch to be strictly ahead of an ancestor base. It reads provenance only; do
-not read the executor's report body before pass one. If the check never returns
+That check fetches the named branch from `origin` before resolving it. A
+Verifier must run from a linked worktree; a separate clone is coordinator-only
+because its completion-report inbox is private and cannot establish delivery
+for another seat. The check requires the executor's shared-inbox completion
+report to name the task and exact branch head, and requires the branch to be
+strictly ahead of an ancestor base. It reads provenance only; do not read the
+executor's report body before pass one. If the check never returns
 `delivered` before your session ends, stop and say exactly **"not delivered
 yet"**. The owner pastes this prompt again later. When it returns `delivered`,
 continue with the exact-SHA
