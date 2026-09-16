@@ -66,6 +66,7 @@ class Finding:
     line: int
     rule: str
     message: str
+    matched: str = ""
 
     def __str__(self) -> str:  # pragma: no cover - formatting only
         return f"{self.source}:{self.line} [{self.rule}] {self.message}"
@@ -223,8 +224,8 @@ def scan(
     lines = text.splitlines()
     result.lines_scanned = len(lines)
 
-    def emit(n: int, rule: str, message: str) -> None:
-        result.findings.append(Finding(source, n, rule, message))
+    def emit(n: int, rule: str, message: str, *, matched: str = "") -> None:
+        result.findings.append(Finding(source, n, rule, message, matched))
 
     # Token-adjacency rules run over LOGICAL lines, so a compound split across a
     # soft wrap -- "the SomeProvider" ending one line and "Worker" starting the
@@ -232,7 +233,8 @@ def scan(
     for n, line in logical_lines(text):
         if n in suppressed:
             continue
-        for qualifier, role in compound_re.findall(line):
+        for match in compound_re.finditer(line):
+            qualifier, role = match.groups()
             words = [w for w in qualifier.split() if w]
             bad = [
                 w for w in words
@@ -243,13 +245,16 @@ def scan(
                     n, "compound-lane",
                     f"'{qualifier.strip()} {role}' binds a proper noun to a role; "
                     f"lanes are the bare roles {roles}",
+                    matched=match.group(0).strip(),
                 )
 
-        for prefix, role in prefixed_re.findall(line):
+        for match in prefixed_re.finditer(line):
+            prefix, role = match.groups()
             emit(
                 n, "prefixed-lane",
                 f"'{prefix}-{role}' prefixes a role to make a lane token; "
                 f"the lane is '{role}'",
+                matched=match.group(0),
             )
 
     # Positional rules stay on PHYSICAL lines: joining a paragraph would let the
@@ -259,23 +264,30 @@ def scan(
         if n in suppressed:
             continue
 
-        candidates = [g for m in BRANCH_COMMAND.findall(line) for g in m if g]
+        candidates: list[tuple[str, str]] = []
+        for match in BRANCH_COMMAND.finditer(line):
+            candidates.extend(
+                (group, match.group(0))
+                for group in match.groups() if group
+            )
         if BRANCH_LINE.search(line):
-            for prefix, rest in BRANCH_BACKTICK.findall(line):
+            for match in BRANCH_BACKTICK.finditer(line):
+                prefix, rest = match.groups()
                 if prefix == "origin":
                     if "/" not in rest:
                         continue
                     prefix, rest = rest.split("/", 1)
                 if FILE_SUFFIX.search(rest):
                     continue  # a file path, not a branch
-                candidates.append(prefix)
-        for prefix in candidates:
+                candidates.append((prefix, match.group(0)))
+        for prefix, matched in candidates:
             if prefix in branch_prefixes:
                 continue
             emit(
                 n, "branch-namespace",
                 f"branch prefix '{prefix}/' is not a role; new branches are "
                 f"<role>/<scope> for {sorted(branch_prefixes)}",
+                matched=matched.strip("`"),
             )
 
         # A branch token whose namespace itself prefixes a declared role is
@@ -289,19 +301,23 @@ def scan(
                     n, "branch-namespace",
                     f"branch prefix '{match.group(1)}/' is not a role; new "
                     f"branches are <role>/<scope> for {sorted(branch_prefixes)}",
+                    matched=match.group(0).strip("`"),
                 )
 
         if queue_re is not None:
-            for stem in queue_re.findall(line):
+            for match in queue_re.finditer(line):
+                stem = match.group(1)
                 if stem not in role_set:
                     emit(
                         n, "queue-identity",
                         f"canonical queue '{stem}' is not a role queue; live "
                         f"queues are {roles}",
+                        matched=match.group(0),
                     )
 
         if max_lanes is not None:
-            for tok in LANE_COUNT.findall(line):
+            for match in LANE_COUNT.finditer(line):
+                tok = match.group(1)
                 value = _WORD_TO_INT.get(tok.lower()) or (
                     int(tok) if tok.isdigit() else None
                 )
@@ -310,6 +326,7 @@ def scan(
                         n, "lane-count",
                         f"topology says '{tok}' standing lanes where there are "
                         f"{max_lanes}; a provider never adds a lane",
+                        matched=match.group(0),
                     )
 
     for start, body in blocks:
@@ -366,7 +383,7 @@ def scan_counterexample(
     is non-inert only when every declaration is present in the body and its
     declared rule is emitted by ``scan`` with the declaration's roles.
     """
-    del roles, coordinator, queue_pattern, max_lanes
+    del roles
     declarations = _counterexample_declarations(text)
     if any("guard:violation" in line for line in text.splitlines()) and not all(
         _COUNTEREXAMPLE_DECLARATION.match(line)
@@ -389,10 +406,21 @@ def scan_counterexample(
         if not offending_text or offending_text not in body:
             return []
         try:
-            result = scan(offending_text, declared_roles, source=source)
+            result = scan(
+                body, declared_roles, source=source,
+                coordinator=coordinator, queue_pattern=queue_pattern,
+                max_lanes=max_lanes,
+            )
         except ValueError:
             return []
-        matching = [finding for finding in result.findings if finding.rule == rule]
+        matching = [
+            finding
+            for finding in result.findings
+            if finding.rule == rule and (
+                offending_text in finding.matched
+                or finding.matched in offending_text
+            )
+        ]
         if not matching:
             return []
         findings.extend(matching)

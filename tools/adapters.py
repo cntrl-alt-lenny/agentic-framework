@@ -46,10 +46,31 @@ somewhere unintended.
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 MANIFEST_NAME = "adapter.json"
+
+
+def _tracked_files_under(root: Path) -> list[Path] | None:
+    """Return tracked files below ``root``; None means this is not a Git tree."""
+    try:
+        top = Path(subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=root, text=True, stderr=subprocess.DEVNULL,
+        ).strip()).resolve()
+        rel_root = root.resolve().relative_to(top).as_posix()
+        output = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", rel_root], cwd=top,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return None
+    return [
+        (top / raw).resolve()
+        for raw in output.decode().split("\0") if raw
+    ]
 
 
 class AdapterError(Exception):
@@ -90,8 +111,11 @@ class Adapter:
 
     def source_files(self) -> list[Path]:
         """Every file this adapter installs, manifest and exclusions removed."""
+        files = _tracked_files_under(self.root)
+        if files is None:
+            files = [p for p in sorted(self.root.rglob("*")) if p.is_file()]
         return [
-            p for p in sorted(self.root.rglob("*"))
+            p for p in files
             if p.is_file()
             and p.relative_to(self.root).as_posix() not in self.exclude
         ]
@@ -119,7 +143,11 @@ class Adapter:
         """This adapter's role seat files, per its declared ``seats_dir``."""
         if self.seats_dir is None:
             return []
-        return sorted((self.root / self.seats_dir).glob("*.md"))
+        seat_root = self.root / self.seats_dir
+        return sorted(
+            p for p in self.source_files()
+            if p.parent == seat_root and p.suffix == ".md"
+        )
 
     def seat_roles(self) -> list[str]:
         return [p.stem for p in self.seat_files()]
@@ -203,7 +231,16 @@ def load(root: Path) -> Adapter:
 
 
 def available(adapters_dir: Path) -> list[str]:
-    return sorted(p.name for p in adapters_dir.iterdir() if p.is_dir())
+    tracked = _tracked_files_under(adapters_dir)
+    if tracked is None:
+        return sorted(p.name for p in adapters_dir.iterdir() if p.is_dir())
+    names = {
+        p.relative_to(adapters_dir).parts[0]
+        for p in tracked
+        if len(p.relative_to(adapters_dir).parts) >= 2
+        and p.relative_to(adapters_dir).parts[1] == MANIFEST_NAME
+    }
+    return sorted(names)
 
 
 def load_all(adapters_dir: Path) -> list[Adapter]:

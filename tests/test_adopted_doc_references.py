@@ -71,6 +71,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import adapters as adapter_manifests  # noqa: E402
 import adopt  # noqa: E402
+import docset  # noqa: E402
 from textblocks import logical_lines  # noqa: E402
 
 #: Markdown link targets, excluding anchors, URLs and mail links. Same shape as
@@ -141,7 +142,7 @@ class TestCopiedDocumentsOnlyLinkToCopiedDocuments(unittest.TestCase):
     def test_every_relative_link_targets_a_document_that_is_also_copied(self):
         copied = {(ROOT / "framework" / rel).resolve() for rel in copied_docs()}
         # A link may name a directory of copied documents, e.g. `roles/`.
-        copied_dirs = {p.parent for p in copied}
+        copied_dirs = docset.tracked_directories(copied)
         problems: list[str] = []
         for rel in copied_docs():
             path = ROOT / "framework" / rel
@@ -290,13 +291,32 @@ class TestUnresolvableReferencesSayWhichRepository(AdoptedTreeCase):
 
     def _framework_only(self, path_text: str) -> bool:
         """True if this path exists here but not in an adopted project."""
-        here = (ROOT / path_text.rstrip("/"))
-        if not here.exists():
-            return False  # not a reference to a file in this repository at all
         stem = path_text.rstrip("/")
+        tracked = {
+            p.relative_to(ROOT).as_posix()
+            for p in docset.tracked_paths()
+        }
+        if not any(p == stem or p.startswith(stem + "/") for p in tracked):
+            return False  # not a reference to a file in this repository at all
         return not any(
             p == stem or p.startswith(stem + "/") for p in self.installed
         )
+
+    def test_untracked_worktree_layout_is_not_repository_evidence(self):
+        """Ignored role checkouts must not change tracked-reference semantics."""
+        worktrees_were_present = (ROOT / ".worktrees").exists()
+        worktrees = ROOT / ".worktrees"
+        worktrees.mkdir(exist_ok=True)
+        stray = worktrees / "round5-untracked-role" / ".DS_Store"
+        stray.parent.mkdir(exist_ok=True)
+        stray.write_bytes(b"stray\n")
+        def cleanup():
+            stray.unlink(missing_ok=True)
+            stray.parent.rmdir()
+            if not worktrees_were_present:
+                worktrees.rmdir()
+        self.addCleanup(cleanup)
+        self.assertFalse(self._framework_only(".worktrees/"))
 
     def test_every_framework_only_reference_is_marked(self):
         problems: list[str] = []

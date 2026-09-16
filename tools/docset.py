@@ -14,6 +14,7 @@ a visible act, not an omission.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,29 +43,99 @@ FIXTURES: tuple[str, ...] = (
     "tests/fixtures/v1_stale_authority.md",
 )
 
+# Reference material belongs in the repository for authors to read, but is not
+# normative policy or historical evidence. It is classified explicitly so an
+# untracked or ignored copy cannot change the guard's surface.
+REFERENCES: tuple[str, ...] = (
+    "standards/readme.md",
+)
+
 HISTORICAL_MARKER = "historical document"
 
 
+def tracked_paths() -> set[Path]:
+    """Return paths Git tracks, never whatever happens to be on disk."""
+    try:
+        output = subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        # Mutation tests copy the repository without its .git directory. Keep
+        # those isolated checks usable, while still excluding the exact class
+        # of untracked role checkout that the Git-backed path rejects.
+        return {
+            path.resolve() for path in ROOT.rglob("*")
+            if path.is_file() and ".worktrees" not in path.parts
+        }
+    return {
+        (ROOT / raw).resolve()
+        for raw in output.decode().split("\0")
+        if raw
+    }
+
+
+def tracked_markdown_files() -> list[Path]:
+    """Every tracked Markdown file, including historical and reference text."""
+    return sorted(
+        path for path in tracked_paths()
+        if path.suffix.lower() == ".md"
+    )
+
+
+def tracked_directories(paths: set[Path] | None = None) -> set[Path]:
+    """Directories that contain tracked content at any depth."""
+    paths = tracked_paths() if paths is None else {
+        path.resolve() for path in paths
+    }
+    directories: set[Path] = set()
+    for path in paths:
+        current = path.parent
+        while current == ROOT or ROOT in current.parents:
+            directories.add(current)
+            if current == ROOT:
+                break
+            current = current.parent
+    return directories
+
+
 def historical_files() -> list[Path]:
-    return [ROOT / rel for rel in HISTORICAL]
+    tracked = tracked_paths()
+    return [ROOT / rel for rel in HISTORICAL if (ROOT / rel).resolve() in tracked]
+
+
+def reference_files() -> list[Path]:
+    tracked = tracked_paths()
+    return [ROOT / rel for rel in REFERENCES if (ROOT / rel).resolve() in tracked]
 
 
 def normative_files() -> list[Path]:
     """Every policy-defining document, derived from the tree."""
-    excluded = {(ROOT / rel).resolve() for rel in HISTORICAL}
-    paths: list[Path] = []
-    for base in (ROOT / "framework", ROOT / "templates", ROOT / "adapters"):
-        if base.is_dir():
-            paths += sorted(base.rglob("*.md"))
-    paths.append(ROOT / "README.md")
+    tracked = tracked_paths()
+    excluded = {
+        (ROOT / rel).resolve()
+        for rel in HISTORICAL + REFERENCES
+    }
+    roots = (
+        ROOT / "framework",
+        ROOT / "templates",
+        ROOT / "adapters",
+    )
+    paths = sorted(
+        path for path in tracked
+        if path.suffix.lower() == ".md"
+        and any(path.is_relative_to(root.resolve()) for root in roots)
+    )
+    readme = (ROOT / "README.md").resolve()
+    if readme in tracked:
+        paths.append(readme)
     return [
-        p for p in paths
-        if p.is_file() and p.resolve() not in excluded
+        p for p in paths if p.resolve() not in excluded
     ]
 
 
 def all_documents() -> list[Path]:
-    return normative_files() + [p for p in historical_files() if p.is_file()]
+    return normative_files() + historical_files() + reference_files()
 
 
 def classified() -> set[Path]:
@@ -72,6 +143,7 @@ def classified() -> set[Path]:
     return (
         {p.resolve() for p in normative_files()}
         | {p.resolve() for p in historical_files()}
+        | {p.resolve() for p in reference_files()}
         | {(ROOT / rel).resolve() for rel in FIXTURES}
     )
 
@@ -84,7 +156,7 @@ def unclassified() -> list[Path]:
     """
     known = classified()
     out = []
-    for path in sorted(ROOT.rglob("*.md")):
+    for path in tracked_markdown_files():
         if ".git" in path.parts or path.name.startswith("."):
             continue
         if path.resolve() not in known:
