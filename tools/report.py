@@ -57,6 +57,10 @@ Guarantees this module is responsible for, and how:
     time, and a timestamp. `status` compares that SHA against the checkout's
     *current* HEAD, so a reader does not have to parse the header by hand to
     tell a fresh report from a stale one.
+  * **Finds reports by Brief-ID.** Each role/Brief-ID has an atomically replaced
+    file under `by-task/`, keyed by a SHA-256 digest. The digest is a filesystem
+    key only; the exact task remains in the provenance header. `latest` and
+    `log` remain compatibility surfaces for adopted projects.
 
 What this module deliberately does NOT do: decide whether a report is good,
 guess a role's identity from anything self-reported, or make writing it
@@ -69,10 +73,12 @@ failure; see the constitution's *Unknown means unknown*.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
 import time
+from urllib.parse import quote, unquote
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,6 +99,7 @@ __all__ = [
     "role_tag",
     "head_sha",
     "write_report",
+    "find_report",
     "latest_report_provenance",
     "check_status",
     "delivery_status",
@@ -180,6 +187,10 @@ writer. Each `<role>-latest.md` holds the most recent completion report from
 the matching checkout. `brain-latest.md` is the coordinating role's own
 report, from the project's primary checkout. The old `coordinator-latest.md`
 filename remains readable for reports written by an earlier adoption.
+Reports are also retained at `by-task/<role>/<sha256-of-brief>.md`, so a
+reader can find an older report by its Brief-ID after a later report replaces
+`latest`. The hash is only a filesystem key; the provenance header remains the
+authoritative exact task value.
 
 **A missing or stale file means UNKNOWN, never that a task did not happen or
 that a review did not run.** Not every role runs this command every round --
@@ -225,10 +236,53 @@ def _seed_readme(inbox: Path) -> None:
 
 
 def _header(*, role: str, task: str, sha: str, source: str, stamp: str) -> str:
+    # Header fields are space-delimited for compatibility with existing
+    # reports. Percent-encoding keeps arbitrary free-text task IDs in one
+    # field, while leaving ordinary IDs byte-for-byte compatible with older
+    # report.py readers.
+    # ``:`` remains literal for compatibility with the hook's historical
+    # session-tagged task values; it is not used as a filesystem key.
+    encoded_task = quote(task, safe="-._~:")
     return (
-        f"<!-- captured {stamp} role={role} task={task} head={sha} "
+        f"<!-- captured {stamp} role={role} task={encoded_task} head={sha} "
         f"source={source} -->\n\n"
     )
+
+
+def _canonical_task(task: str) -> str:
+    if not isinstance(task, str) or not task:
+        raise ReportError("a task/brief identifier is required")
+    if not task.strip():
+        raise ReportError("a task/brief identifier is required")
+    if task != task.strip():
+        raise ReportError(
+            "a task/brief identifier may not have leading or trailing whitespace"
+        )
+    return task
+
+
+def _task_key(task: str) -> str:
+    return hashlib.sha256(task.encode("utf-8")).hexdigest()
+
+
+def _archive_path(inbox: Path, role: str, task: str) -> Path:
+    if not role or any(
+        c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        for c in role
+    ):
+        raise ReportError(f"invalid report role '{role}'")
+    return inbox / "by-task" / role / f"{_task_key(task)}.md"
+
+
+def _latest_path(inbox: Path, role: str) -> Path:
+    return inbox / f"{role}-latest.md"
+
+
+def _read_provenance(path: Path) -> Provenance | None:
+    try:
+        return _parse_header(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
 
 
 def write_report(
@@ -242,8 +296,8 @@ def write_report(
 
     ``task`` is required: without it, two reports from the same role that left
     HEAD unchanged -- two consecutive investigative rounds, say -- would be
-    indistinguishable by SHA alone. A brief's own filename (see
-    `framework/lifecycle.md`'s naming convention) is the natural value.
+    indistinguishable by SHA alone. Use the brief's stable `Brief-ID` value,
+    not the transient `active.md` filename.
 
     Returns the path written. Raises `ReportError` rather than writing a
     partial or misattributed report -- see that class's docstring for why
@@ -252,8 +306,7 @@ def write_report(
     body_text = text.strip()
     if not body_text:
         raise ReportError("report text is empty")
-    if not task or not task.strip():
-        raise ReportError("a task/brief identifier is required")
+    task = _canonical_task(task)
 
     inbox = git_common_dir(cwd) / "agent-inbox"
     role = role_tag(cwd)
@@ -263,10 +316,20 @@ def write_report(
     inbox.mkdir(parents=True, exist_ok=True)
     _seed_readme(inbox)
 
-    header = _header(role=role, task=task.strip(), sha=sha, source=source, stamp=stamp)
+    header = _header(role=role, task=task, sha=sha, source=source, stamp=stamp)
     body = header + body_text + "\n"
 
-    latest = inbox / f"{role}-latest.md"
+    archive = _archive_path(inbox, role, task)
+    if archive.is_file():
+        existing = _read_provenance(archive)
+        if existing is None or existing.role != role or existing.task != task:
+            raise ReportError(
+                f"report task key collision at {archive}; refusing to overwrite it"
+            )
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(archive, body)
+
+    latest = _latest_path(inbox, role)
     _atomic_write(latest, body)
 
     log = inbox / f"{role}-log.md"
@@ -299,9 +362,14 @@ def _parse_header(text: str) -> Provenance | None:
         if "=" in part:
             key, _, value = part.partition("=")
             fields[key] = value
+    encoded_task = fields.get("task")
+    try:
+        parsed_task = unquote(encoded_task) if encoded_task is not None else None
+    except (UnicodeDecodeError, ValueError):
+        parsed_task = None
     return Provenance(
         role=fields.get("role", ""),
-        task=fields.get("task"),
+        task=parsed_task,
         head=fields.get("head"),
         source=fields.get("source"),
         stamp=stamp,
@@ -321,7 +389,7 @@ def latest_report_provenance(cwd: str | Path | None = None) -> Provenance | None
     """
     role = role_tag(cwd)
     inbox = git_common_dir(cwd) / "agent-inbox"
-    latest = inbox / f"{role}-latest.md"
+    latest = _latest_path(inbox, role)
     if role == "brain" and not latest.is_file():
         legacy = inbox / "coordinator-latest.md"
         if legacy.is_file():
@@ -329,9 +397,44 @@ def latest_report_provenance(cwd: str | Path | None = None) -> Provenance | None
     if not latest.is_file():
         return None
     try:
-        return _parse_header(latest.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError):
+        return _read_provenance(latest)
+    except ReportError:
         return None
+
+
+def find_report(
+    *, role: str, task: str, cwd: str | Path | None = None,
+) -> Path | None:
+    """Find the newest report for an exact role and Brief-ID.
+
+    New writers keep one atomically replaced file per task under ``by-task``.
+    If that file is absent, fall back to the legacy latest surface so an inbox
+    created by an older adoption remains readable. A latest file is accepted
+    only when its provenance matches both requested values.
+    """
+    task = _canonical_task(task)
+    inbox = git_common_dir(cwd) / "agent-inbox"
+    archive = _archive_path(inbox, role, task)
+    if archive.is_file():
+        provenance = _read_provenance(archive)
+        if provenance is not None and provenance.role == role and provenance.task == task:
+            return archive
+        return None
+
+    latest = _latest_path(inbox, role)
+    if role == "brain" and not latest.is_file():
+        legacy = inbox / "coordinator-latest.md"
+        if legacy.is_file():
+            latest = legacy
+    if not latest.is_file():
+        return None
+    provenance = _read_provenance(latest)
+    acceptable_roles = {role}
+    if latest.name == "coordinator-latest.md" and role == "brain":
+        acceptable_roles.add("coordinator")
+    if provenance is not None and provenance.role in acceptable_roles and provenance.task == task:
+        return latest
+    return None
 
 
 def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
@@ -342,7 +445,7 @@ def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
     """
     role = role_tag(cwd)
     inbox = git_common_dir(cwd) / "agent-inbox"
-    latest = inbox / f"{role}-latest.md"
+    latest = _latest_path(inbox, role)
     if role == "brain" and not latest.is_file():
         legacy = inbox / "coordinator-latest.md"
         if legacy.is_file():
@@ -501,13 +604,10 @@ def delivery_status(
             f"branch '{branch}' at {head}"
         )
 
-    latest = git_common_dir(cwd) / "agent-inbox" / f"{role}-latest.md"
-    if not latest.is_file():
+    report_path = find_report(role=role, task=task, cwd=cwd)
+    if report_path is None:
         return 1, f"not delivered yet: no report for role '{role}'"
-    try:
-        provenance = _parse_header(latest.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError):
-        provenance = None
+    provenance = _read_provenance(report_path)
     if provenance is None:
         return 1, f"not delivered yet: report for role '{role}' has no header"
     if provenance.role != role or provenance.task != task:
@@ -532,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     write_p.add_argument(
         "--task", required=True,
-        help="the brief/round this report is for (e.g. its filename)",
+        help="the stable Brief-ID this report is for",
     )
     write_p.add_argument(
         "--file", help="read the report from this file instead of stdin"
@@ -560,6 +660,16 @@ def main(argv: list[str] | None = None) -> int:
     delivery_p.add_argument("--role", required=True)
     delivery_p.add_argument("--task", required=True)
     delivery_p.add_argument(
+        "--cwd", default=None,
+        help="repository checkout to inspect (default: current directory)",
+    )
+
+    find_p = sub.add_parser(
+        "find", help="find a completion report by role and exact Brief-ID"
+    )
+    find_p.add_argument("--role", required=True)
+    find_p.add_argument("--task", required=True)
+    find_p.add_argument(
         "--cwd", default=None,
         help="repository checkout to inspect (default: current directory)",
     )
@@ -599,6 +709,18 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         print(message)
         return code
+
+    if args.command == "find":
+        try:
+            path = find_report(role=args.role, task=args.task, cwd=args.cwd)
+        except ReportError as exc:
+            print(f"report: {exc}", file=sys.stderr)
+            return 3
+        if path is None:
+            print(f"no report found for role '{args.role}' and task '{args.task}'")
+            return 1
+        print(path)
+        return 0
 
     return 2  # pragma: no cover - argparse enforces a valid subcommand
 

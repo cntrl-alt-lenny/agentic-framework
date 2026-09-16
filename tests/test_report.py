@@ -172,6 +172,90 @@ class TestWriteReportBehaviour(RepoCase):
         report.write_report("Second.", task="b", cwd=self.repo)
         self.assertIn("A note a human added.", readme.read_text(encoding="utf-8"))
 
+    def test_reports_for_different_briefs_survive_in_either_write_order(self):
+        report.write_report("Brief A first.", task="brief-A", cwd=self.repo)
+        report.write_report("Brief B second.", task="brief-B", cwd=self.repo)
+        self.assertIn("Brief A first.", report.find_report(
+            role="brain", task="brief-A", cwd=self.repo
+        ).read_text(encoding="utf-8"))
+        self.assertIn("Brief B second.", report.find_report(
+            role="brain", task="brief-B", cwd=self.repo
+        ).read_text(encoding="utf-8"))
+
+        report.write_report("Brief B again.", task="brief-B", cwd=self.repo)
+        report.write_report("Brief A again.", task="brief-A", cwd=self.repo)
+        self.assertIn("Brief A again.", report.find_report(
+            role="brain", task="brief-A", cwd=self.repo
+        ).read_text(encoding="utf-8"))
+        self.assertIn("Brief B again.", report.find_report(
+            role="brain", task="brief-B", cwd=self.repo
+        ).read_text(encoding="utf-8"))
+
+    def test_same_brief_correction_at_a_new_head_wins(self):
+        report.write_report("Initial answer.", task="same-brief", cwd=self.repo)
+        (self.repo / "advance").write_text("new\n", encoding="utf-8")
+        subprocess.run(["git", "add", "advance"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "advance"], cwd=self.repo, check=True,
+        )
+        newest = commit_head_sha(self.repo)
+        report.write_report("Corrected answer.", task="same-brief", cwd=self.repo)
+        found = report.find_report(role="brain", task="same-brief", cwd=self.repo)
+        self.assertIn("Corrected answer.", found.read_text(encoding="utf-8"))
+        self.assertIn(f"head={newest}", found.read_text(encoding="utf-8"))
+        self.assertIn("Initial answer.", (self.inbox() / "brain-log.md").read_text())
+
+    def test_free_text_task_ids_are_safe_and_do_not_collide(self):
+        task_ids = [
+            "../outside/report",
+            r"C:\\temp\\bad<>:\"/|?*",
+            "unicode-☃-and spaces",
+            "x" * 5000,
+            "Case-Only",
+            "case-only",
+        ]
+        for index, task in enumerate(task_ids):
+            report.write_report(f"body-{index}", task=task, cwd=self.repo)
+
+        paths = []
+        for index, task in enumerate(task_ids):
+            found = report.find_report(role="brain", task=task, cwd=self.repo)
+            self.assertIsNotNone(found)
+            self.assertIn(f"body-{index}", found.read_text(encoding="utf-8"))
+            paths.append(found.resolve())
+            self.assertTrue(found.resolve().is_relative_to(self.inbox().resolve()))
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertNotEqual(
+            report.find_report(role="brain", task="Case-Only", cwd=self.repo),
+            report.find_report(role="brain", task="case-only", cwd=self.repo),
+        )
+
+    def test_leading_and_trailing_whitespace_is_rejected_not_silently_collided(self):
+        for task in (" leading", "trailing ", "\twrapped\n"):
+            with self.assertRaises(report.ReportError):
+                report.write_report("body", task=task, cwd=self.repo)
+
+    def test_a_corrupt_task_key_is_refused_instead_of_silently_replaced(self):
+        archive = report._archive_path(self.inbox(), "brain", "collision")
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive.write_text(
+            "<!-- captured now role=brain task=other head=wrong source=old -->\n\n"
+            "Do not replace me.\n", encoding="utf-8",
+        )
+        with self.assertRaisesRegex(report.ReportError, "collision"):
+            report.write_report("new body", task="collision", cwd=self.repo)
+
+    def test_old_latest_only_inbox_remains_findable(self):
+        inbox = self.inbox()
+        inbox.mkdir(parents=True, exist_ok=True)
+        sha = commit_head_sha(self.repo)
+        (inbox / "brain-latest.md").write_text(
+            f"<!-- captured now role=brain task=legacy-brief head={sha} source=old -->\n\n"
+            "Legacy report.\n", encoding="utf-8",
+        )
+        found = report.find_report(role="brain", task="legacy-brief", cwd=self.repo)
+        self.assertEqual(found, inbox / "brain-latest.md")
+
 
 class TestNonClobberAcrossConcurrentLanes(RepoCase):
     def test_two_roles_writing_produce_two_distinct_files(self):
@@ -439,6 +523,16 @@ class TestCLI(RepoCase):
         self._run(["write", "--task", "a"], stdin="Body.\n")
         proc = self._run(["status"])
         self.assertEqual(proc.returncode, 0)
+
+    def test_find_cli_returns_the_archived_brief_path(self):
+        self._run(["write", "--task", "cli-first"], stdin="First CLI report.\n")
+        self._run(["write", "--task", "cli-second"], stdin="Second CLI report.\n")
+        proc = self._run(["find", "--role", "brain", "--task", "cli-first"])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertTrue(Path(proc.stdout.strip()).is_file())
+        self.assertIn(
+            "First CLI report.", Path(proc.stdout.strip()).read_text(encoding="utf-8")
+        )
 
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@ inbox, and a cold coordinating session should not conflate them:
 
 | Evidence | Means |
 |---|---|
-| A fresh `<role>-latest.md` | The convenience worked. Read it, but as evidence, not verdict — same as any agent report. |
+| A report found with `tools/report.py find --role <role> --task <Brief-ID>` | The convenience worked. Read it, but as evidence, not verdict — same as any agent report. `<role>-latest.md` remains a convenience view, not the durable lookup key. |
 | Nothing in the inbox, or only stale entries | **UNKNOWN.** Ordinary and expected whenever a round ran on a different tool, or on no tool with this hook wired. Not a sign of failure by itself. |
 | A fresh `claude-code-health.md`, in the same inbox as the reports (`<git-common-dir>/agent-inbox/`, normally `.git/agent-inbox/`), alongside a missing or stale `<role>-latest.md` | **This host's Claude Code adapter is misconfigured**, not merely silent: the wrapper ran and could not find a working Python 3. Fix the host — see above — rather than treating this the same as ordinary absence. |
 
