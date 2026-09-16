@@ -88,6 +88,25 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             source=path.relative_to(ROOT).as_posix(), coordinator=COORDINATOR,
         )
 
+    def test_declared_role_branch_placeholder_is_not_a_provider_namespace(self):
+        for text in (
+            "Push your work on builder/<scope> and open a pull request.",
+            "Push your work on `builder/<scope>` and open a pull request.",
+            "Push your work on builder/feature-42 and open a pull request.",
+            "Push your work on `builder/feature-42` and open a pull request.",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(neutrality.scan(text, ROLES).findings, [])
+
+    def test_capitalised_roles_in_adjacent_sentences_are_not_one_lane(self):
+        for text in (
+            "Hand the report to the Verifier. That Builder then waits.",
+            "The Builder finished. Verifier reviews the exact commit.",
+            "A Worker stops here! The Verifier continues independently.",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(neutrality.scan(text, ROLES).findings, [])
+
     def test_no_provider_shaped_lane_identity(self):
         problems: list[str] = []
         for path in docset.normative_files():

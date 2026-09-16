@@ -61,7 +61,6 @@ VERBATIM_DOCS = (
     "kickoff.md",
     "lifecycle.md",
     "reports.md",
-    "state.md",
     "topologies.md",
     "roles/README.md",
     "roles/brain.md",
@@ -71,7 +70,7 @@ VERBATIM_DOCS = (
 
 #: Historical to this repository, never copied: they are its evidence, not the
 #: adopting project's.
-NOT_COPIED = ("failure-catalogue.md", "case-studies.md", "adoption.md")
+NOT_COPIED = ("failure-catalogue.md", "case-studies.md", "adoption.md", "state.md")
 
 DOCS_DEST = "docs/agents"
 
@@ -81,6 +80,8 @@ class Plan:
     writes: list[tuple[Path, str, bool]] = field(default_factory=list)
     collisions: list[tuple[Path, Path]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    ensure_worktrees_ignore: bool = False
+    target: Path = Path(".")
 
 
 def topology_diagram(coordinator: str, workers: list[str], verifier: bool) -> str:
@@ -172,7 +173,7 @@ def build_plan(
     hooks: bool,
     adapters: list[str],
 ) -> Plan:
-    plan = Plan()
+    plan = Plan(target=target)
 
     def add(rel: str, content: str, executable: bool = False) -> None:
         dst = target / rel
@@ -226,6 +227,26 @@ def build_plan(
     add("tests/test_role_neutrality.py",
         render((TEMPLATES / "tests/test_role_neutrality.py").read_text(encoding="utf-8"),
                values))
+    add("tests/test_checkout.py",
+        (TEMPLATES / "tests/test_checkout.py").read_text(encoding="utf-8"))
+    add("tests/test_report.py",
+        (ROOT / "tests" / "test_report.py").read_text(encoding="utf-8"))
+
+    checkout_src = ROOT / "tools" / "checkout.py"
+    with checkout_src.open("rb") as stream:
+        checkout_executable = stream.readline().startswith(b"#!")
+    add(
+        "tools/checkout.py", checkout_src.read_text(encoding="utf-8"),
+        executable=checkout_executable,
+    )
+
+    # Preserve every existing project rule and append the required isolation
+    # entry only when neither common spelling is already present.
+    ignore = target / ".gitignore"
+    existing_ignore = ignore.read_text(encoding="utf-8") if ignore.is_file() else ""
+    ignored_lines = {line.strip() for line in existing_ignore.splitlines()}
+    if ".worktrees/" not in ignored_lines and "/.worktrees/" not in ignored_lines:
+        plan.ensure_worktrees_ignore = True
 
     # The cross-provider completion-report writer -- see framework/reports.md.
     # Installed unconditionally, with no `--adapter` required: it is the
@@ -299,6 +320,8 @@ def render_plan(plan: Plan, target: Path) -> str:
         )
     for note in plan.notes:
         out.append(f"  note   {note}")
+    if plan.ensure_worktrees_ignore:
+        out.append("  append .gitignore (ignore .worktrees/; existing content stays in order)")
     return "\n".join(out) or "  (nothing to do)"
 
 
@@ -340,6 +363,14 @@ def apply_plan(plan: Plan) -> list[Path]:
                 pass
             if not executable_bit_took(dst):
                 unset.append(dst)
+    if plan.ensure_worktrees_ignore:
+        ignore = plan.target / ".gitignore"
+        prior = ignore.read_text(encoding="utf-8") if ignore.is_file() else ""
+        lines = {line.strip() for line in prior.splitlines()}
+        if ".worktrees/" not in lines and "/.worktrees/" not in lines:
+            separator = "" if not prior or prior.endswith(("\n", "\r")) else "\n"
+            with ignore.open("a", encoding="utf-8", newline="") as stream:
+                stream.write(separator + ".worktrees/\n")
     return unset
 
 

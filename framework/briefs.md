@@ -20,6 +20,8 @@ the executor design around it.
 ## Template
 
 ```markdown
+Brief-ID: <NNN-YYYY-MM-DD-slug>
+
 ## MODE: <IMPLEMENTATION | RESEARCH | SOURCE VERIFICATION | ADVERSARIAL AUDIT |
 ##        DATA / SCHEMA | REGRESSION INVESTIGATION | DOCUMENTATION>
 
@@ -61,6 +63,12 @@ Branch name, and the reminder that the executor does not merge.
 ## Completion-report schema
 Any additions to the standard report for this task.
 ```
+
+`Brief-ID:` is the stable identifier for the round. Brain assigns it when the
+brief is written, using the zero-padded sequence, date and slug, and never
+changes it as the file moves through the lifecycle. It is the value passed to
+`tools/report.py write --task`; `active.md` is only the current location and is
+not an identifier.
 
 ## Design rules
 

@@ -418,10 +418,10 @@ class TestClaudeCodeHookPortabilityGuardFires(MutationCase):
         self.assert_guard_fires(
             path="tools/report.py",
             mutate=lambda body: body.replace(
-                'role = "coordinator" if is_primary else Path(toplevel).name',
+                'role = "brain" if is_primary else Path(toplevel).name',
                 'role = Path(toplevel).name',
             ),
-            module=self.MODULE, expect="coordinator",
+            module=self.MODULE, expect="brain",
             why="the primary checkout is named after the project, not the "
                 "coordinating role; tagging by basename mislabels every "
                 "report the coordinating role writes about itself",

@@ -72,6 +72,25 @@ class TestThePasteableBlocksAreUsable(unittest.TestCase):
         self.assertIn("AGENTS.md", start)
         self.assertIn("roles/brain.md", start)
 
+    def test_the_brain_prompt_starts_with_the_checkout_check(self):
+        start = next(b for b in self.blocks if "You are the Brain" in b)
+        first_instruction = next(
+            line.strip() for line in start.splitlines() if line.strip()
+        )
+        self.assertEqual(
+            first_instruction, "Before anything else, run:",
+            "the first prompt action must be the mechanical checkout check",
+        )
+        self.assertIn("python3 tools/checkout.py --seat brain", start)
+
+    def test_brain_requires_each_generated_prompt_to_start_with_its_check(self):
+        text = " ".join(BRAIN.read_text(encoding="utf-8").split())
+        self.assertIn(
+            "Every prompt Brain writes for another seat must put that seat's "
+            "corresponding checkout check before its first other instruction",
+            text,
+        )
+
     def test_the_starting_block_asks_for_both_prompts(self):
         start = next(b for b in self.blocks if "You are the Brain" in b)
         self.assertIn("Builder prompt", start)
@@ -120,7 +139,12 @@ class TestBrainStillIssuesBothPrompts(unittest.TestCase):
         for path in (KICKOFF, BRAIN, LIFECYCLE, VERIFIER):
             with self.subTest(path=path):
                 text = " ".join(path.read_text(encoding="utf-8").split())
-                self.assertIn("only after the Builder has finished", text)
+                expected = (
+                    "only after the executor has finished"
+                    if path == VERIFIER
+                    else "only after the Builder has finished"
+                )
+                self.assertIn(expected, text)
                 self.assertNotIn("opens both sessions at once", text)
                 self.assertNotIn("starts both sessions at the same time", text)
                 self.assertNotIn("Verifier waits for mechanical delivery", text)

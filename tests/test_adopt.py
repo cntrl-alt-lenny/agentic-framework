@@ -31,6 +31,12 @@ class AdoptionCase(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.target = Path(self._tmp.name)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.target, check=True)
+        (self.target / ".seed").write_text("seed\n", encoding="utf-8")
+        subprocess.run(["git", "add", ".seed"], cwd=self.target, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=self.target, check=True)
         self.addCleanup(self._tmp.cleanup)
 
 
@@ -55,11 +61,18 @@ class TestDefaultAdoption(AdoptionCase):
             "tools/neutrality.py",
             "tools/authority.py",
             "tools/textblocks.py",
+            "tools/checkout.py",
             "tools/report.py",
             "tests/test_role_neutrality.py",
+            "tests/test_checkout.py",
+            "tests/test_report.py",
         ):
             with self.subTest(path=rel):
                 self.assertTrue((self.target / rel).is_file(), rel)
+
+    def test_framework_state_guidance_is_not_a_second_project_state_file(self):
+        self.assertFalse((self.target / "docs/agents/state.md").exists())
+        self.assertTrue((self.target / "docs/state.md").is_file())
 
     def test_report_py_is_installed_with_no_adapter_at_all(self):
         """The baseline mechanism must not depend on choosing an adapter.
@@ -76,6 +89,7 @@ class TestDefaultAdoption(AdoptionCase):
             "tools/authority.py",
             "tools/neutrality.py",
             "tools/textblocks.py",
+            "tools/checkout.py",
             "tools/report.py",
         ):
             with self.subTest(path=rel):
@@ -94,6 +108,15 @@ class TestDefaultAdoption(AdoptionCase):
     def test_standards_are_not_copied(self):
         """The repository's presentation reference is outside the framework copy."""
         self.assertFalse((self.target / "standards").exists())
+
+    def test_worktrees_are_ignored_without_reordering_existing_rules(self):
+        original = "# local rules\ncache/\n"
+        (self.target / ".gitignore").write_text(original, encoding="utf-8")
+        self.assertEqual(run_adopt(self.target), 0)
+        updated = (self.target / ".gitignore").read_text(encoding="utf-8")
+        self.assertEqual(updated, original + ".worktrees/\n")
+        self.assertEqual(run_adopt(self.target), 0)
+        self.assertEqual((self.target / ".gitignore").read_text(encoding="utf-8"), updated)
 
     def test_no_unresolved_placeholders(self):
         leftovers = []
@@ -332,6 +355,28 @@ class TestVerbatimDocsStayInSync(unittest.TestCase):
         for rel in adopt.VERBATIM_DOCS:
             with self.subTest(doc=rel):
                 self.assertTrue((ROOT / "framework" / rel).is_file(), rel)
+
+    def test_adoption_table_lists_every_verbatim_document(self):
+        table = (ROOT / "framework" / "adoption.md").read_text(encoding="utf-8")
+        for rel in adopt.VERBATIM_DOCS:
+            with self.subTest(doc=rel):
+                self.assertIn(f"`docs/agents/{rel}`", table)
+
+    def test_adoption_table_lists_the_default_guard_files(self):
+        table = (ROOT / "framework" / "adoption.md").read_text(encoding="utf-8")
+        copied = (
+            "tests/test_role_neutrality.py",
+            "tests/test_checkout.py",
+            "tests/test_report.py",
+            "tools/neutrality.py",
+            "tools/authority.py",
+            "tools/textblocks.py",
+            "tools/checkout.py",
+            "tools/report.py",
+        )
+        for rel in copied:
+            with self.subTest(path=rel):
+                self.assertIn(f"`{rel}`", table)
 
     def test_nothing_normative_is_silently_left_behind(self):
         """A new framework document must be a deliberate copy-or-not decision.

@@ -142,7 +142,9 @@ def _compound_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
     out of the qualifier. Anything that is not plain English grammar is treated
     as a proper noun, i.e. a provider, and rejected."""
     caps = "|".join(re.escape(r.capitalize()) for r in sorted(roles, key=len, reverse=True))
-    return re.compile(r"(?<![\w-])((?:[A-Z][\w.+]*\s+){1,3})(" + caps + r")\b")
+    # Do not let the qualifier cross sentence punctuation: `Verifier. That
+    # Builder` contains two ordinary role mentions, not a provider-shaped lane.
+    return re.compile(r"(?<![\w-])((?:[A-Z][\w+-]*\s+){1,3})(" + caps + r")\b")
 
 
 def _prefixed_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
@@ -215,7 +217,7 @@ def scan(
     role_set = set(roles)
     branch_prefixes = role_set | {coordinator}
     role_branch_re = re.compile(
-        r"(?<![\w])([a-z0-9][\w.+]*[-_]" + _role_alt(roles) + r")/"
+        r"(?<![\w-])((?:[a-z0-9][\w.+]*[-_])?(?:" + _role_alt(roles) + r"))/"
         r"[\w.<>-]+"
     )
 
@@ -297,6 +299,8 @@ def scan(
         # ``acme/some-scope``.
         if not BRANCH_LINE.search(line):
             for match in role_branch_re.finditer(line):
+                if match.group(1) in branch_prefixes:
+                    continue
                 emit(
                     n, "branch-namespace",
                     f"branch prefix '{match.group(1)}/' is not a role; new "

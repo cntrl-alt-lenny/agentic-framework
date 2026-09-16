@@ -40,8 +40,9 @@ Guarantees this module is responsible for, and how:
     `git-and-isolation.md` puts one role per checkout; a linked worktree's own
     directory name already matches its role, and the primary checkout — where
     `--git-dir` and `--git-common-dir` coincide, which holds regardless of what
-    either directory is called — is the coordinating role, tagged
-    `coordinator` rather than guessed from a project's own name for that seat.
+    either directory is called — is the coordinating role, tagged `brain`
+    rather than guessed from a project's own name for that seat. Readers keep
+    compatibility with older `coordinator-latest.md` reports.
   * **Writes atomically.** Write to a temp file beside the target, then
     `os.replace`, which is an atomic rename on both POSIX and Windows within one
     filesystem. A reader never observes a half-written report.
@@ -70,6 +71,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,7 +141,9 @@ def role_tag(cwd: str | Path | None = None) -> str:
         and common_dir is not None
         and _resolve(git_dir, cwd) == _resolve(common_dir, cwd)
     )
-    role = "coordinator" if is_primary else Path(toplevel).name
+    # `coordinator` was the pre-seat compatibility tag. Brain is the actual
+    # coordinating seat; readers still fall back to coordinator-latest below.
+    role = "brain" if is_primary else Path(toplevel).name
     return "".join(c for c in role if c.isalnum() or c in "-_") or "unknown"
 
 
@@ -162,11 +166,9 @@ README = """# agent-inbox
 Auto-populated by `tools/report.py`, called either directly by a role's own
 contract or by a provider-specific convenience hook that calls the same
 writer. Each `<role>-latest.md` holds the most recent completion report from
-the matching checkout. `coordinator-latest.md` is the coordinating role's own
-report, from the project's primary checkout -- tagged `coordinator` rather
-than the project's name, and rather than whatever this project calls that
-role, because the role tag is derived from checkout structure, never
-self-reported or read from `AGENTS.md`.
+the matching checkout. `brain-latest.md` is the coordinating role's own
+report, from the project's primary checkout. The old `coordinator-latest.md`
+filename remains readable for reports written by an earlier adoption.
 
 **A missing or stale file means UNKNOWN, never that a task did not happen or
 that a review did not run.** Not every role runs this command every round --
@@ -181,10 +183,28 @@ Not under version control: this lives inside git's own directory.
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    """Write-then-rename, so a reader never observes a partially-written file."""
+    """Write-then-rename, retrying Windows' sharing violation briefly.
+
+    Ported from edopro-retro-formats, `tools/report.py`, whose report writer
+    handles a reader holding the destination open.
+    """
     tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
     tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
+    deadline = time.monotonic() + 5.0
+    delay = 0.005
+    while True:
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                try:
+                    tmp.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.05)
 
 
 def _seed_readme(inbox: Path) -> None:
@@ -288,6 +308,10 @@ def check_status(cwd: str | Path | None = None) -> tuple[int, str]:
     role = role_tag(cwd)
     inbox = git_common_dir(cwd) / "agent-inbox"
     latest = inbox / f"{role}-latest.md"
+    if role == "brain" and not latest.is_file():
+        legacy = inbox / "coordinator-latest.md"
+        if legacy.is_file():
+            latest = legacy
     if not latest.is_file():
         return 2, f"no report found for role '{role}' at {latest}"
 
@@ -324,7 +348,7 @@ def _commit_for_ref(ref: str, cwd: str | Path | None = None) -> str | None:
 def _fetch_branch(branch: str, cwd: str | Path | None = None) -> None:
     """Best-effort fetch of the named branch before resolving delivery.
 
-    A Verifier may be in a separate clone, where the Builder's later push is
+    A Verifier may be in a separate clone, where the executor's later push is
     not present in any local ref until it is fetched. A linked worktree may
     already have the local branch, and a repository without an ``origin`` may
     be intentionally offline; both cases remain usable because the local and
@@ -374,7 +398,7 @@ def _delivery_branch_head(
     """Reconcile a local branch with the freshly fetched origin branch.
 
     A stale local ref must not hide a newer remote head. A local branch ahead
-    of origin is valid for a linked Builder worktree, while divergence is
+    of origin is valid for a linked executor worktree, while divergence is
     ambiguous and must remain retryable rather than selecting either side.
     """
     local_ref, remote_ref = _branch_ref_names(branch)
@@ -414,7 +438,7 @@ def delivery_status(
     task: str,
     cwd: str | Path | None = None,
 ) -> tuple[int, str]:
-    """Check whether a Builder has delivered this task for Verifier review.
+    """Check whether an executor has delivered this task for Verifier review.
 
     Delivery is a conjunction, not a branch existence check: the named branch
     must resolve to a commit strictly after an ancestor base, and the shared

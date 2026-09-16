@@ -32,9 +32,10 @@ already accepted. They are **not** expected to read diffs, understand SHAs,
 branches or worktrees, interpret CI, or judge whether an implementation is
 technically safe.
 
-Their loop is: *ask what's next → receive one ready-to-paste prompt → paste it
-into whichever tool they choose → say the task finished → receive a
-plain-English outcome and the next prompt.*
+Their loop is: *ask what's next → receive one ready-to-paste executor prompt
+and, where the topology has a Verifier, one separately labelled Verifier prompt
+to send later → paste them in the stated order → say the task finished → receive
+a plain-English outcome and the next prompt.*
 
 If a step in that loop requires the owner to open a repository file, run a git
 command, or judge technical correctness, that is a **defect in the framework**,
@@ -199,7 +200,8 @@ context per assignment is preferred: it prevents stale assumptions, prevents an
 agent defending its earlier reasoning, and stops a long conversation becoming
 hidden state.
 
-Details: [`state.md`](state.md).
+Details: the framework repository's `state.md` author guidance, while an
+adopting project keeps its one durable state document at `docs/state.md`.
 
 ## Evidence outranks narrative
 

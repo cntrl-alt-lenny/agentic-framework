@@ -35,6 +35,19 @@ on a new machine reaches the same layout with the same commands.
 
 `.worktrees/` is ignored by git.
 
+Every role prompt starts with the shipped mechanical check:
+
+```bash
+python3 tools/checkout.py --seat <seat named in the prompt>
+```
+
+It passes for the primary coordinating checkout and for a linked worktree at
+`.worktrees/<role>`, and fails with the current and expected locations when a
+seat is claimed from the wrong checkout. A separate clone has the same shape as
+the primary checkout; leave it as the coordinating seat or assign it locally
+before launch with `git config --local framework.checkout-seat <role>`. The
+setting is private clone metadata, not a tracked policy file.
+
 Git worktrees share one object database and one remote, so a fetch or push from
 any is visible to the others. They do **not** share a working directory or index:
 one role cannot check out a branch another is sitting on, and one role switching

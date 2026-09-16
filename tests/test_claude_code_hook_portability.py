@@ -185,7 +185,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("python3",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py3", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(latest.is_file(), "no report written with python3 present")
         self.assertIn("Final reply text.", latest.read_text(encoding="utf-8"))
 
@@ -200,7 +200,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("python",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py-only", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(
             latest.is_file(),
             "no report written with only `python` on PATH; a fix that only "
@@ -212,7 +212,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         path_dir = make_interpreter_dir(extra_names=("py",))
         proc = run_launcher(self.target, path_dir=path_dir, session_id="py-launcher", sh=self.sh)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        latest = inbox_dir(self.target) / "coordinator-latest.md"
+        latest = inbox_dir(self.target) / "brain-latest.md"
         self.assertTrue(latest.is_file(), "the `py` launcher candidate was not tried")
 
     def test_original_hardcoded_command_would_have_failed_here(self):
@@ -248,7 +248,7 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
         )
         inbox = inbox_dir(self.target)
         self.assertFalse(
-            (inbox / "coordinator-latest.md").exists(),
+            (inbox / "brain-latest.md").exists(),
             "a report was written despite no interpreter being available",
         )
         health = inbox / "claude-code-health.md"
@@ -261,7 +261,7 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
 
     def test_the_health_marker_and_a_role_report_are_never_confused(self):
         """A cold Brain must be able to tell these apart by filename alone."""
-        for name in ("coordinator-latest.md", "worker-latest.md", "verifier-latest.md"):
+        for name in ("brain-latest.md", "worker-latest.md", "verifier-latest.md"):
             self.assertNotEqual(name, "claude-code-health.md")
 
     def test_absence_of_the_health_file_proves_nothing(self):
@@ -277,11 +277,11 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
 class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
     """Item 8: the primary checkout is not named after a role."""
 
-    def test_the_primary_checkout_is_tagged_coordinator(self):
+    def test_the_primary_checkout_is_tagged_brain(self):
         path_dir = make_interpreter_dir(extra_names=("python3",))
         run_launcher(self.target, path_dir=path_dir, session_id="primary", sh=self.sh)
         inbox = inbox_dir(self.target)
-        self.assertTrue((inbox / "coordinator-latest.md").is_file())
+        self.assertTrue((inbox / "brain-latest.md").is_file())
         # The defect this replaces: tagged with the project's own directory
         # name, which is `self.target.name` here.
         self.assertFalse(
@@ -314,7 +314,7 @@ class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
             (inbox / "worker-latest.md").is_file(),
             "a linked worktree named 'worker' must produce worker-latest.md",
         )
-        self.assertFalse((inbox / "coordinator-latest.md").exists())
+        self.assertFalse((inbox / "brain-latest.md").exists())
 
 
 class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
@@ -375,7 +375,7 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
             "a python3-only PATH; this does not reproduce the incident",
         )
         self.assertFalse(
-            (inbox_dir(target) / "coordinator-latest.md").exists(),
+            (inbox_dir(target) / "brain-latest.md").exists(),
             "the pre-fix command produced a report despite naming an "
             "interpreter absent from PATH; the reproduction is not faithful",
         )
@@ -395,7 +395,7 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
         text = report_path.read_text(encoding="utf-8")
         # Restore the exact pre-fix derivation this replaced.
         marker = (
-            'role = "coordinator" if is_primary else Path(toplevel).name'
+            'role = "brain" if is_primary else Path(toplevel).name'
         )
         self.assertIn(marker, text, "fixture out of sync with tools/report.py")
         text = text.replace(marker, "role = Path(toplevel).name")
@@ -411,7 +411,7 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
             "reverting the role-tag fix should reproduce project-named "
             "reports from the primary checkout",
         )
-        self.assertFalse((inbox / "coordinator-latest.md").exists())
+        self.assertFalse((inbox / "brain-latest.md").exists())
 
 
 if __name__ == "__main__":

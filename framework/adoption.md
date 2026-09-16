@@ -9,18 +9,40 @@ project."*
 | In the target repository | What it is |
 |---|---|
 | `AGENTS.md` | The project's coordination document: its declared topology, its authority statement, its own invariants, and pointers. **This is the only file that needs real thought.** |
-| `docs/agents/roles/*.md` | The role contracts, copied verbatim. Generic by design — do not edit them per project. |
-| `docs/agents/lifecycle.md`, `evidence.md`, `git-and-isolation.md`, `adapters.md`, `reports.md` | Copied verbatim. |
+| `docs/agents/CONSTITUTION.md` | The authority model and operating principles, copied verbatim. |
+| `docs/agents/adapters.md` | Provider-adapter boundary, copied verbatim. |
+| `docs/agents/briefs.md` | Brief format and identifier rules, copied verbatim. |
+| `docs/agents/evidence.md` | Evidence discipline, copied verbatim. |
+| `docs/agents/git-and-isolation.md` | Checkout and branch isolation rules, copied verbatim. |
+| `docs/agents/kickoff.md` | The owner's kickoff loop, copied verbatim. |
+| `docs/agents/lifecycle.md` | Round lifecycle, copied verbatim. |
+| `docs/agents/reports.md` | Completion-report mechanism, copied verbatim. |
+| `docs/agents/topologies.md` | Topology choices, copied verbatim. |
+| `docs/agents/roles/README.md` | Role vocabulary guidance, copied verbatim. |
+| `docs/agents/roles/brain.md` | Brain contract, copied verbatim. |
+| `docs/agents/roles/worker.md` | Worker contract, copied verbatim. |
+| `docs/agents/roles/verifier.md` | Optional Verifier contract, copied verbatim. |
 | `docs/state.md` | The durable state document, starting nearly empty. |
 | `docs/briefs/` | `README.md` (lifecycle), `active.md`, `delivered/`, `archive/`. |
 | `tests/test_role_neutrality.py` | The neutrality guard, pointed at the project's declared role set. |
+| `tests/test_checkout.py` | The first-action checkout guard. |
+| `tests/test_report.py` | Behavioural tests for the installed completion-report tool. |
 | `tools/neutrality.py` | The scanner the test uses. |
+| `tools/authority.py` | The authority scanner used by the installed guard. |
+| `tools/textblocks.py` | Shared counterexample parsing used by the installed guards. |
+| `tools/checkout.py` | The first-action checkout check. |
 | `tools/report.py` | The provider-neutral completion-report writer every Worker and Verifier contract requires — installed unconditionally, with no `--adapter` needed. See `reports.md`. |
+| `.gitattributes` | LF normalization for installed scripts and hooks. |
+| `.gitignore` | Adoption appends `.worktrees/` without changing existing rules. |
 | `.githooks/pre-push` *(optional)* | A client-side gate, if the project has validation worth running early. |
 | A provider adapter's files *(optional)* | Installed **where that adapter declares**, which is a property of the tool and not of the adapter's name — see [`adapters.md`](adapters.md). `adopt.py` prints the destination and the seats it installed. |
 
 The mechanical copy can be done by [`../tools/adopt.py`](../tools/adopt.py). The
 judgement cannot.
+
+The framework's own `framework/state.md` is author guidance for this repository
+and is deliberately not copied. An adopting project has one durable state file:
+`docs/state.md`; this avoids confusing framework guidance with project state.
 
 ## Counterexample declarations
 
@@ -111,6 +133,21 @@ and pointed at from here.
 
 One isolated checkout per concurrently-active role. See
 [`git-and-isolation.md`](git-and-isolation.md).
+
+Adoption ensures `.worktrees/` is present in `.gitignore`, appending one entry
+only when neither `.worktrees/` nor `/.worktrees/` is already present. It never
+rewrites or reorders an existing ignore file. For a separate clone, assign its
+seat once before launching a role because Git gives a separate clone the same
+shape as the primary checkout:
+
+```bash
+git config --local framework.checkout-seat <role>
+python3 tools/checkout.py --seat <role>
+```
+
+The check is the first action in every role prompt. A linked worktree derives
+its seat from `.worktrees/<role>`; the primary checkout and an unassigned clone
+are the coordinating seat.
 
 ### 7. Make the guard real
 

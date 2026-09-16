@@ -35,7 +35,15 @@ Open a fresh session in the project and paste this. It is the same text for
 every project and every tool:
 
 ```
+Before anything else, run:
+
+python3 tools/checkout.py --seat brain
+
 You are the Brain for this project.
+
+Every prompt you write for another seat must begin with that seat's equivalent
+`tools/checkout.py --seat <seat>` check, before any other instruction in the
+prompt.
 
 Read AGENTS.md first, then docs/agents/roles/brain.md, which is your contract
 — follow it. Then rehydrate: derive the live repository state yourself rather
@@ -68,8 +76,9 @@ to a session with repository access rather than pasting state in by hand.
 
 ## 2. Running the Builder and the Verifier
 
-Paste the Builder block Brain produced into its own fresh session and checkout
-first — see [`git-and-isolation.md`](git-and-isolation.md). If there is a
+Paste the Builder block Brain produced into its own fresh session. Its first
+action is the checkout check Brain placed at the top — see
+[`git-and-isolation.md`](git-and-isolation.md). If there is a
 standing Verifier seat, paste its separately labelled block only after the
 Builder has finished. If there is no standing Verifier seat, paste only the
 Builder block.
