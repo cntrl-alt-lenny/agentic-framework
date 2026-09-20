@@ -100,8 +100,8 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
 
     def test_declared_structural_branch_namespaces_are_allowed(self):
         text = (
-            "Create `m3/feature-work` for the next milestone.\n"
-            "Keep `meta/coordination` for project structure.\n"
+            "Create branch `m3/feature-work` for the next milestone.\n"
+            "Keep branch namespace `meta/coordination` for project structure.\n"
         )
         self.assertEqual(
             neutrality.scan(
