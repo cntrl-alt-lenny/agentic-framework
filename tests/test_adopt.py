@@ -219,7 +219,7 @@ class TestTopologyOptions(AdoptionCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
             agents.write_text(
-                declared.replace('prefixes="m<N>,meta"', 'prefixes="m<N>,vendor"'),
+                declared.replace('prefixes="m<N>,meta"', 'prefixes="m<N>,vendor-ai"'),
                 encoding="utf-8",
             )
             proc = subprocess.run(
@@ -228,6 +228,51 @@ class TestTopologyOptions(AdoptionCase):
             )
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn("unsupported branch namespace", proc.stdout + proc.stderr)
+        finally:
+            agents.write_text(original, encoding="utf-8")
+
+    def test_declared_custom_namespaces_need_tracked_structure(self):
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "builder", "--verifier"),
+            0,
+        )
+        evidence = self.target / "docs" / "branch-namespaces"
+        evidence.mkdir(parents=True)
+        for name in ("release", "feature"):
+            (evidence / f"{name}.md").write_text(
+                f"This project owns the {name} branch namespace.\n",
+                encoding="utf-8",
+            )
+        subprocess.run(["git", "add", "docs/branch-namespaces"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "namespace evidence"],
+            cwd=self.target, check=True, capture_output=True, text=True,
+        )
+        agents = self.target / "AGENTS.md"
+        original = agents.read_text(encoding="utf-8")
+        declared = (
+            original
+            + '\n<!-- guard:branch-namespaces prefixes="release,feature" -->\n'
+            + "Create branch `release/next` and branch `feature/queue` here.\n"
+        )
+        agents.write_text(declared, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+            agents.write_text(
+                declared + "Create branch `vendor/release` for this round.\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("branch-namespace", proc.stdout + proc.stderr)
         finally:
             agents.write_text(original, encoding="utf-8")
 

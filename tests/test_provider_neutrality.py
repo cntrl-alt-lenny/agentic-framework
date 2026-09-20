@@ -122,9 +122,20 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 ).findings
             )
         )
+        self.assertEqual(
+            neutrality.branch_namespace_declarations(
+                '<!-- guard:branch-namespaces prefixes="release,feature" -->'
+            ),
+            ("release", "feature"),
+        )
         with self.assertRaisesRegex(ValueError, "unsupported"):
             neutrality.branch_namespace_declarations(
-                '<!-- guard:branch-namespaces prefixes="m<N>,vendor" -->'
+                '<!-- guard:branch-namespaces prefixes="m<N>,vendor-ai" -->'
+            )
+        with self.assertRaisesRegex(ValueError, "tracked project-structure"):
+            neutrality.branch_namespace_declarations(
+                '<!-- guard:branch-namespaces prefixes="vendor" -->',
+                root=ROOT,
             )
         self.assertEqual(
             neutrality.branch_namespace_declarations(
@@ -132,6 +143,19 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             ),
             (),
         )
+
+    def test_branch_namespace_declarations_ignore_all_markdown_fences(self):
+        for example in (
+            '```markdown\n<!-- guard:branch-namespaces prefixes="release" -->\n```',
+            '~~~markdown\n<!-- guard:branch-namespaces prefixes="release" -->\n~~~',
+            '````markdown\n'
+            '```\n<!-- guard:branch-namespaces prefixes="release" -->\n```\n'
+            '````',
+        ):
+            with self.subTest(example=example):
+                self.assertEqual(
+                    neutrality.branch_namespace_declarations(example), ()
+                )
 
     def test_capitalised_roles_in_adjacent_sentences_are_not_one_lane(self):
         for text in (
@@ -179,14 +203,22 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             "See ../edopro-next-builder for details.",
             "The record-builder module is ordinary text.",
             "A self-builder pattern appears in the manual.",
+            "The deck-builder module handles queue serialization.",
+            "The deck-builder path is relative to the checkout.",
+            "The release-builder file is mentioned beside the queue guide.",
+            "A cross-team-builder example belongs in the UI manual.",
         )
         caught = (
             "The vendor-builder lane is isolated.",
             "Use the `vendor-builder` queue.",
+            "The vendor-ai-builder lane is isolated.",
+            "Use the `vendor-ai-builder` queue.",
             "Create vendor-builder/queue for this seat.",
             "The vendor-builder worktree is separate.",
             "Send the task to vendor-builder.",
             "Route the result through vendor-builder role.",
+            "The queue is vendor-ai-builder for now.",
+            "Create vendor-ai-builder/queue for this round.",
         )
         for text in clean:
             with self.subTest(text=text):
