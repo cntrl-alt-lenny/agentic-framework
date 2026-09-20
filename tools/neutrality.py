@@ -17,6 +17,12 @@ to this file.
 function words — not a vendor list. A test asserts it contains no proper nouns,
 so it cannot quietly become one.
 
+BRANCH NAMESPACE DECLARATIONS are deliberately structural, not an arbitrary
+allowlist. A project's AGENTS.md may declare `m<N>` for milestone namespaces
+and/or `meta` for project-coordination namespaces. The scanner expands those
+shapes mechanically; adding another shape is a framework change with a test,
+not a project-side escape hatch for a provider name.
+
 HISTORICAL TEXT IS OUT OF SCOPE. Case studies, round logs, archived briefs and
 failure catalogues record which tool actually ran. That is a record of events,
 never a lane definition. Callers pass only their *normative* surface.
@@ -52,6 +58,7 @@ __all__ = [
     "Counterexample",
     "ScanResult",
     "GRAMMAR_QUALIFIERS",
+    "branch_namespace_declarations",
     "scan",
     "scan_counterexample",
     "scan_adapter_blocks",
@@ -163,9 +170,125 @@ def _compound_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
 
 
 def _prefixed_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
-    """`<something>-<role>` / `<something>_<role>` — a lane token built by
-    prefixing a role. No prefix is ever legitimate."""
-    return re.compile(r"(?<![\w])([a-z0-9][\w.+]*)[-_](" + _role_alt(roles) + r")\b")
+    """Find a role-suffixed token; the caller supplies identity context.
+
+    Token shape alone is insufficient: ``deck-builder`` can be ordinary
+    English or a filename. `_prefixed_lane_is_identity` below requires a lane
+    cue, an explicit identifier, or a role-suffixed path before emitting it.
+    """
+    return re.compile(
+        r"(?<![\w-])(?P<prefix>[a-z0-9][\w.+]*)[-_]"
+        r"(?P<role>" + _role_alt(roles) + r")\b"
+    )
+
+
+_LANE_IDENTITY_CUE = re.compile(
+    r"\b(?:lane|lanes|queue|queues|seat|seats|role|roles|session|sessions|"
+    r"worktree|worktrees|checkout|checkouts|branch|branches|namespace|"
+    r"namespaces|send|hand|route|assign|dispatch|use|run|launch|start|"
+    r"open|cut|create)\b",
+    re.IGNORECASE,
+)
+_BRANCH_NAMESPACE_DECLARATION = re.compile(
+    r'^\s*<!--\s*guard:branch-namespaces\s+'
+    r'prefixes="(?P<prefixes>[^"]+)"\s*-->\s*$'
+)
+_STRUCTURAL_BRANCH_NAMESPACES = frozenset(("m<N>", "meta"))
+_MILESTONE_NAMESPACE = re.compile(r"m[0-9]+\Z")
+
+
+def branch_namespace_declarations(text: str) -> tuple[str, ...]:
+    """Read the bounded branch-namespace declaration from a project document.
+
+    The marker is intended for the adopting project's AGENTS.md. Only the two
+    structural forms documented by the framework are accepted; arbitrary names
+    are rejected rather than turning the scanner into a caller-controlled
+    allowlist.
+    """
+    marker_lines = []
+    in_fence = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and "guard:branch-namespaces" in line:
+            marker_lines.append(line)
+    if not marker_lines:
+        return ()
+    if len(marker_lines) != 1:
+        raise ValueError("only one branch-namespace declaration is allowed")
+    match = _BRANCH_NAMESPACE_DECLARATION.match(marker_lines[0])
+    if not match:
+        raise ValueError(
+            'branch namespace declaration must be '
+            '<!-- guard:branch-namespaces prefixes="m<N>,meta" -->'
+        )
+    prefixes = tuple(
+        prefix.strip() for prefix in match.group("prefixes").split(",")
+        if prefix.strip()
+    )
+    if not prefixes or len(set(prefixes)) != len(prefixes):
+        raise ValueError("branch namespace declaration must name unique prefixes")
+    invalid = [
+        prefix for prefix in prefixes
+        if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
+    ]
+    if invalid:
+        raise ValueError(
+            "unsupported branch namespace declaration(s): "
+            + ", ".join(invalid)
+            + "; only m<N> and meta are structural forms"
+        )
+    return prefixes
+
+
+def _branch_namespace_allowed(
+    prefix: str,
+    role_prefixes: set[str],
+    declared: Sequence[str],
+) -> bool:
+    if prefix in role_prefixes:
+        return True
+    return (
+        ("meta" in declared and prefix == "meta")
+        or ("m<N>" in declared and _MILESTONE_NAMESPACE.fullmatch(prefix) is not None)
+    )
+
+
+def _prefixed_lane_is_identity(line: str, match: re.Match[str]) -> bool:
+    """Require evidence that a role-suffixed token names a lane.
+
+    A backticked identifier, a role-suffixed path component, or a same-sentence
+    lane/queue/worktree cue is an identity claim. A bare compound, filename,
+    or relative path without such evidence remains ordinary prose.
+    """
+    _, end = match.span("role")
+    token_start = match.start("prefix")
+    token_end = end
+    after = line[token_end:]
+    if after.startswith("/"):
+        return True
+    if (
+        token_start > 0
+        and line[token_start - 1] == "`"
+        and after.startswith("`")
+    ):
+        return True
+
+    previous = line[:token_start]
+    if previous.endswith("../") or previous.endswith("./"):
+        return False
+    left_boundary = max(
+        (line.rfind(mark, 0, token_start) for mark in ".!?;"),
+        default=-1,
+    )
+    right_marks = [line.find(mark, token_end) for mark in ".!?;"]
+    right_marks = [mark for mark in right_marks if mark >= 0]
+    right_boundary = min(right_marks, default=len(line))
+    sentence = line[left_boundary + 1:right_boundary]
+    if _LANE_IDENTITY_CUE.search(sentence):
+        return True
+    return False
 
 
 #: A branch PRESCRIPTION. Deliberately narrow: a branch name is only claimed
@@ -206,6 +329,7 @@ def scan(
     *,
     source: str = "<text>",
     coordinator: str = "brain",
+    branch_namespaces: Iterable[str] = (),
     queue_pattern: str | None = None,
     max_lanes: int | None = None,
 ) -> ScanResult:
@@ -214,6 +338,8 @@ def scan(
     ``roles``       the project's declared executor roles. The single source of
                     truth for lane identity; everything below derives from it.
     ``coordinator`` the coordinating role, which may also own branches.
+    ``branch_namespaces`` bounded structural namespace forms declared by the
+                    adopting project's AGENTS.md (`m<N>` and/or `meta`).
     ``queue_pattern`` optional regex with one capture group yielding the stem of
                     a canonical (non-archived) queue path. Enabled only for
                     projects that keep such files.
@@ -225,6 +351,17 @@ def scan(
     if not roles:
         raise ValueError("at least one role must be declared; an empty role set "
                          "would make every rule vacuous")
+
+    declared_namespaces = tuple(branch_namespaces)
+    invalid_namespaces = [
+        name for name in declared_namespaces
+        if name not in _STRUCTURAL_BRANCH_NAMESPACES
+    ]
+    if invalid_namespaces:
+        raise ValueError(
+            "unsupported branch namespace form(s): "
+            + ", ".join(invalid_namespaces)
+        )
 
     compound_re = _compound_lane_re(roles)
     prefixed_re = _prefixed_lane_re(roles)
@@ -266,7 +403,9 @@ def scan(
                 )
 
         for match in prefixed_re.finditer(line):
-            prefix, role = match.groups()
+            prefix, role = match.group("prefix"), match.group("role")
+            if not _prefixed_lane_is_identity(line, match):
+                continue
             emit(
                 n, "prefixed-lane",
                 f"'{prefix}-{role}' prefixes a role to make a lane token; "
@@ -298,7 +437,9 @@ def scan(
                     continue  # a file path, not a branch
                 candidates.append((prefix, match.group(0)))
         for prefix, matched in candidates:
-            if prefix in branch_prefixes:
+            if _branch_namespace_allowed(
+                prefix, branch_prefixes, declared_namespaces
+            ):
                 continue
             emit(
                 n, "branch-namespace",
@@ -353,6 +494,7 @@ def scan(
             body, roles,
             source=f"{source}#counterexample@{start}",
             coordinator=coordinator,
+            branch_namespaces=declared_namespaces,
             queue_pattern=queue_pattern,
             max_lanes=max_lanes,
         )
@@ -392,6 +534,7 @@ def scan_counterexample(
     *,
     source: str = "<text>",
     coordinator: str = "brain",
+    branch_namespaces: Iterable[str] = (),
     queue_pattern: str | None = None,
     max_lanes: int | None = None,
 ) -> list[Finding]:
@@ -428,6 +571,7 @@ def scan_counterexample(
             result = scan(
                 body, declared_roles, source=source,
                 coordinator=coordinator, queue_pattern=queue_pattern,
+                branch_namespaces=branch_namespaces,
                 max_lanes=max_lanes,
             )
         except ValueError:
@@ -552,6 +696,11 @@ def main(argv: Sequence[str] | None = None) -> int:
              "(default: brain)",
     )
     ap.add_argument(
+        "--branch-namespaces", default="",
+        help="comma-separated structural forms declared by the project: "
+             "m<N> and/or meta",
+    )
+    ap.add_argument(
         "--queue-pattern", default=None,
         help="optional regex with one capture group yielding a queue stem; "
              "only for projects that keep such files",
@@ -583,6 +732,22 @@ def main(argv: Sequence[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
+    branch_namespaces = tuple(
+        item.strip() for item in args.branch_namespaces.split(",")
+        if item.strip()
+    )
+    invalid = [
+        item for item in branch_namespaces
+        if item not in _STRUCTURAL_BRANCH_NAMESPACES
+    ]
+    if invalid:
+        print(
+            "neutrality: unsupported branch namespace form(s): "
+            + ", ".join(invalid),
+            file=sys.stderr,
+        )
+        return 2
+
     findings: list[Finding] = []
     inert: list[str] = []
     for path in files:
@@ -591,13 +756,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, UnicodeDecodeError) as exc:
             print(f"neutrality: cannot read {path}: {exc}", file=sys.stderr)
             return 2
-        result = scan(
-            text, roles,
-            source=str(path),
-            coordinator=args.coordinator,
-            queue_pattern=args.queue_pattern,
-            max_lanes=args.max_lanes,
-        )
+        try:
+            result = scan(
+                text, roles,
+                source=str(path),
+                coordinator=args.coordinator,
+                branch_namespaces=branch_namespaces,
+                queue_pattern=args.queue_pattern,
+                max_lanes=args.max_lanes,
+            )
+        except ValueError as exc:
+            print(f"neutrality: {exc}", file=sys.stderr)
+            return 2
         findings += result.findings
         findings += scan_adapter_blocks(text, source=str(path))
         # An exemption that protects nothing is a silent widening of the guard.

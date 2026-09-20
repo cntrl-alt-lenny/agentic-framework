@@ -98,6 +98,41 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(neutrality.scan(text, ROLES).findings, [])
 
+    def test_declared_structural_branch_namespaces_are_allowed(self):
+        text = (
+            "Create `m3/feature-work` for the next milestone.\n"
+            "Keep `meta/coordination` for project structure.\n"
+        )
+        self.assertEqual(
+            neutrality.scan(
+                text, ("builder", "verifier"),
+                branch_namespaces=("m<N>", "meta"),
+            ).findings,
+            [],
+        )
+
+    def test_undeclared_or_unbounded_branch_namespaces_still_fail(self):
+        text = "Create `vendor/release` as a branch namespace.\n"
+        self.assertTrue(
+            any(
+                finding.rule == "branch-namespace"
+                for finding in neutrality.scan(
+                    text, ("builder", "verifier"),
+                    branch_namespaces=("m<N>", "meta"),
+                ).findings
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            neutrality.branch_namespace_declarations(
+                '<!-- guard:branch-namespaces prefixes="m<N>,vendor" -->'
+            )
+        self.assertEqual(
+            neutrality.branch_namespace_declarations(
+                '```text\n<!-- guard:branch-namespaces prefixes="m<N>,meta" -->\n```'
+            ),
+            (),
+        )
+
     def test_capitalised_roles_in_adjacent_sentences_are_not_one_lane(self):
         for text in (
             "Hand the report to the Verifier. That Builder then waits.",
@@ -135,6 +170,36 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
         for text in cases:
             with self.subTest(text=text):
                 self.assertEqual(neutrality.scan(text, ROLES).findings, [])
+
+    def test_prefixed_lane_requires_identity_context_not_token_shape(self):
+        clean = (
+            "The deck-builder UI is separate.",
+            "A world-builder tool is documented.",
+            "See deck-builder-ui.md for details.",
+            "See ../edopro-next-builder for details.",
+            "The record-builder module is ordinary text.",
+            "A self-builder pattern appears in the manual.",
+        )
+        caught = (
+            "The vendor-builder lane is isolated.",
+            "Use the `vendor-builder` queue.",
+            "Create vendor-builder/queue for this seat.",
+            "The vendor-builder worktree is separate.",
+            "Send the task to vendor-builder.",
+            "Route the result through vendor-builder role.",
+        )
+        for text in clean:
+            with self.subTest(text=text):
+                self.assertEqual(neutrality.scan(text, ROLES).findings, [])
+        for text in caught:
+            with self.subTest(text=text):
+                self.assertTrue(
+                    any(
+                        finding.rule == "prefixed-lane"
+                        for finding in neutrality.scan(text, ROLES).findings
+                    ),
+                    text,
+                )
 
     def test_no_provider_shaped_lane_identity(self):
         problems: list[str] = []

@@ -64,6 +64,24 @@ declaration is a visible, reviewable claim, not a magic exemption: a made-up
 role in a declaration can make harmless prose appear to be a real violation,
 so review declarations as carefully as the text they exempt.
 
+## Branch namespace declarations
+
+The scanner accepts role names and the coordinator as branch namespaces. A
+project whose established branch structure also has milestone or coordination
+namespaces may declare those bounded structural forms in its root `AGENTS.md`:
+
+```text
+<!-- guard:branch-namespaces prefixes="m<N>,meta" -->
+```
+
+`m<N>` means a literal `m` followed by one or more decimal digits; `meta` means
+the literal `meta/` namespace. The
+installed neutrality test reads this one declaration and passes it to the
+scanner for every normative document. The declaration is intentionally not an
+arbitrary allowlist: provider-shaped or otherwise new namespaces remain
+findings and require a framework change with a test. A malformed, duplicate,
+or unsupported declaration fails the installed guard.
+
 ## Procedure
 
 ### 1. Read the framework first
@@ -180,8 +198,10 @@ files.
 Migrate, do not bulldoze.
 
 - **Keep the project's existing branch convention** if it already derives from
-  roles or project structure. A milestone prefix is fine. Only a
-  provider-derived namespace is a defect.
+  roles or project structure. Declare the bounded structural forms `m<N>`
+  and/or `meta` in `AGENTS.md` using the marker above; a milestone prefix is
+  fine. Only a provider-derived namespace is a defect, and declaring an
+  arbitrary provider-shaped prefix is not permitted.
 - **Do not rename active branches.** Preserve in-flight work; apply the
   convention to new branches.
 - **Retire, do not delete.** Move superseded queues and roles to a clearly

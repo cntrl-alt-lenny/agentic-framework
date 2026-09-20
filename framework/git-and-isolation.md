@@ -101,8 +101,14 @@ above — so it is acceptable only for the coordinating seat.
 
 The prefix left of the slash identifies **which role owns pushes to that
 branch** — never which provider ran it. A project may use a different scheme
-(milestone prefixes, for example) as long as the namespace derives from roles or
-project structure and never from a provider.
+(milestone or coordination prefixes, for example) as long as the namespace
+derives from roles or project structure and never from a provider. Declare the
+bounded structural forms in the adopting project's root `AGENTS.md` with
+`<!-- guard:branch-namespaces prefixes="m<N>,meta" -->`; `m<N>` accepts
+milestone namespaces, and `meta` accepts `meta/`. The installed
+guard accepts only those documented forms, not an arbitrary project-supplied
+allowlist, so a new structural form must be added to the framework with a
+test.
 
 <!-- guard:counterexample -->
 <!-- guard:violation branch-namespace roles=builder text="gemini/<task>" -->

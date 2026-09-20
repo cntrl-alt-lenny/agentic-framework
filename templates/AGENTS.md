@@ -47,6 +47,20 @@ and may never restate policy — see
 Adding or retiring a role is a strategic decision and goes to the owner. A
 provider never creates a lane.
 
+## Project branch namespaces
+
+If this project has milestone or coordination branch namespaces in addition to
+role branches, declare only the bounded structural forms it uses in this file:
+
+```text
+<!-- guard:branch-namespaces prefixes="m<N>,meta" -->
+```
+
+`m<N>` covers milestone namespaces and `meta` covers project-coordination
+branches. The installed guard accepts these forms only; it is not an arbitrary
+allowlist for provider-shaped names. A malformed or unsupported declaration is
+a guard failure.
+
 ## Non-negotiable project invariants
 
 <!-- Replace this block. These outrank any process below, and they are what an

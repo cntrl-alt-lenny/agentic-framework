@@ -197,6 +197,40 @@ class TestDefaultAdoption(AdoptionCase):
 
 
 class TestTopologyOptions(AdoptionCase):
+    def test_declared_milestone_namespace_is_installed_and_bounded(self):
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "builder", "--verifier"),
+            0,
+        )
+        agents = self.target / "AGENTS.md"
+        original = agents.read_text(encoding="utf-8")
+        declared = (
+            original
+            + '\n<!-- guard:branch-namespaces prefixes="m<N>,meta" -->\n'
+            + "Create `m3/feature-work` and `meta/coordination` as project "
+              "branch namespaces.\n"
+        )
+        agents.write_text(declared, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+            agents.write_text(
+                declared.replace('prefixes="m<N>,meta"', 'prefixes="m<N>,vendor"'),
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("unsupported branch namespace", proc.stdout + proc.stderr)
+        finally:
+            agents.write_text(original, encoding="utf-8")
+
     def test_builder_verifier_adoption_runs_the_installed_guard(self):
         self.assertEqual(
             run_adopt(self.target, "--workers", "builder", "--verifier"),
