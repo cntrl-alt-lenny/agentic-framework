@@ -111,6 +111,30 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             [],
         )
 
+    def test_declared_custom_namespace_is_a_reviewed_boundary(self):
+        """Evidence and declaration are checked; provider identity is not."""
+        result = neutrality.scan(
+            "Create branch `codex/next` for this project.\n",
+            ("builder", "verifier"),
+            branch_namespaces=("codex",),
+        )
+        self.assertEqual(result.findings, [])
+
+    def test_namespace_boundary_is_documented_without_a_vendor_claim(self):
+        for path in (
+            ROOT / "framework" / "CONSTITUTION.md",
+            ROOT / "framework" / "adoption.md",
+            ROOT / "templates" / "AGENTS.md",
+        ):
+            text = path.read_text(encoding="utf-8").lower()
+            with self.subTest(path=path):
+                self.assertIn("does not identify providers", text)
+                self.assertIn("reviewed human", text)
+        adoption = (ROOT / "framework" / "adoption.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("vendor-ai` is rejected", adoption)
+
     def test_undeclared_or_unbounded_branch_namespaces_still_fail(self):
         text = "Create `vendor/release` as a branch namespace.\n"
         self.assertTrue(
@@ -144,13 +168,19 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             (),
         )
 
-    def test_branch_namespace_declarations_ignore_all_markdown_fences(self):
+    def test_branch_namespace_declarations_ignore_markdown_and_html_examples(self):
         for example in (
             '```markdown\n<!-- guard:branch-namespaces prefixes="release" -->\n```',
             '~~~markdown\n<!-- guard:branch-namespaces prefixes="release" -->\n~~~',
             '````markdown\n'
             '```\n<!-- guard:branch-namespaces prefixes="release" -->\n```\n'
             '````',
+            '    <!-- guard:branch-namespaces prefixes="release" -->',
+            '<pre>\n<!-- guard:branch-namespaces prefixes="release" -->\n</pre>',
+            '<code>\n<!-- guard:branch-namespaces prefixes="release" -->\n</code>',
+            '<textarea>\n<!-- guard:branch-namespaces prefixes="release" -->\n</textarea>',
+            '<script>\n<!-- guard:branch-namespaces prefixes="release" -->\n</script>',
+            '<style>\n<!-- guard:branch-namespaces prefixes="release" -->\n</style>',
         ):
             with self.subTest(example=example):
                 self.assertEqual(
@@ -378,6 +408,66 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 self.assertTrue(
                     any(f.rule == rule for f in findings),
                     f"{offending!r} was not reported as {rule}: {findings}",
+                )
+
+    def test_counterexample_exempts_only_declared_rule_and_text(self):
+        cases = (
+            (
+                "declared branch, undeclared branch and compound",
+                '<!-- guard:counterexample -->\n'
+                '<!-- guard:violation branch-namespace roles=builder '
+                'text="Cut `acme/some-scope` for this branch." -->\n'
+                "Cut `acme/some-scope` for this branch.\n"
+                "git checkout -b nebula/builder-task origin/master\n"
+                "Hand this to the NebulaAI Builder.\n"
+                "<!-- /guard:counterexample -->\n",
+                {"branch-namespace", "compound-lane"},
+            ),
+            (
+                "declared compound, undeclared prefixed lane",
+                '<!-- guard:counterexample -->\n'
+                '<!-- guard:violation compound-lane roles=builder '
+                'text="Hand it to the Acme Builder." -->\n'
+                "Hand it to the Acme Builder. Use the `nebula-builder` queue.\n"
+                "<!-- /guard:counterexample -->\n",
+                {"prefixed-lane"},
+            ),
+            (
+                "declared prefixed lane, undeclared branch",
+                '<!-- guard:counterexample -->\n'
+                '<!-- guard:violation prefixed-lane roles=builder '
+                'text="Use the `codex-builder` queue." -->\n'
+                "Use the `codex-builder` queue.\n"
+                "Create branch `nebula/release` for this round.\n"
+                "<!-- /guard:counterexample -->\n",
+                {"branch-namespace"},
+            ),
+        )
+        for name, text, rules in cases:
+            with self.subTest(name=name):
+                result = neutrality.scan(text, ("builder", "verifier"))
+                self.assertTrue(result.findings)
+                self.assertEqual(
+                    {finding.rule for finding in result.findings}, rules
+                )
+
+    def test_counterexample_can_exempt_the_declared_violation_exactly(self):
+        for body in (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Hand it to the Acme Builder." -->\n'
+            "Hand it to the Acme Builder.\n"
+            "<!-- /guard:counterexample -->\n",
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation branch-namespace roles=builder '
+            'text="Cut `acme/some-scope` for this branch." -->\n'
+            "Cut `acme/some-scope` for this branch.\n"
+            "<!-- /guard:counterexample -->\n",
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(
+                    neutrality.scan(body, ("builder", "verifier")).findings,
+                    [],
                 )
 
     def test_counterexample_declaration_must_be_present_and_true(self):

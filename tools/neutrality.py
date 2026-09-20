@@ -20,9 +20,10 @@ so it cannot quietly become one.
 BRANCH NAMESPACE DECLARATIONS are deliberately structural, not an arbitrary
 allowlist. A project's AGENTS.md may declare the bounded structural forms
 `m<N>` and `meta`, or a lower-case project namespace backed by a tracked
-`docs/branch-namespaces/<name>.md` evidence file. The scanner accepts custom
-names only when that evidence exists; a caller cannot simply whitelist a
-provider-shaped prefix.
+`docs/branch-namespaces/<name>.md` evidence file. The scanner checks that
+syntax and evidence, but it cannot identify providers or prove that a custom
+label is provider-neutral. The declaration is therefore a reviewed human
+decision, not a machine-verified guarantee.
 
 HISTORICAL TEXT IS OUT OF SCOPE. Case studies, round logs, archived briefs and
 failure catalogues record which tool actually ran. That is a record of events,
@@ -40,9 +41,10 @@ demonstrates:
 The declaration names the exact offending text and the roles with which it is
 invalid. The probe runs that text through the real scanner with those declared
 roles, not the adopting project's roles. A missing, absent or unflagged
-declaration is inert. Findings inside such a block are suppressed by the outer
-scan but still reported separately, so `ScanResult.inert_counterexamples()` can
-make a useless exemption fail.
+declaration is inert. The outer scan suppresses only a validated finding whose
+rule and matched text are covered by the declaration; other findings in the
+same block remain visible. The block is still reported separately, so
+`ScanResult.inert_counterexamples()` can make a useless exemption fail.
 """
 
 from __future__ import annotations
@@ -52,7 +54,13 @@ import sys
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
-from textblocks import counterexample_blocks, logical_lines, negated
+from textblocks import (
+    COUNTEREXAMPLE_CLOSE,
+    COUNTEREXAMPLE_OPEN,
+    counterexample_blocks,
+    logical_lines,
+    negated,
+)
 
 __all__ = [
     "Finding",
@@ -214,35 +222,68 @@ _STRUCTURAL_BRANCH_NAMESPACES = frozenset(("m<N>", "meta"))
 _MILESTONE_NAMESPACE = re.compile(r"m[0-9]+\Z")
 _PROJECT_NAMESPACE = re.compile(r"[a-z][a-z0-9]*\Z")
 _FENCE = re.compile(r"^( {0,3})(?P<run>(?P<char>`|~){2,})(?P<info>.*)$")
+_HTML_EXAMPLE_OPEN = re.compile(
+    r"<\s*(?P<tag>pre|code|textarea|script|style)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HTML_EXAMPLE_CLOSE = re.compile(
+    r"</\s*(?P<tag>pre|code|textarea|script|style)\s*>",
+    re.IGNORECASE,
+)
 
 
 def _live_lines(text: str) -> list[str]:
-    """Return lines outside CommonMark-style fenced code blocks."""
+    """Return lines outside common Markdown and HTML example constructs.
+
+    Declarations in fenced or four-space-indented Markdown code, or in raw
+    HTML ``pre``, ``code``, ``textarea``, ``script`` or ``style`` blocks, are
+    examples rather than live project policy. This is deliberately a
+    line-oriented guard: an inline comment embedded in arbitrary HTML or a
+    non-standard renderer construct can still look live and needs review.
+    """
     live: list[str] = []
     fence_char: str | None = None
     fence_length = 0
+    html_tag: str | None = None
     for line in text.splitlines():
-        match = _FENCE.match(line)
-        if fence_char is None:
-            if match:
-                run = match.group("run")
-                fence_char = match.group("char")
-                fence_length = len(run)
-            else:
-                live.append(line)
+        if fence_char is not None:
+            stripped = line.lstrip()
+            if (
+                stripped.startswith(fence_char * fence_length)
+                and stripped[len(fence_char) * fence_length:].strip() == ""
+            ):
+                fence_char = None
+                fence_length = 0
             continue
-        stripped = line.lstrip()
-        if (
-            stripped.startswith(fence_char * fence_length)
-            and stripped[len(fence_char) * fence_length:].strip() == ""
-        ):
-            fence_char = None
-            fence_length = 0
+        if html_tag is not None:
+            close = _HTML_EXAMPLE_CLOSE.search(line)
+            if close and close.group("tag").lower() == html_tag:
+                html_tag = None
+            continue
+        if line.startswith("\t") or line.startswith("    "):
+            continue
+        match = _FENCE.match(line)
+        if match:
+            run = match.group("run")
+            fence_char = match.group("char")
+            fence_length = len(run)
+            continue
+        html = _HTML_EXAMPLE_OPEN.search(line)
+        if html:
+            tag = html.group("tag").lower()
+            if not _HTML_EXAMPLE_CLOSE.search(line, html.end()):
+                html_tag = tag
+            continue
+        live.append(line)
     return live
 
 
 def _namespace_evidence(root: "Path", prefix: str) -> bool:
-    """Require a tracked project-structure witness for custom namespaces."""
+    """Require a tracked project-structure witness for custom namespaces.
+
+    This proves project-owned structure exists; it does not prove anything
+    about whether the chosen label resembles a provider.
+    """
     import subprocess
 
     evidence = root / "docs" / "branch-namespaces" / f"{prefix}.md"
@@ -489,19 +530,32 @@ def scan(
     )
 
     result = ScanResult()
-    blocks, suppressed = counterexample_blocks(text)
-    lines = text.splitlines()
+    blocks, _ = counterexample_blocks(text)
+    scan_text = _counterexample_scan_text(text)
+    exemptions = _counterexample_exemptions(
+        text, roles, coordinator=coordinator,
+        branch_namespaces=declared_namespaces,
+        queue_pattern=queue_pattern, max_lanes=max_lanes,
+    )
+    lines = scan_text.splitlines()
     result.lines_scanned = len(lines)
 
     def emit(n: int, rule: str, message: str, *, matched: str = "") -> None:
+        for start, end, declarations in exemptions:
+            if not start <= n <= end:
+                continue
+            if any(
+                rule == declared_rule
+                and (matched in declared_text or declared_text in matched)
+                for declared_rule, declared_text in declarations
+            ):
+                return
         result.findings.append(Finding(source, n, rule, message, matched))
 
     # Token-adjacency rules run over LOGICAL lines, so a compound split across a
     # soft wrap -- "the SomeProvider" ending one line and "Worker" starting the
     # next -- is still caught.
-    for n, line in logical_lines(text):
-        if n in suppressed:
-            continue
+    for n, line in logical_lines(scan_text):
         for match in compound_re.finditer(line):
             qualifier, role = match.groups()
             words = [w for w in qualifier.split() if w]
@@ -532,9 +586,6 @@ def scan(
     # word "branch" anywhere in it enable backtick-branch detection for the
     # whole thing, which is how this kind of detector starts crying wolf.
     for n, line in enumerate(lines, 1):
-        if n in suppressed:
-            continue
-
         candidates: list[tuple[str, str]] = []
         for match in BRANCH_COMMAND.finditer(line):
             candidates.extend(
@@ -641,6 +692,61 @@ def _counterexample_declarations(text: str) -> list[tuple[str, tuple[str, ...], 
                 (match.group("rule"), declared_roles, match.group("text"))
             )
     return declarations
+
+
+def _counterexample_scan_text(text: str) -> str:
+    """Remove only counterexample metadata while keeping every body line.
+
+    Markers and declarations describe an exemption; they are not normative
+    prose. The body must remain in the scan so an undeclared finding cannot
+    hide behind a neighbouring declaration. Blank replacements preserve the
+    physical line numbers used in findings.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped in {COUNTEREXAMPLE_OPEN, COUNTEREXAMPLE_CLOSE}:
+            lines[index] = ""
+        elif _COUNTEREXAMPLE_DECLARATION.match(line):
+            lines[index] = ""
+    return "\n".join(lines)
+
+
+def _counterexample_exemptions(
+    text: str,
+    roles: Sequence[str],
+    *,
+    coordinator: str,
+    branch_namespaces: Sequence[str],
+    queue_pattern: str | None,
+    max_lanes: int | None,
+) -> list[tuple[int, int, tuple[tuple[str, str], ...]]]:
+    """Return validated ``(start, end, rule/text)`` exemptions.
+
+    A declaration earns an exemption only after the real probe accepts the
+    whole block. Matching is intentionally exact at the structural level:
+    both the declared rule and the scanner's matched text must agree. This
+    makes a block that demonstrates one defect unable to shelter another.
+    """
+    exemptions: list[tuple[int, int, tuple[tuple[str, str], ...]]] = []
+    for start, body in counterexample_blocks(text)[0]:
+        declarations = _counterexample_declarations(body)
+        if not declarations:
+            continue
+        if not scan_counterexample(
+            body, roles, source=f"<counterexample@{start}>",
+            coordinator=coordinator, branch_namespaces=branch_namespaces,
+            queue_pattern=queue_pattern, max_lanes=max_lanes,
+        ):
+            continue
+        body_lines = body.splitlines()
+        if not body_lines:
+            continue
+        exemptions.append(
+            (start + 1, start + len(body_lines),
+             tuple((rule, text) for rule, _, text in declarations))
+        )
+    return exemptions
 
 
 def scan_counterexample(

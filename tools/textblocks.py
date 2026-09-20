@@ -35,10 +35,10 @@ __all__ = ["logical_lines", "counterexample_blocks", "negated", "NEGATORS",
 #:     <!-- /guard:counterexample -->
 #:
 #: The neutrality probe validates the declaration with the real scanner and the
-#: roles named there; it never guesses from surrounding prose. Findings inside
-#: are suppressed, but callers still get the blocks back so they can assert
-#: every block actually contains something the guard rejects. An exemption that
-#: protects nothing is a silent widening.
+#: roles named there; it never guesses from surrounding prose. Only findings
+#: covered by a validated declaration are exempted, but callers still get the
+#: blocks back so they can assert every block actually contains something the
+#: guard rejects. An exemption that protects nothing is a silent widening.
 COUNTEREXAMPLE_OPEN = "<!-- guard:counterexample -->"
 COUNTEREXAMPLE_CLOSE = "<!-- /guard:counterexample -->"
 

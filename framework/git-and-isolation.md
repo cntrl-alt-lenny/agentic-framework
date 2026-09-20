@@ -111,6 +111,8 @@ command-line guards discover the same declaration, and reject unsupported
 labels or labels without that structural evidence.
 
 <!-- guard:counterexample -->
+<!-- guard:violation branch-namespace roles=builder text="claude/<task>" -->
+<!-- guard:violation branch-namespace roles=builder text="codex/<task>" -->
 <!-- guard:violation branch-namespace roles=builder text="gemini/<task>" -->
 Never: `claude/<task>`, `codex/<task>`, `gemini/<task>`, or any branch namespace
 named after the tool that happened to run the round.
