@@ -49,17 +49,20 @@ provider never creates a lane.
 
 ## Project branch namespaces
 
-If this project has milestone or coordination branch namespaces in addition to
-role branches, declare only the bounded structural forms it uses in this file:
+If this project has milestone, coordination, release, feature, or other
+project-owned branch namespaces in addition to role branches, declare the
+bounded forms it uses in this file:
 
 ```text
 <!-- guard:branch-namespaces prefixes="m<N>,meta" -->
 ```
 
 `m<N>` covers milestone namespaces and `meta` covers project-coordination
-branches. The installed guard accepts these forms only; it is not an arbitrary
-allowlist for provider-shaped names. A malformed or unsupported declaration is
-a guard failure.
+branches. A custom lower-case alphanumeric label such as `release` or `feature`
+also needs a tracked `docs/branch-namespaces/<name>.md` witness. The installed
+and command-line guards discover this same declaration; it is not an arbitrary
+allowlist for provider-shaped names. A malformed, unsupported, or unevidenced
+declaration is a guard failure.
 
 ## Non-negotiable project invariants
 

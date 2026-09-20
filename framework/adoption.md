@@ -67,20 +67,23 @@ so review declarations as carefully as the text they exempt.
 ## Branch namespace declarations
 
 The scanner accepts role names and the coordinator as branch namespaces. A
-project whose established branch structure also has milestone or coordination
-namespaces may declare those bounded structural forms in its root `AGENTS.md`:
+project whose established branch structure also has milestone, coordination, or
+other project-owned namespaces may declare them in its root `AGENTS.md`:
 
 ```text
 <!-- guard:branch-namespaces prefixes="m<N>,meta" -->
 ```
 
 `m<N>` means a literal `m` followed by one or more decimal digits; `meta` means
-the literal `meta/` namespace. The
-installed neutrality test reads this one declaration and passes it to the
-scanner for every normative document. The declaration is intentionally not an
-arbitrary allowlist: provider-shaped or otherwise new namespaces remain
-findings and require a framework change with a test. A malformed, duplicate,
-or unsupported declaration fails the installed guard.
+the literal `meta/` namespace. A custom namespace such as `release` or
+`feature` must be a single lower-case alphanumeric label and must have a
+tracked project-structure witness at
+`docs/branch-namespaces/<name>.md`. That witness is what keeps the declaration
+from being a caller-controlled allowlist: `vendor-ai` is rejected as a
+provider-shaped label, and `vendor` without project evidence is rejected too.
+The installed neutrality test and the command-line scanner discover the same
+declaration and apply it to every normative document. A malformed, duplicate,
+unsupported, or unsupported-by-evidence declaration fails the guard.
 
 ## Procedure
 

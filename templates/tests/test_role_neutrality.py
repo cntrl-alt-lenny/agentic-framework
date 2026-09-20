@@ -35,12 +35,9 @@ COORDINATOR = "{{COORDINATOR}}"
 # A project may declare only the framework's bounded structural branch forms in
 # AGENTS.md. The installed guard carries that declaration to every normative
 # document; it is not an arbitrary CLI allowlist.
-_AGENTS = ROOT / "AGENTS.md"
 _BRANCH_NAMESPACE_ERROR = None
 try:
-    BRANCH_NAMESPACES = neutrality.branch_namespace_declarations(
-        _AGENTS.read_text(encoding="utf-8") if _AGENTS.is_file() else ""
-    )
+    BRANCH_NAMESPACES = neutrality.branch_namespaces_for_paths([str(ROOT)])
 except ValueError as exc:
     # Keep the guard as a unittest failure with a summary instead of aborting
     # test discovery before any result can be reported.

@@ -18,10 +18,11 @@ function words — not a vendor list. A test asserts it contains no proper nouns
 so it cannot quietly become one.
 
 BRANCH NAMESPACE DECLARATIONS are deliberately structural, not an arbitrary
-allowlist. A project's AGENTS.md may declare `m<N>` for milestone namespaces
-and/or `meta` for project-coordination namespaces. The scanner expands those
-shapes mechanically; adding another shape is a framework change with a test,
-not a project-side escape hatch for a provider name.
+allowlist. A project's AGENTS.md may declare the bounded structural forms
+`m<N>` and `meta`, or a lower-case project namespace backed by a tracked
+`docs/branch-namespaces/<name>.md` evidence file. The scanner accepts custom
+names only when that evidence exists; a caller cannot simply whitelist a
+provider-shaped prefix.
 
 HISTORICAL TEXT IS OUT OF SCOPE. Case studies, round logs, archived briefs and
 failure catalogues record which tool actually ran. That is a record of events,
@@ -59,6 +60,7 @@ __all__ = [
     "ScanResult",
     "GRAMMAR_QUALIFIERS",
     "branch_namespace_declarations",
+    "branch_namespaces_for_paths",
     "scan",
     "scan_counterexample",
     "scan_adapter_blocks",
@@ -177,16 +179,31 @@ def _prefixed_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
     cue, an explicit identifier, or a role-suffixed path before emitting it.
     """
     return re.compile(
-        r"(?<![\w-])(?P<prefix>[a-z0-9][\w.+]*)[-_]"
+        r"(?<![\w-])(?P<prefix>[a-z0-9][\w.+-]*?)[-_]"
         r"(?P<role>" + _role_alt(roles) + r")\b"
     )
 
 
-_LANE_IDENTITY_CUE = re.compile(
+_LANE_IDENTITY_NOUN = re.compile(
+    r"^\s+(?:lane|lanes|queue|queues|seat|seats|role|roles|session|sessions|"
+    r"worktree|worktrees|checkout|checkouts|branch|branches|namespace|"
+    r"namespaces)\b",
+    re.IGNORECASE,
+)
+_LANE_ROUTING_VERB = re.compile(
+    r"\b(?:send|hand|route|assign|dispatch|use|run|launch|start|open|cut|create)\b",
+    re.IGNORECASE,
+)
+_LANE_IDENTITY_BEFORE = re.compile(
     r"\b(?:lane|lanes|queue|queues|seat|seats|role|roles|session|sessions|"
     r"worktree|worktrees|checkout|checkouts|branch|branches|namespace|"
-    r"namespaces|send|hand|route|assign|dispatch|use|run|launch|start|"
-    r"open|cut|create)\b",
+    r"namespaces)\s+(?:is|are|was|were|named|called|uses|routes)\s*$",
+    re.IGNORECASE,
+)
+_ORDINARY_TOKEN_SUFFIX = re.compile(
+    r"^\s+(?:module|modules|path|paths|file|files|ui|tool|tools|"
+    r"pattern|patterns|brief|briefs|prompt|prompts|note|notes|guide|"
+    r"guidance|document|documents|directory|directories)\b",
     re.IGNORECASE,
 )
 _BRANCH_NAMESPACE_DECLARATION = re.compile(
@@ -195,24 +212,66 @@ _BRANCH_NAMESPACE_DECLARATION = re.compile(
 )
 _STRUCTURAL_BRANCH_NAMESPACES = frozenset(("m<N>", "meta"))
 _MILESTONE_NAMESPACE = re.compile(r"m[0-9]+\Z")
+_PROJECT_NAMESPACE = re.compile(r"[a-z][a-z0-9]*\Z")
+_FENCE = re.compile(r"^( {0,3})(?P<run>(?P<char>`|~){2,})(?P<info>.*)$")
 
 
-def branch_namespace_declarations(text: str) -> tuple[str, ...]:
-    """Read the bounded branch-namespace declaration from a project document.
-
-    The marker is intended for the adopting project's AGENTS.md. Only the two
-    structural forms documented by the framework are accepted; arbitrary names
-    are rejected rather than turning the scanner into a caller-controlled
-    allowlist.
-    """
-    marker_lines = []
-    in_fence = False
+def _live_lines(text: str) -> list[str]:
+    """Return lines outside CommonMark-style fenced code blocks."""
+    live: list[str] = []
+    fence_char: str | None = None
+    fence_length = 0
     for line in text.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
+        match = _FENCE.match(line)
+        if fence_char is None:
+            if match:
+                run = match.group("run")
+                fence_char = match.group("char")
+                fence_length = len(run)
+            else:
+                live.append(line)
             continue
-        if not in_fence and "guard:branch-namespaces" in line:
-            marker_lines.append(line)
+        stripped = line.lstrip()
+        if (
+            stripped.startswith(fence_char * fence_length)
+            and stripped[len(fence_char) * fence_length:].strip() == ""
+        ):
+            fence_char = None
+            fence_length = 0
+    return live
+
+
+def _namespace_evidence(root: "Path", prefix: str) -> bool:
+    """Require a tracked project-structure witness for custom namespaces."""
+    import subprocess
+
+    evidence = root / "docs" / "branch-namespaces" / f"{prefix}.md"
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(root), "ls-files", "--error-unmatch",
+                str(evidence.relative_to(root)),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def branch_namespace_declarations(
+    text: str, *, root: "Path | None" = None,
+) -> tuple[str, ...]:
+    """Read the bounded declaration from a project document.
+
+    ``m<N>`` and ``meta`` are built-in structural forms. A custom lower-case
+    namespace is accepted only when ``root`` proves it with a tracked
+    ``docs/branch-namespaces/<name>.md`` document.
+    """
+    marker_lines = [
+        line for line in _live_lines(text)
+        if "guard:branch-namespaces" in line
+    ]
     if not marker_lines:
         return ()
     if len(marker_lines) != 1:
@@ -229,17 +288,58 @@ def branch_namespace_declarations(text: str) -> tuple[str, ...]:
     )
     if not prefixes or len(set(prefixes)) != len(prefixes):
         raise ValueError("branch namespace declaration must name unique prefixes")
-    invalid = [
-        prefix for prefix in prefixes
-        if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
-    ]
+    invalid = [prefix for prefix in prefixes if not (
+        prefix in _STRUCTURAL_BRANCH_NAMESPACES
+        or _PROJECT_NAMESPACE.fullmatch(prefix)
+    )]
     if invalid:
         raise ValueError(
             "unsupported branch namespace declaration(s): "
             + ", ".join(invalid)
-            + "; only m<N> and meta are structural forms"
+            + "; custom names must be lower-case project namespaces"
         )
+    if root is not None:
+        missing = [
+            prefix for prefix in prefixes
+            if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
+            and not _namespace_evidence(root, prefix)
+        ]
+        if missing:
+            raise ValueError(
+                "custom branch namespace(s) lack tracked project-structure "
+                "evidence under docs/branch-namespaces/: "
+                + ", ".join(missing)
+            )
     return prefixes
+
+
+def _project_root_for_paths(paths: Sequence[str]) -> "Path | None":
+    from pathlib import Path
+
+    roots = []
+    for raw in paths:
+        path = Path(raw).resolve()
+        start = path.parent if path.is_file() else path
+        for parent in (start, *start.parents):
+            if (parent / "AGENTS.md").is_file():
+                roots.append(parent)
+                break
+    if not roots:
+        return None
+    unique = {root.resolve() for root in roots}
+    if len(unique) != 1:
+        raise ValueError("scanned paths belong to different AGENTS.md projects")
+    return roots[0]
+
+
+def branch_namespaces_for_paths(paths: Sequence[str]) -> tuple[str, ...]:
+    """Discover the same AGENTS.md declaration used by the installed guard."""
+    root = _project_root_for_paths(paths)
+    if root is None:
+        return ()
+    return branch_namespace_declarations(
+        (root / "AGENTS.md").read_text(encoding="utf-8"), root=root,
+    )
 
 
 def _branch_namespace_allowed(
@@ -250,7 +350,7 @@ def _branch_namespace_allowed(
     if prefix in role_prefixes:
         return True
     return (
-        ("meta" in declared and prefix == "meta")
+        prefix in declared
         or ("m<N>" in declared and _MILESTONE_NAMESPACE.fullmatch(prefix) is not None)
     )
 
@@ -258,9 +358,10 @@ def _branch_namespace_allowed(
 def _prefixed_lane_is_identity(line: str, match: re.Match[str]) -> bool:
     """Require evidence that a role-suffixed token names a lane.
 
-    A backticked identifier, a role-suffixed path component, or a same-sentence
-    lane/queue/worktree cue is an identity claim. A bare compound, filename,
-    or relative path without such evidence remains ordinary prose.
+    A role-suffixed path component, a token directly used as a lane/queue/etc.,
+    or a routing target is an identity claim. A token used as an adjective for
+    a module, file, UI, tool, or path is ordinary prose even when that sentence
+    mentions a queue or checkout elsewhere.
     """
     _, end = match.span("role")
     token_start = match.start("prefix")
@@ -268,25 +369,36 @@ def _prefixed_lane_is_identity(line: str, match: re.Match[str]) -> bool:
     after = line[token_end:]
     if after.startswith("/"):
         return True
-    if (
-        token_start > 0
-        and line[token_start - 1] == "`"
-        and after.startswith("`")
+    if after.startswith(("-", "_")):
+        return False
+
+    previous = line[:token_start]
+    if line[token_start - 1:token_start] == "/" and not (
+        previous.endswith("../") or previous.endswith("./")
     ):
         return True
 
-    previous = line[:token_start]
+    after_unquoted = after
+    if after.startswith("`"):
+        if token_start > 0 and line[token_start - 1] == "`":
+            return True
+        after_unquoted = after[1:]
+    if _LANE_IDENTITY_NOUN.match(after_unquoted):
+        return True
+    if _ORDINARY_TOKEN_SUFFIX.match(after_unquoted):
+        return False
+
     if previous.endswith("../") or previous.endswith("./"):
         return False
     left_boundary = max(
         (line.rfind(mark, 0, token_start) for mark in ".!?;"),
         default=-1,
     )
-    right_marks = [line.find(mark, token_end) for mark in ".!?;"]
-    right_marks = [mark for mark in right_marks if mark >= 0]
-    right_boundary = min(right_marks, default=len(line))
-    sentence = line[left_boundary + 1:right_boundary]
-    if _LANE_IDENTITY_CUE.search(sentence):
+    sentence_before = line[left_boundary + 1:token_start]
+    if (
+        _LANE_ROUTING_VERB.search(sentence_before)
+        or _LANE_IDENTITY_BEFORE.search(sentence_before)
+    ):
         return True
     return False
 
@@ -355,7 +467,10 @@ def scan(
     declared_namespaces = tuple(branch_namespaces)
     invalid_namespaces = [
         name for name in declared_namespaces
-        if name not in _STRUCTURAL_BRANCH_NAMESPACES
+        if not (
+            name in _STRUCTURAL_BRANCH_NAMESPACES
+            or _PROJECT_NAMESPACE.fullmatch(name)
+        )
     ]
     if invalid_namespaces:
         raise ValueError(
@@ -696,11 +811,6 @@ def main(argv: Sequence[str] | None = None) -> int:
              "(default: brain)",
     )
     ap.add_argument(
-        "--branch-namespaces", default="",
-        help="comma-separated structural forms declared by the project: "
-             "m<N> and/or meta",
-    )
-    ap.add_argument(
         "--queue-pattern", default=None,
         help="optional regex with one capture group yielding a queue stem; "
              "only for projects that keep such files",
@@ -732,21 +842,12 @@ def main(argv: Sequence[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
-    branch_namespaces = tuple(
-        item.strip() for item in args.branch_namespaces.split(",")
-        if item.strip()
-    )
-    invalid = [
-        item for item in branch_namespaces
-        if item not in _STRUCTURAL_BRANCH_NAMESPACES
-    ]
-    if invalid:
-        print(
-            "neutrality: unsupported branch namespace form(s): "
-            + ", ".join(invalid),
-            file=sys.stderr,
-        )
+    try:
+        discovered_namespaces = branch_namespaces_for_paths(args.paths)
+    except (OSError, ValueError) as exc:
+        print(f"neutrality: cannot read branch namespace declaration: {exc}", file=sys.stderr)
         return 2
+    branch_namespaces = discovered_namespaces
 
     findings: list[Finding] = []
     inert: list[str] = []
