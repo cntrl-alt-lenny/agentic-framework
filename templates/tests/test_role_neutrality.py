@@ -32,9 +32,10 @@ import textblocks  # noqa: E402
 ROLES: tuple[str, ...] = {{ROLES}}
 COORDINATOR = "{{COORDINATOR}}"
 
-# A project may declare only the framework's bounded structural branch forms in
-# AGENTS.md. The installed guard carries that declaration to every normative
-# document; it is not an arbitrary CLI allowlist.
+# A project may declare the framework's bounded structural forms or a custom
+# lower-case label with tracked project-structure evidence in AGENTS.md. The
+# installed guard carries that declaration to every normative document. It
+# checks syntax and evidence, not provider identity.
 _BRANCH_NAMESPACE_ERROR = None
 try:
     BRANCH_NAMESPACES = neutrality.branch_namespaces_for_paths([str(ROOT)])

@@ -249,15 +249,15 @@ class TestScannersAreRunnableWithoutGlue(unittest.TestCase):
             docs.mkdir(parents=True)
             evidence.mkdir(parents=True)
             (root / "AGENTS.md").write_text(
-                '<!-- guard:branch-namespaces prefixes="release" -->\n',
+                '<!-- guard:branch-namespaces prefixes="codex" -->\n',
                 encoding="utf-8",
             )
-            (evidence / "release.md").write_text(
-                "The project owns release branches.\n", encoding="utf-8"
+            (evidence / "codex.md").write_text(
+                "The project owns codex branches.\n", encoding="utf-8"
             )
             policy = docs / "policy.md"
             policy.write_text(
-                "Create branch `release/next` for this project.\n",
+                "Create branch `codex/next` for this project.\n",
                 encoding="utf-8",
             )
             subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)

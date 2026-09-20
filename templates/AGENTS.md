@@ -59,10 +59,17 @@ bounded forms it uses in this file:
 
 `m<N>` covers milestone namespaces and `meta` covers project-coordination
 branches. A custom lower-case alphanumeric label such as `release` or `feature`
-also needs a tracked `docs/branch-namespaces/<name>.md` witness. The installed
-and command-line guards discover this same declaration; it is not an arbitrary
-allowlist for provider-shaped names. A malformed, unsupported, or unevidenced
-declaration is a guard failure.
+also needs a tracked `docs/branch-namespaces/<name>.md` witness. When the
+optional neutrality guard is installed, its test and command-line scanner
+discover this same declaration. The witness establishes project-owned
+structure; the scanner does not identify providers or prove that a declared
+label is provider-neutral. Declaring a custom namespace is a reviewed human
+decision. A malformed, unsupported, or unevidenced declaration is a failure of
+the installed guard.
+Declarations inside fenced or four-space-indented Markdown code, and inside
+raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are examples
+and inert. A declaration embedded in arbitrary inline HTML or a non-standard
+renderer block remains a human-review case.
 
 ## Non-negotiable project invariants
 

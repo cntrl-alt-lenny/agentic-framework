@@ -197,6 +197,31 @@ class TestDefaultAdoption(AdoptionCase):
 
 
 class TestTopologyOptions(AdoptionCase):
+    def test_neutrality_installation_can_be_deferred_explicitly(self):
+        plan = adopt.build_plan(
+            self.target, project="Test Project", coordinator="brain",
+            workers=["worker"], verifier=False, hooks=False, adapters=[],
+            neutrality=False,
+        )
+        self.assertTrue(
+            any("deferred by --no-neutrality" in note for note in plan.notes)
+        )
+        self.assertEqual(run_adopt(self.target, "--no-neutrality"), 0)
+        for rel in (
+            "tools/neutrality.py",
+            "tools/authority.py",
+            "tools/textblocks.py",
+            "tests/test_role_neutrality.py",
+        ):
+            with self.subTest(path=rel):
+                self.assertFalse((self.target / rel).exists())
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            cwd=self.target, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
     def test_declared_milestone_namespace_is_installed_and_bounded(self):
         self.assertEqual(
             run_adopt(self.target, "--workers", "builder", "--verifier"),
