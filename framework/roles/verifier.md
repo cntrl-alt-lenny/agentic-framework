@@ -73,6 +73,14 @@ yet"**. The owner pastes this prompt again later. When it returns `delivered`,
 continue with the exact-SHA
 discipline — you still review one literal commit, you just establish which one:
 
+When you need the report body after delivery, look up the exact role and
+Brief-ID rather than relying on the role's replaceable latest view:
+
+```
+python3 tools/report.py find --role <executor role> --task <brief identifier> \
+  --cwd <your linked verifier worktree>
+```
+
 - Resolve the delivered branch to a SHA, confirm the base is genuinely its ancestor, and
   **put the literal SHA in your report**.
 - If delivery is not established, say **"not delivered yet"** and stop. That is

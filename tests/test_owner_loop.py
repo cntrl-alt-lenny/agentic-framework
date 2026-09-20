@@ -248,6 +248,35 @@ class TestDeliveryCommand(unittest.TestCase):
             cwd=builder, input="Builder delivered.\n", capture_output=True, text=True,
         )
         self.assertEqual(report.returncode, 0, report.stdout + report.stderr)
+        newer_report = subprocess.run(
+            [
+                sys.executable, str(ROOT / "tools" / "report.py"), "write",
+                "--task", "a-later-brief",
+            ],
+            cwd=builder, input="A later brief also completed.\n",
+            capture_output=True, text=True,
+        )
+        self.assertEqual(newer_report.returncode, 0, newer_report.stdout + newer_report.stderr)
+        proc = self._check(repo, base)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("delivered:", proc.stdout)
+
+    def test_legacy_latest_only_inbox_still_delivers(self):
+        tmp, repo, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        self._git(repo, "branch", "worker/task", base)
+        builder = repo / ".worktrees" / "builder"
+        self._git(repo, "worktree", "add", "-q", str(builder), "worker/task")
+        (builder / "change.txt").write_text("legacy\n", encoding="utf-8")
+        self._git(builder, "add", "change.txt")
+        self._git(builder, "commit", "-q", "-m", "legacy delivery")
+        head = self._git(builder, "rev-parse", "HEAD")
+        inbox = repo / ".git" / "agent-inbox"
+        inbox.mkdir(parents=True)
+        (inbox / "builder-latest.md").write_text(
+            f"<!-- captured now role=builder task={self.TASK} head={head} source=old -->\n\n"
+            "Legacy writer report.\n", encoding="utf-8",
+        )
         proc = self._check(repo, base)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("delivered:", proc.stdout)

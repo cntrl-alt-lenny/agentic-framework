@@ -70,6 +70,32 @@ essentials:
   time, and a timestamp — `python3 tools/report.py status` compares that SHA
   against the checkout's current HEAD and says whether the report is still
   fresh, so a reader does not parse the header by hand.
+- The task identifier is the exact, stable `Brief-ID` value. It must not have
+  leading or trailing whitespace. New headers carry `format=2` and
+  percent-encode the task in the space-delimited header; readers decode only
+  those marked headers. A header without the marker is a legacy header and its
+  task field is literal, including any percent sequences. This explicit marker
+  is important: the same text must not mean two different Brief-IDs depending
+  on which writer produced it. Both forms use a fixed SHA-256 filesystem key
+  under `by-task/<role>/<sha256-of-brief>.md`, preventing path traversal,
+  Windows filename problems, overlong filenames, and case-folding collisions.
+  A repeated write for the same role and Brief-ID replaces that task's file
+  with the newest report; different Brief-IDs remain separately readable. The
+  append-only `<role>-log.md` remains a human audit trail.
+
+  The older reader understands ordinary task IDs written by this version when
+  they contain no characters that need encoding. It does not understand the
+  `format=2` decoding convention for IDs containing spaces or other encoded
+  characters; the current reader remains backward-compatible with old literal
+  headers. The Claude Code session fallback uses `claude-code-session:<id>`,
+  which remains a valid task value.
+
+- Role names are portable checkout names: lowercase ASCII, starting with a
+  letter, then only lowercase letters, digits, `-` or `_`, excluding Windows
+  device names. `tools/checkout.py` rejects any other linked-worktree name
+  before work starts, and `tools/report.py` uses the same validator before it
+  derives an inbox path. This prevents case-folding collisions and names that
+  cannot be represented on Windows.
 
 ### This is a contract requirement, not a convenience
 
@@ -89,9 +115,18 @@ and unambiguous, then say plainly what its absence does and does not prove.
 **A missing or stale report is UNKNOWN. Never "the task did not happen",
 never "the agent failed."** The fallbacks, in order:
 
-1. Check the shared inbox — `<role>-latest.md` for the role you are asking
-   about. This now works for every provider, not only ones with a
-   convenience hook installed.
+1. Look up the exact role and Brief-ID with:
+
+   ```
+   python3 tools/report.py find --role <role> --task <brief identifier> \
+     --cwd <checkout that can see the inbox>
+   ```
+
+   This reads the per-brief archive and therefore still finds an earlier
+   report after a later report replaced `<role>-latest.md`. For an inbox from
+   an older adoption, it falls back to `<role>-latest.md` (and the historical
+   `coordinator-latest.md`) when that file's provenance matches. `latest` is
+   still useful as a convenience view, but is not the lookup key for a brief.
 2. Ask the owner to paste the report, if nothing automates the handoff.
 3. Inspect repository and pull-request state directly. This can confirm
    execution happened — it leaves a branch and a diff whether or not a
@@ -113,6 +148,12 @@ would be treated. Exit `2` means no report exists for that checkout's role
 at all, which is ordinary and expected whenever a round has not written one
 yet, or ran before this mechanism existed in the project.
 
+The per-brief archive is intentionally append-by-key rather than a bounded
+cache: it grows with the number of distinct role/brief pairs. Reports are
+small, live in git's private directory, and are the durable evidence needed to
+answer later questions; projects that need retention can remove old entries
+after their own review policy, without changing `latest` or `log` semantics.
+
 ## How this relates to provider-specific hooks
 
 A tool-specific hook — Claude Code's Stop hook is the shipped example — is
@@ -127,6 +168,11 @@ does. A project with the Claude Code adapter installed has this at
 Claude Code's own transcript, then hands the text to `tools/report.py`'s
 writer for everything after that — the inbox location, the role tag, the
 atomic write, the provenance header.
+
+The hook's session-tagged fallback is findable by that session task, but it is
+not a substitute for the agent's real Brief-ID report. The hook still leaves a
+current self-written report alone and only mirrors when the report is absent,
+stale, or was previously written by the hook itself.
 
 A hook converging onto this mechanism is a convenience layered on top of a
 requirement that already holds without it. It changes nothing about what a
