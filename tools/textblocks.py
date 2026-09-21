@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["logical_lines", "counterexample_blocks", "negated", "NEGATORS",
+__all__ = ["logical_lines", "logical_lines_with_positions",
+           "counterexample_blocks", "negated", "NEGATORS",
            "COUNTEREXAMPLE_OPEN", "COUNTEREXAMPLE_CLOSE"]
 
 #: A normative document sometimes needs to quote a banned form in order to
@@ -65,49 +66,66 @@ FENCE = re.compile(r"^\s*(?:```|~~~)")
 STANDALONE_COMMENT = re.compile(r"^\s*<!--.*-->\s*$")
 
 
-def logical_lines(text: str) -> list[tuple[int, str]]:
-    """Return ``(starting_physical_line_number, joined_text)`` pairs.
-
-    Content inside fenced code blocks is returned line by line, unjoined: code
-    is not prose and joining it would invent adjacency that is not there.
-    """
-    out: list[tuple[int, str]] = []
+def logical_lines_with_positions(
+    text: str,
+) -> list[tuple[int, str, tuple[int, ...]]]:
+    """Return logical lines plus the physical line for every text character."""
+    out: list[tuple[int, str, tuple[int, ...]]] = []
     start: int | None = None
-    buf: list[str] = []
+    buf: list[tuple[int, str]] = []
     in_fence = False
 
     def flush() -> None:
         nonlocal start, buf
         if start is not None and buf:
-            out.append((start, " ".join(s.strip() for s in buf).strip()))
+            parts = [line.strip() for _, line in buf]
+            joined = " ".join(parts).strip()
+            positions: list[int] = []
+            for index, (physical, _) in enumerate(buf):
+                if index:
+                    positions.append(physical)
+                positions.extend([physical] * len(parts[index]))
+            out.append((start, joined, tuple(positions)))
         start, buf = None, []
 
     for n, line in enumerate(text.splitlines(), 1):
         if FENCE.match(line):
             flush()
-            out.append((n, line))
+            out.append((n, line, tuple([n] * len(line))))
             in_fence = not in_fence
             continue
         if in_fence:
-            out.append((n, line))
+            out.append((n, line, tuple([n] * len(line))))
             continue
         if not line.strip():
             flush()
             continue
         if STANDALONE_COMMENT.match(line):
             flush()
-            out.append((n, line))
+            out.append((n, line, tuple([n] * len(line))))
             continue
         if BLOCK_START.match(line):
             flush()
-            start, buf = n, [line]
+            start, buf = n, [(n, line)]
             continue
         if start is None:
-            start, buf = n, [line]
+            start, buf = n, [(n, line)]
         else:
-            buf.append(line)
+            buf.append((n, line))
     flush()
     return out
+
+
+def logical_lines(text: str) -> list[tuple[int, str]]:
+    """Return ``(starting_physical_line_number, joined_text)`` pairs.
+
+    Content inside fenced code blocks is returned line by line, unjoined: code
+    is not prose and joining it would invent adjacency that is not there.
+    """
+    return [
+        (start, line)
+        for start, line, _ in logical_lines_with_positions(text)
+    ]
 
 
 def counterexample_blocks(text: str) -> tuple[list[tuple[int, str]], set[int]]:

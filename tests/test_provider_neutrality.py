@@ -13,6 +13,8 @@ tested — a policy file cannot be exempted by adding it to a list.
 from __future__ import annotations
 
 import sys
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -120,6 +122,111 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
         )
         self.assertEqual(result.findings, [])
 
+    def test_hyphenated_project_namespace_needs_a_real_witness(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+            (root / "docs" / "branch-namespaces").mkdir(parents=True)
+            (root / "docs" / "branch-namespaces" / "modern-ui.md").write_text(
+                "The legacy web application owns modern-ui branches for UI work; "
+                "it is not a role or provider lane.\n",
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                '<!-- guard:branch-namespaces prefixes="modern-ui" -->\n',
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "witness"], cwd=root, check=True)
+            self.assertEqual(
+                neutrality.branch_namespace_declarations(
+                    (root / "AGENTS.md").read_text(), root=root,
+                    roles=("builder",),
+                ),
+                ("modern-ui",),
+            )
+            self.assertEqual(
+                neutrality.scan(
+                    "Create branch `modern-ui/next` for the legacy UI.\n",
+                    ("builder",), branch_namespaces=("modern-ui",),
+                ).findings,
+                [],
+            )
+
+            (root / "docs" / "branch-namespaces" / "acme-builder.md").write_text(
+                "The project owns this branch namespace.\n", encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "role witness"], cwd=root, check=True)
+            with self.assertRaisesRegex(ValueError, "declared role"):
+                neutrality.branch_namespace_declarations(
+                    '<!-- guard:branch-namespaces prefixes="acme-builder" -->',
+                    root=root, roles=("builder",),
+                )
+
+    def test_hyphenated_declared_roles_and_coordinator_are_refused_everywhere(self):
+        roles = ("lead-brain", "build-team")
+        coordinator = "chief-coordinator"
+        for namespace in (
+            "acme-lead-brain", "acme-build-team", "acme-chief-coordinator",
+        ):
+            with self.subTest(namespace=namespace):
+                declaration = (
+                    f'<!-- guard:branch-namespaces prefixes="{namespace}" -->'
+                )
+                with self.assertRaisesRegex(ValueError, "declared role"):
+                    neutrality.branch_namespace_declarations(
+                        declaration, roles=roles, coordinator=coordinator,
+                    )
+                with self.assertRaisesRegex(ValueError, "declared role"):
+                    neutrality.scan(
+                        f"Create branch `{namespace}/next` for this round.\n",
+                        roles, coordinator=coordinator,
+                        branch_namespaces=(namespace,),
+                    )
+
+    def test_command_line_uses_the_same_hyphenated_role_context(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+            (root / "docs" / "branch-namespaces").mkdir(parents=True)
+            (root / "docs" / "branch-namespaces" / "acme-lead-brain.md").write_text(
+                "This is established project structure, not a role or provider lane.\n",
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                '<!-- guard:branch-namespaces prefixes="acme-lead-brain" -->\n'
+                "Create branch `acme-lead-brain/next` for this round.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "witness"], cwd=root, check=True)
+            proc = subprocess.run(
+                [
+                    sys.executable, str(ROOT / "tools" / "neutrality.py"),
+                    str(root / "AGENTS.md"), "--roles", "lead-brain,build-team",
+                    "--coordinator", "chief-coordinator",
+                ],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn("declared role", proc.stdout + proc.stderr)
+
+    def test_installed_guard_passes_rendered_role_context_to_declaration_discovery(self):
+        template = (ROOT / "templates" / "tests" / "test_role_neutrality.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "branch_namespaces_for_paths(\n"
+            "        [str(ROOT)], roles=ROLES, coordinator=COORDINATOR\n"
+            "    )",
+            template,
+        )
+
     def test_namespace_boundary_is_documented_without_a_vendor_claim(self):
         for path in (
             ROOT / "framework" / "CONSTITUTION.md",
@@ -130,6 +237,10 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("does not identify providers", text)
                 self.assertIn("reviewed human", text)
+        template = (ROOT / "templates" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("single hyphens", template)
+        self.assertIn("hyphenated role", template)
+        self.assertIn("filename-only formality", template)
         adoption = (ROOT / "framework" / "adoption.md").read_text(
             encoding="utf-8"
         )
@@ -152,9 +263,16 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             ),
             ("release", "feature"),
         )
-        with self.assertRaisesRegex(ValueError, "unsupported"):
+        self.assertEqual(
             neutrality.branch_namespace_declarations(
                 '<!-- guard:branch-namespaces prefixes="m<N>,vendor-ai" -->'
+            ),
+            ("m<N>", "vendor-ai"),
+        )
+        with self.assertRaisesRegex(ValueError, "tracked project-structure"):
+            neutrality.branch_namespace_declarations(
+                '<!-- guard:branch-namespaces prefixes="m<N>,vendor-ai" -->',
+                root=ROOT,
             )
         with self.assertRaisesRegex(ValueError, "tracked project-structure"):
             neutrality.branch_namespace_declarations(
@@ -481,6 +599,49 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             [],
             "only presentation whitespace and outer backticks are ignored",
         )
+
+    def test_branch_counterexample_names_the_same_branch_in_command_and_prose(self):
+        command = "git checkout -b acme/some-scope origin/main"
+        prose = "Create branch `acme/some-scope` for this round."
+        for body in (command, prose):
+            with self.subTest(body=body):
+                findings = neutrality.scan(body, ("builder",)).findings
+                self.assertEqual(
+                    [finding.matched for finding in findings], ["acme/some-scope"]
+                )
+                declaration = (
+                    '<!-- guard:counterexample -->\n'
+                    '<!-- guard:violation branch-namespace roles=builder '
+                    'text="acme/some-scope" -->\n'
+                    f"{body}\n<!-- /guard:counterexample -->\n"
+                )
+                self.assertEqual(
+                    neutrality.scan(declaration, ("builder",)).findings, []
+                )
+
+    def test_paragraph_findings_use_the_line_where_the_match_starts(self):
+        cases = (
+            (
+                "Introductory text with no finding.\n"
+                "Hand this to the Acme\n"
+                "Builder today.",
+                "compound-lane",
+                2,
+            ),
+            (
+                "Introductory text with no finding.\n"
+                "Route this through vendor-builder lane.",
+                "prefixed-lane",
+                2,
+            ),
+        )
+        for text, rule, expected_line in cases:
+            with self.subTest(rule=rule):
+                finding = next(
+                    finding for finding in neutrality.scan(text, ("builder",)).findings
+                    if finding.rule == rule
+                )
+                self.assertEqual(finding.line, expected_line)
 
     def test_partial_counterexample_declarations_do_not_exempt_any_rule(self):
         """A declaration is an exact matched-token key, never a substring."""

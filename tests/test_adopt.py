@@ -275,7 +275,7 @@ class TestTopologyOptions(AdoptionCase):
                 cwd=self.target, capture_output=True, text=True,
             )
             self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("unsupported branch namespace", proc.stdout + proc.stderr)
+            self.assertIn("tracked project-structure", proc.stdout + proc.stderr)
         finally:
             agents.write_text(original, encoding="utf-8")
 
@@ -602,13 +602,99 @@ class TestSafety(AdoptionCase):
         first = (self.target / "docs/agents/CONSTITUTION.md").read_text(
             encoding="utf-8"
         )
+        before = sorted(self.target.rglob("*.framework"))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target), 0)
+        self.assertIn("already current", output.getvalue())
+        self.assertEqual(sorted(self.target.rglob("*.framework")), before)
         self.assertEqual(run_adopt(self.target), 0)
-        # Second run collides with itself and writes siblings rather than
-        # clobbering; the original is untouched either way.
         self.assertEqual(
             (self.target / "docs/agents/CONSTITUTION.md").read_text(encoding="utf-8"),
             first,
         )
+
+    def test_a_real_collision_gets_a_sibling_without_overwriting_either_file(self):
+        agents = self.target / "AGENTS.md"
+        agents.write_text("project-owned\n", encoding="utf-8")
+        self.assertEqual(run_adopt(self.target), 0)
+        sibling = self.target / "AGENTS.md.framework"
+        self.assertTrue(sibling.is_file())
+        sibling_before = sibling.read_bytes()
+        self.assertEqual(agents.read_text(encoding="utf-8"), "project-owned\n")
+        self.assertEqual(run_adopt(self.target), 0)
+        self.assertEqual(agents.read_text(encoding="utf-8"), "project-owned\n")
+        self.assertEqual(sibling.read_bytes(), sibling_before)
+
+    @unittest.skipIf(os.name == "nt", "Windows cannot preserve POSIX execute bits")
+    def test_identical_executable_file_with_wrong_mode_is_a_collision(self):
+        destination = self.target / "tools" / "report.py"
+        destination.parent.mkdir(parents=True)
+        source = ROOT / "tools" / "report.py"
+        destination.write_bytes(source.read_bytes())
+        destination.chmod(0o644)
+
+        self.assertEqual(run_adopt(self.target), 0)
+
+        sibling = self.target / "tools" / "report.py.framework"
+        self.assertEqual(destination.read_bytes(), source.read_bytes())
+        self.assertEqual(destination.stat().st_mode & 0o111, 0)
+        self.assertTrue(sibling.is_file())
+        self.assertTrue(sibling.stat().st_mode & 0o111)
+
+    @unittest.skipIf(os.name == "nt", "Windows cannot preserve POSIX execute bits")
+    def test_identical_framework_sibling_with_wrong_mode_is_not_current(self):
+        destination = self.target / "tools" / "report.py"
+        destination.parent.mkdir(parents=True)
+        destination.write_text("project-owned\n", encoding="utf-8")
+        sibling = destination.with_name("report.py.framework")
+        sibling.write_bytes((ROOT / "tools" / "report.py").read_bytes())
+        sibling.chmod(0o644)
+
+        self.assertEqual(run_adopt(self.target), 0)
+
+        replacement = self.target / "tools" / "report.py.framework.framework"
+        self.assertTrue(replacement.is_file())
+        self.assertTrue(replacement.stat().st_mode & 0o111)
+        self.assertEqual(destination.read_text(encoding="utf-8"), "project-owned\n")
+        self.assertEqual(sibling.stat().st_mode & 0o111, 0)
+
+    @unittest.skipIf(os.name == "nt", "Windows cannot preserve POSIX execute bits")
+    def test_identical_hook_without_execute_bit_is_a_collision(self):
+        hook = self.target / ".githooks" / "pre-push"
+        hook.parent.mkdir(parents=True)
+        source = ROOT / "templates" / "githooks" / "pre-push"
+        hook.write_bytes(source.read_bytes())
+        hook.chmod(0o644)
+
+        self.assertEqual(run_adopt(self.target, "--hooks"), 0)
+
+        sibling = self.target / ".githooks" / "pre-push.framework"
+        self.assertTrue(sibling.is_file())
+        self.assertTrue(sibling.stat().st_mode & 0o111)
+        self.assertEqual(hook.stat().st_mode & 0o111, 0)
+
+    def test_unreadable_existing_file_is_a_collision_not_an_abort(self):
+        destination = self.target / "AGENTS.md"
+        destination.write_text("project-owned\n", encoding="utf-8")
+        original_read_bytes = Path.read_bytes
+
+        def deny_target(path: Path) -> bytes:
+            if path == destination:
+                raise PermissionError("synthetic unreadable existing file")
+            return original_read_bytes(path)
+
+        with mock.patch.object(Path, "read_bytes", new=deny_target):
+            plan = adopt.build_plan(
+                self.target, project="Test Project", coordinator="brain",
+                workers=["worker"], verifier=False, hooks=False, adapters=[],
+            )
+            self.assertTrue(
+                any(dst == self.target / "AGENTS.md.framework" for dst, _, _ in plan.writes)
+            )
+            adopt.apply_plan(plan)
+
+        self.assertEqual(destination.read_text(encoding="utf-8"), "project-owned\n")
 
     def test_missing_target_is_refused(self):
         self.assertEqual(

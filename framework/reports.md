@@ -67,9 +67,12 @@ essentials:
   every other role-per-checkout guarantee in this framework does.
 - The write is atomic: a reader never sees a half-written report.
 - The header records the task, the exact HEAD SHA of your checkout at write
-  time, and a timestamp — `python3 tools/report.py status` compares that SHA
-  against the checkout's current HEAD and says whether the report is still
-  fresh, so a reader does not parse the header by hand.
+  time, the operating system reported automatically by the writer, and a
+  timestamp — `python3 tools/report.py status` compares that SHA against the
+  checkout's current HEAD and says whether the report is still fresh, so a
+  reader does not parse the header by hand. It records only the OS name, never
+  a person or a machine identifier. Older headers without this field remain
+  readable.
 - The task identifier is the exact, stable `Brief-ID` value. It must not have
   leading or trailing whitespace. New headers carry `format=2` and
   percent-encode the task in the space-delimited header; readers decode only

@@ -38,7 +38,9 @@ COORDINATOR = "{{COORDINATOR}}"
 # checks syntax and evidence, not provider identity.
 _BRANCH_NAMESPACE_ERROR = None
 try:
-    BRANCH_NAMESPACES = neutrality.branch_namespaces_for_paths([str(ROOT)])
+    BRANCH_NAMESPACES = neutrality.branch_namespaces_for_paths(
+        [str(ROOT)], roles=ROLES, coordinator=COORDINATOR
+    )
 except ValueError as exc:
     # Keep the guard as a unittest failure with a summary instead of aborting
     # test discovery before any result can be reported.

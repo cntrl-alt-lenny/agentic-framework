@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from textblocks import (NEGATORS, counterexample_blocks, logical_lines,
-                        negated as _negated)
+                        logical_lines_with_positions, negated as _negated)
 
 __all__ = ["Finding", "scan", "inert_counterexamples",
            "has_merge_prohibition", "ROUTINE_APPROVAL",
@@ -127,31 +127,37 @@ def scan(text: str, *, source: str = "<text>",
     findings: list[Finding] = []
     # Logical lines, not physical ones: prose is hard-wrapped here, and a
     # negation on the previous physical line must still negate.
-    for n, line in logical_lines(text):
-        if n in skip:
+    for _, line, positions in logical_lines_with_positions(text):
+        if positions and positions[0] in skip:
             continue
         for pattern, message in _COMPILED_APPROVAL:
             for m in pattern.finditer(line):
                 if _negated(line, m.start()):
                     continue
-                findings.append(
-                    Finding(source, n, "routine-approval", m.group(0), message)
-                )
+                line_number = positions[m.start()] if positions else 1
+                if line_number not in skip:
+                    findings.append(
+                        Finding(source, line_number, "routine-approval", m.group(0), message)
+                    )
         if PERSON_SUBJECT.search(line):
             for m in MERGE_DUTY.finditer(line):
                 if _negated(line, m.start()):
                     continue
-                findings.append(
-                    Finding(source, n, "routine-approval", m.group(0),
-                            "a person named as the routine merge actor")
-                )
+                line_number = positions[m.start()] if positions else 1
+                if line_number not in skip:
+                    findings.append(
+                        Finding(source, line_number, "routine-approval", m.group(0),
+                                "a person named as the routine merge actor")
+                    )
         for pattern, message in _COMPILED_SELF_MERGE:
             for m in pattern.finditer(line):
                 if _negated(line, m.start()):
                     continue
-                findings.append(
-                    Finding(source, n, "executor-self-merge", m.group(0), message)
-                )
+                line_number = positions[m.start()] if positions else 1
+                if line_number not in skip:
+                    findings.append(
+                        Finding(source, line_number, "executor-self-merge", m.group(0), message)
+                    )
     return findings
 
 

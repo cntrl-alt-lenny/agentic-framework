@@ -58,14 +58,18 @@ bounded forms it uses in this file:
 ```
 
 `m<N>` covers milestone namespaces and `meta` covers project-coordination
-branches. A custom lower-case alphanumeric label such as `release` or `feature`
-also needs a tracked `docs/branch-namespaces/<name>.md` witness. When the
-optional neutrality guard is installed, its test and command-line scanner
-discover this same declaration. The witness establishes project-owned
-structure; the scanner does not identify providers or prove that a declared
-label is provider-neutral. Declaring a custom namespace is a reviewed human
-decision. A malformed, unsupported, or unevidenced declaration is a failure of
-the installed guard.
+branches. A custom namespace must be a lower-case project namespace made of
+letters, digits, and single hyphens, and also needs a tracked
+`docs/branch-namespaces/<name>.md` witness. A namespace carrying any declared
+role or coordinator, including a hyphenated role, is refused. When the optional
+neutrality guard is installed, its test and command-line scanner discover this
+same declaration using the project's declared roles and coordinator. The witness
+must explain which established project-owned structure uses the namespace, where
+that structure is visible, and why the namespace is not a role or provider
+identity; a filename-only formality is not sufficient review. The scanner does not identify providers or prove that a declared label is provider-neutral.
+Declaring a custom namespace is a reviewed human decision. A malformed,
+unsupported, role-bearing, or unevidenced declaration is a failure of the
+installed guard.
 Declarations inside fenced or four-space-indented Markdown code, and inside
 raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are examples
 and inert. A declaration embedded in arbitrary inline HTML or a non-standard

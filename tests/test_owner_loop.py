@@ -135,6 +135,17 @@ class TestBrainStillIssuesBothPrompts(unittest.TestCase):
         self.assertIn("strictly ahead of the base", text)
         self.assertIn('"not delivered yet"', text)
 
+    def test_adjudication_corrections_are_checked_as_one_literal_set(self):
+        briefs = " ".join((ROOT / "framework" / "briefs.md").read_text().split())
+        lifecycle = " ".join(LIFECYCLE.read_text(encoding="utf-8").split())
+        brain = " ".join(BRAIN.read_text(encoding="utf-8").split())
+        for text in (briefs, lifecycle, brain):
+            with self.subTest(document=text[:30]):
+                self.assertIn("correction", text)
+                self.assertIn("literally", text)
+                self.assertIn("together", text)
+        self.assertIn("false or contradictory", brain)
+
     def test_all_loop_documents_make_owner_order_explicit(self):
         for path in (KICKOFF, BRAIN, LIFECYCLE, VERIFIER):
             with self.subTest(path=path):
