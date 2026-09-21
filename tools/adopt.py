@@ -96,6 +96,7 @@ def tracked_hook_line_endings(target: Path) -> list[str]:
     recorded its executable mode.
     """
     unsafe: list[str] = []
+    target = target.resolve()
     worktrees = [target]
     try:
         listed = subprocess.run(
@@ -107,7 +108,7 @@ def tracked_hook_line_endings(target: Path) -> list[str]:
     if listed is not None and listed.returncode == 0:
         for line in listed.stdout.splitlines():
             if line.startswith("worktree "):
-                checkout = Path(line.removeprefix("worktree "))
+                checkout = Path(line.removeprefix("worktree ")).resolve()
                 if checkout not in worktrees:
                     worktrees.append(checkout)
 
