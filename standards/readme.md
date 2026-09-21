@@ -45,7 +45,7 @@ They are called **badges**, and almost all are made with [shields.io](https://sh
 - **One style everywhere: `flat`**, as in gx-spirit-caller. `for-the-badge` is much larger and fights a row.
 - **One fixed order:** CI → release → progress → platform → language → license. Four or five at most; a long row is noise.
 - **Anything whose value is expected to move during normal work must be live.** Take it from GitHub or CI, never type it in: a typed-in "PASS" stays green after the build breaks. This includes CI, releases, progress, development stage and other status.
-- **Static badges are only for deliberately declared compatibility facts** such as platform or runtime floor. Keep them accurate when that declaration changes; never use a static badge for a status.
+- **Static badges are only for deliberately declared compatibility facts** such as platform or runtime floor, or for a license whose legally fixed LICENSE must remain verbatim. A static license badge must state what LICENSE actually grants, use the `flat` style, and link to LICENSE. Keep compatibility badges accurate when their declaration changes; never use a static badge for a status.
 - **Every badge links to its evidence**: CI → workflow runs, release → releases, license → LICENSE.
 - **Label spelling: `license`**, matching GitHub's own interface.
 
@@ -53,7 +53,7 @@ They are called **badges**, and almost all are made with [shields.io](https://sh
 |---|---|
 | CI status | `https://github.com/<owner>/<repo>/actions/workflows/<file>.yml/badge.svg` |
 | Latest release | `https://img.shields.io/github/v/release/<owner>/<repo>` |
-| License | Live `https://img.shields.io/github/license/<owner>/<repo>` when GitHub recognises LICENSE; otherwise use the static path below |
+| License | Live `https://img.shields.io/github/license/<owner>/<repo>` when GitHub recognises LICENSE; otherwise use the static badge template below |
 | Anything CI computes | CI writes a small JSON file; the badge reads it: `https://img.shields.io/endpoint?url=<raw URL of that JSON>` |
 
 ## Live project graphics
@@ -94,7 +94,13 @@ as current repository state; re-measure before acting on them.
 
 ## License recognition
 
-GitHub shows "no license", and the live license badge shows "not specified", unless LICENSE contains text GitHub recognises. Do not edit a LICENSE to satisfy this standard: licensing is the owner's decision. When a project must keep an upstream LICENSE legally fixed and verbatim, a static license badge is acceptable; its text must state what that LICENSE actually grants, and it must link to LICENSE. Three repositories report `NOASSERTION` (present but unrecognised): edopro-next, mgs-mc-modkit and smt3hd-deck-modkit. For those projects, the static badge path is the correct one if the upstream text must remain unchanged. Put project-specific notes in the README.
+GitHub shows "no license", and the live license badge shows "not specified", unless LICENSE contains text GitHub recognises. Do not edit a LICENSE to satisfy this standard: licensing is the owner's decision. When a project must keep an upstream LICENSE legally fixed and verbatim, use this generic template for the static badge (the placeholder is not a license):
+
+```markdown
+[![license](https://img.shields.io/badge/license-EXACT_GRANT_FROM_LICENSE-blue?style=flat)](LICENSE)
+```
+
+Replace `EXACT_GRANT_FROM_LICENSE` with a short, URL-encoded statement of what LICENSE actually grants; use Shields.io's [static badge documentation](https://shields.io/badges) for the path format and encoding. The Markdown link must remain `(LICENSE)`. In the 2026-09-15 historical snapshot, three repositories reported `NOASSERTION` (present but unrecognised): edopro-next, mgs-mc-modkit and smt3hd-deck-modkit. For those projects, the static badge path is the correct one if the upstream text must remain unchanged. Put project-specific notes in the README.
 
 ## Out of scope
 
