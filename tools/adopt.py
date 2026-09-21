@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,6 +84,35 @@ class Plan:
     notes: list[str] = field(default_factory=list)
     ensure_worktrees_ignore: bool = False
     target: Path = Path(".")
+
+
+def tracked_hook_line_endings(target: Path) -> list[str]:
+    """Return tracked hook paths whose worktree bytes are not LF-only.
+
+    ``.gitattributes`` can describe the desired checkout without rewriting an
+    unchanged file.  Git's own ``ls-files --eol`` is the cheap, authoritative
+    observation we need here; a failed or non-Git target simply has no warning
+    to add to the adoption plan.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(target), "ls-files", "--eol", "--", ".githooks"],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return []
+    if proc.returncode != 0:
+        return []
+    unsafe: list[str] = []
+    for line in proc.stdout.splitlines():
+        metadata, separator, path = line.partition("\t")
+        fields = metadata.split()
+        if not separator or len(fields) < 2:
+            continue
+        worktree_eol = fields[1]
+        if worktree_eol in {"w/crlf", "w/mixed"}:
+            unsafe.append(path.strip())
+    return unsafe
 
 
 def topology_diagram(coordinator: str, workers: list[str], verifier: bool) -> str:
@@ -280,6 +310,16 @@ def build_plan(
     # checkout makes those inert. Cheap, and wrong to make conditional on
     # remembering a flag.
     add(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"))
+
+    stale_hooks = tracked_hook_line_endings(target)
+    if stale_hooks:
+        plan.notes.append(
+            "WARNING: tracked hook(s) still have CRLF or mixed working-tree "
+            "line endings: " + ", ".join(stale_hooks) + ". Run `git ls-files "
+            "--eol -- .githooks`, then follow docs/agents/git-and-isolation.md's safe "
+            "stash, renormalize, restore and reapply steps before relying on "
+            "the hook. The effect depends on the platform and shell."
+        )
 
     if hooks:
         add(".githooks/pre-push",

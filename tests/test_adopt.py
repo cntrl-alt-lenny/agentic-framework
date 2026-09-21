@@ -9,6 +9,8 @@ but never executed" failure this framework catalogues.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -407,6 +409,35 @@ class TestTopologyOptions(AdoptionCase):
     def test_hooks_are_installed_only_when_asked(self):
         self.assertEqual(run_adopt(self.target, "--hooks"), 0)
         self.assertTrue((self.target / ".githooks/pre-push").is_file())
+
+
+class TestLineEndingWarnings(AdoptionCase):
+    def test_adoption_warns_on_existing_crlf_hooks_using_git_ls_files_eol(self):
+        attributes = self.target / ".gitattributes"
+        attributes.write_text("* text=auto eol=lf\n", encoding="utf-8")
+        hook = self.target / ".githooks/pre-push"
+        hook.parent.mkdir()
+        hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        subprocess.run(["git", "add", ".gitattributes", ".githooks"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "old hook"], cwd=self.target, check=True,
+        )
+        # Reproduce the real migration hazard: the index is normalized, but an
+        # unchanged pre-existing worktree file remains CRLF.
+        hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        eol = subprocess.run(
+            ["git", "ls-files", "--eol", "--", ".githooks"],
+            cwd=self.target, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("i/lf", eol)
+        self.assertIn("w/crlf", eol)
+        self.assertIn("attr/text=auto eol=lf", eol)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target), 0)
+        self.assertIn("tracked hook(s) still have CRLF", output.getvalue())
+        self.assertIn("git ls-files --eol -- .githooks", output.getvalue())
 
 
 class TestSafety(AdoptionCase):

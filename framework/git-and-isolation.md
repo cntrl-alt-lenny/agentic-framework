@@ -178,6 +178,44 @@ Two wrinkles worth knowing before you trust a `pre-push` hook:
 **Treat a green local hook as "I probably did not just waste a CI round", never
 as "this is enforced."**
 
+### Existing working trees and line endings
+
+Adoption installs `.gitattributes` with `eol=lf`, but Git does not rewrite an
+unchanged working file just because a new attribute applies to it. After an
+update, check every clone and linked worktree that can run a framework hook:
+
+```bash
+git ls-files --eol -- .githooks
+```
+
+Treat `w/crlf` or `w/mixed` on a tracked hook as a portability hazard. The
+effect depends on the platform and shell: macOS Git refused the framework's
+CRLF `#!/bin/sh` hook with `cannot exec ... No such file or directory`; Windows
+11 Pro 10.0.26200 with Git 2.54.0.windows.1 and its bundled GNU bash 5.3.9
+(`igncr` off) executed the same hook's real logic and rejected a protected
+branch push normally. WSL Git, Cygwin Git, and other Windows shells were not
+tested. This is not evidence of a Windows guard bypass; it is why a clone that
+later moves to macOS or Linux must be repaired.
+
+After the adoption change containing `.gitattributes` is committed, refresh
+without discarding local work:
+
+```bash
+git status --short
+git stash push --include-untracked -m "before framework line-ending refresh"
+git add --renormalize .
+git diff --cached --check
+git commit -m "Normalize framework-managed text files"
+git restore --source=HEAD --worktree -- .githooks
+git stash pop
+```
+
+Review the staged diff before committing. The stash is recoverable; if
+`stash pop` conflicts, resolve the conflict and do not drop the stash. Repeat
+the `ls-files --eol` check in each worktree. The framework repository's
+`tools/adopt.py` warns during its plan when it detects an existing tracked hook
+with `w/crlf` or `w/mixed`.
+
 ## The identity limit
 
 When every agent authenticates with the same repository credentials, the server
