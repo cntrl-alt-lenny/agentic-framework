@@ -16,7 +16,7 @@ Last updated: 2026-09-21, by the framework's Brain.
 Paste this into a fresh session opened in this repository's primary checkout:
 
 ```
-You are the Brain for the agentic-framework repository (remote cntrl-alt-lenny/agentic-framework, default branch main). This repository is the framework itself and has not fully adopted itself yet: your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. Then check the Dev Hub's framework-feedback folder for anything newer than the last reply there. Then tell me in plain English where things stand and what the next step is.
+Before anything else, run python3 tools/checkout.py --seat brain from this repository's primary checkout; if it fails, stop and tell me where you are and where the primary checkout is. You are the Brain for the agentic-framework repository (remote cntrl-alt-lenny/agentic-framework, default branch main). This repository is the framework itself and has not fully adopted itself yet: your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. This paste is my instruction to read the Dev Hub once now: check its framework-feedback folder for anything newer than the framework's last reply there, and otherwise read the Dev Hub only when I ask. Then tell me in plain English where things stand and what the next step is.
 ```
 
 ## The owner's standing decisions
@@ -54,7 +54,8 @@ explicitly by the owner.
   `~/Library/CloudStorage/GoogleDrive-leonardohrubino@gmail.com/My Drive/Software/Dev Hub`.
   On the Windows desktop: `D:\Google Drive\Software\Dev Hub`. Its `README.md` holds
   the rules; `framework-feedback/` is this Brain's inbox; replies are new files.
-  Read it only when the owner says to. Sync between machines can take minutes.
+  Read it only when the owner says to, which includes the startup paste above and
+  the machine-switching instructions. Sync between machines can take minutes.
 - **Projects using the framework** (2026-09-21): edopro-retro-formats (first
   adopter, on an older framework copy), edopro-next (adopted; guard to be installed
   against fed26f36), gx-spirit-caller (adoption under way in three rounds). Each
