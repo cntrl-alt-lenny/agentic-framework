@@ -323,7 +323,7 @@ def _validate_namespace_forms(
         prefix for prefix in prefixes
         if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
         and prefix not in role_prefixes
-        and bool(set(re.split(r"[-_]", prefix)) & role_prefixes)
+        and _namespace_carries_role(prefix, role_prefixes)
     ]
     if role_bearing:
         raise ValueError(
@@ -331,6 +331,28 @@ def _validate_namespace_forms(
             + ", ".join(role_bearing)
             + "; a custom namespace may not carry a declared role or coordinator"
         )
+
+
+def _namespace_carries_role(prefix: str, role_prefixes: set[str]) -> bool:
+    """Return whether a namespace contains a role as separator-delimited words.
+
+    Both namespaces and declared role names may contain hyphens or underscores.
+    Comparing whole split pieces misses ``lead-brain`` inside
+    ``acme-lead-brain``; comparing the role's own word sequence preserves the
+    old boundary semantics while handling compound role names.
+    """
+    namespace_words = tuple(word for word in re.split(r"[-_]", prefix) if word)
+    for role in role_prefixes:
+        role_words = tuple(word for word in re.split(r"[-_]", role) if word)
+        if not role_words or len(role_words) > len(namespace_words):
+            continue
+        width = len(role_words)
+        if any(
+            namespace_words[index:index + width] == role_words
+            for index in range(len(namespace_words) - width + 1)
+        ):
+            return True
+    return False
 
 
 def branch_namespace_declarations(

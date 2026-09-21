@@ -166,6 +166,67 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                     root=root, roles=("builder",),
                 )
 
+    def test_hyphenated_declared_roles_and_coordinator_are_refused_everywhere(self):
+        roles = ("lead-brain", "build-team")
+        coordinator = "chief-coordinator"
+        for namespace in (
+            "acme-lead-brain", "acme-build-team", "acme-chief-coordinator",
+        ):
+            with self.subTest(namespace=namespace):
+                declaration = (
+                    f'<!-- guard:branch-namespaces prefixes="{namespace}" -->'
+                )
+                with self.assertRaisesRegex(ValueError, "declared role"):
+                    neutrality.branch_namespace_declarations(
+                        declaration, roles=roles, coordinator=coordinator,
+                    )
+                with self.assertRaisesRegex(ValueError, "declared role"):
+                    neutrality.scan(
+                        f"Create branch `{namespace}/next` for this round.\n",
+                        roles, coordinator=coordinator,
+                        branch_namespaces=(namespace,),
+                    )
+
+    def test_command_line_uses_the_same_hyphenated_role_context(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+            (root / "docs" / "branch-namespaces").mkdir(parents=True)
+            (root / "docs" / "branch-namespaces" / "acme-lead-brain.md").write_text(
+                "This is established project structure, not a role or provider lane.\n",
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                '<!-- guard:branch-namespaces prefixes="acme-lead-brain" -->\n'
+                "Create branch `acme-lead-brain/next` for this round.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "witness"], cwd=root, check=True)
+            proc = subprocess.run(
+                [
+                    sys.executable, str(ROOT / "tools" / "neutrality.py"),
+                    str(root / "AGENTS.md"), "--roles", "lead-brain,build-team",
+                    "--coordinator", "chief-coordinator",
+                ],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn("declared role", proc.stdout + proc.stderr)
+
+    def test_installed_guard_passes_rendered_role_context_to_declaration_discovery(self):
+        template = (ROOT / "templates" / "tests" / "test_role_neutrality.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "branch_namespaces_for_paths(\n"
+            "        [str(ROOT)], roles=ROLES, coordinator=COORDINATOR\n"
+            "    )",
+            template,
+        )
+
     def test_namespace_boundary_is_documented_without_a_vendor_claim(self):
         for path in (
             ROOT / "framework" / "CONSTITUTION.md",
@@ -176,6 +237,10 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("does not identify providers", text)
                 self.assertIn("reviewed human", text)
+        template = (ROOT / "templates" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("single hyphens", template)
+        self.assertIn("hyphenated role", template)
+        self.assertIn("filename-only formality", template)
         adoption = (ROOT / "framework" / "adoption.md").read_text(
             encoding="utf-8"
         )

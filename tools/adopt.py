@@ -21,10 +21,11 @@ Options:
                        manifest — never from its name. See `tools/adapters.py`.
     --dry-run          Print the plan; write nothing.
 
-Safety: an existing file is never overwritten. A byte-identical file is
-reported as already current; a different file gets the framework version
-alongside it as `<name>.framework` and is reported as a collision to merge by
-hand. Re-running is therefore safe and idempotent.
+Safety: an existing file is never overwritten. A file is reported as already
+current only when its bytes and any required executable mode already make it
+usable; anything else gets the framework version alongside it as
+`<name>.framework` and is reported as a collision to merge by hand. Re-running
+is therefore safe and idempotent.
 """
 
 from __future__ import annotations
@@ -87,6 +88,24 @@ class Plan:
     notes: list[str] = field(default_factory=list)
     ensure_worktrees_ignore: bool = False
     target: Path = Path(".")
+
+
+def _file_matches(path: Path, content: bytes, executable: bool) -> bool:
+    """Whether an existing file is complete for the installed framework use.
+
+    A byte-identical executable script with mode 0644 is not current: adoption
+    would still need to make it runnable. Read failures deliberately mean
+    "collision", never "current" and never an exception that aborts the plan.
+    """
+    try:
+        if not path.is_file() or path.read_bytes() != content:
+            return False
+        # Windows cannot represent POSIX execute bits. Its existing-file
+        # equivalence is therefore byte-based, while newly written executable
+        # files still go through apply_plan's explicit postcondition warning.
+        return not executable or os.name == "nt" or executable_bit_took(path)
+    except (OSError, ValueError):
+        return False
 
 
 def tracked_hook_line_endings(target: Path) -> list[str]:
@@ -222,13 +241,14 @@ def build_plan(
     def add(rel: str, content: str, executable: bool = False) -> None:
         dst = target / rel
         installed = content.replace("\r\n", "\n").replace("\r", "\n")
+        installed_bytes = installed.encode("utf-8")
         if dst.exists():
-            if dst.is_file() and dst.read_bytes() == installed.encode("utf-8"):
+            if _file_matches(dst, installed_bytes, executable):
                 plan.current.append(dst)
                 return
             sibling = dst.with_name(dst.name + ".framework")
             while sibling.exists():
-                if sibling.is_file() and sibling.read_bytes() == installed.encode("utf-8"):
+                if _file_matches(sibling, installed_bytes, executable):
                     plan.collisions.append((dst, sibling))
                     plan.current.append(sibling)
                     return

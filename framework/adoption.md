@@ -163,20 +163,20 @@ other project-owned namespaces may declare them in its root `AGENTS.md`:
 ```
 
 `m<N>` means a literal `m` followed by one or more decimal digits; `meta` means
-the literal `meta/` namespace. A custom namespace such as `release` or
-`feature` must be a single lower-case alphanumeric label and must have a
-tracked project-structure witness at
-`docs/branch-namespaces/<name>.md`. A hyphenated name such as `modern-ui` is
-valid, but a custom namespace carrying a declared role or coordinator, such as
-acme-builder, remains refused. The witness must explain which established
-project-owned structure uses the namespace, where that structure is visible,
-and why the namespace is not a role or provider identity; a filename-only
-formality is not sufficient review. The tracked witness establishes
+the literal `meta/` namespace. A custom namespace must be a lower-case project
+namespace made of letters, digits, and single hyphens, and must have a tracked
+project-structure witness at `docs/branch-namespaces/<name>.md`. A namespace
+carrying any declared role or coordinator, including a hyphenated one such as
+`acme-lead-brain` for `lead-brain`, remains refused. The witness must explain
+which established project-owned structure uses the namespace, where that
+structure is visible, and why the namespace is not a role or provider identity;
+a filename-only formality is not sufficient review. The tracked witness establishes
 project-owned structure, but the scanner does not identify providers or prove
 that a label is not provider-shaped. Declaring a custom namespace is therefore
 a reviewed human decision, not a machine-verified neutrality guarantee. When
 neutrality is enabled, its test and command-line scanner discover the same
-declaration and apply it to every normative document. A malformed, duplicate,
+declaration using the project's declared roles and coordinator and apply it to
+every normative document. A malformed, duplicate,
 unsupported, role-bearing, or unsupported-by-evidence declaration fails the
 installed guard.
 Declarations inside fenced or four-space-indented Markdown code, and inside
