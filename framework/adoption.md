@@ -32,6 +32,7 @@ project."*
 | `tools/textblocks.py` *(when neutrality is enabled)* | Shared counterexample parsing used by the optional installed guards. |
 | `tools/checkout.py` | The first-action checkout check. |
 | `tools/report.py` | The provider-neutral completion-report writer every Worker and Verifier contract requires — installed unconditionally, with no `--adapter` needed. See `reports.md`. |
+| `tools/line_endings.py` | Detects and safely refreshes tracked executable text files whose working-tree bytes are CRLF or mixed. It discovers paths from Git and the files themselves, not from an adapter list. |
 | `.gitattributes` | LF normalization for installed scripts and hooks. |
 | `.gitignore` | Adoption appends `.worktrees/` without changing existing rules. |
 | `.githooks/pre-push` *(optional)* | A client-side gate, if the project has validation worth running early. |
@@ -80,8 +81,9 @@ consistent framework update, move these together in one change:
 
 1. Every document in `tools/adopt.py`'s `VERBATIM_DOCS`, installed under
    `docs/agents/` — the complete set is listed in the adoption table above.
-2. The baseline installed tools `tools/checkout.py`, `tools/report.py`, and
-   `tests/test_checkout.py` and `tests/test_report.py`.
+2. The baseline installed tools `tools/checkout.py`, `tools/report.py`,
+   `tools/line_endings.py`, and `tests/test_checkout.py` and
+   `tests/test_report.py`.
 3. When neutrality is enabled, `tools/neutrality.py`, `tools/textblocks.py`,
    `tools/authority.py`, and `tests/test_role_neutrality.py`.
 4. The installed root `.gitattributes`, and `.githooks/pre-push` when the
@@ -101,14 +103,20 @@ mechanism.
 
 The `.gitattributes` rule is installed unconditionally, but Git does not
 rewrite an unchanged working file merely because a new attribute now applies
-to it. After adoption, check every clone and linked worktree that can run a
-framework hook:
+to it. After adoption, check every checkout in this clone that can run a
+framework hook. A separate clone has a separate Git index and must be checked
+there independently; the adoption warning cannot inspect it. From each
+checkout run:
 
 ```
-git ls-files --eol -- .githooks
+python3 tools/line_endings.py check
 ```
 
-Treat `w/crlf` or `w/mixed` on a tracked hook as a portability hazard. The
+The detector discovers every tracked executable text file (including adapter
+hooks) from Git's executable mode and the file's shebang, and always includes
+the `.githooks/` root because Git treats it as a hook topology even before its
+mode is committed correctly. It does not claim to inspect another clone.
+Treat `w/crlf` or `w/mixed` on a tracked framework script as a portability hazard. The
 effect depends on the platform and the shell: on macOS the framework's CRLF
 `#!/bin/sh` hook was refused by Git with `cannot exec ... No such file or
 directory`; on Windows 11 Pro 10.0.26200 with Git 2.54.0.windows.1 and its
@@ -118,22 +126,23 @@ Windows shells were not tested. This is not evidence of a Windows guard
 bypass; it is why a clone that later moves to macOS or Linux must be repaired.
 
 After the adoption change containing `.gitattributes` is committed, refresh
-without discarding local work:
+without a stash. The refresh tool changes only line-ending bytes in the files
+it identifies and stages only those paths; it never pops an older stash, drops
+local content, or changes another linked worktree. Run it once in each
+checkout:
 
 ```
-git status --short
-git stash push --include-untracked -m "before framework line-ending refresh"
-git add --renormalize .
+python3 tools/line_endings.py refresh
+git diff --check
 git diff --cached --check
-git commit -m "Normalize framework-managed text files"
-git restore --source=HEAD --worktree -- .githooks
-git stash pop
 ```
 
-Review the staged diff before committing. The stash is recoverable; if
-`stash pop` conflicts, resolve the conflict and do not drop the stash. Repeat
-the `ls-files --eol` check in each worktree. `tools/adopt.py` also warns during
-its plan when it detects an existing tracked hook with `w/crlf` or `w/mixed`.
+Review the staged diff before committing, then commit only the intended
+normalization. `tools/adopt.py` also warns during its plan when it detects an
+existing unsafe tracked framework script in this clone or one of its linked
+worktrees. No stash operation is part of this recovery, so an older stash in
+this clone — including one held by another seat's worktree — is neither read
+nor dropped.
 
 ## Branch namespace declarations
 

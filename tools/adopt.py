@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import adapters as adapter_manifests  # noqa: E402
+import line_endings  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FRAMEWORK = ROOT / "framework"
@@ -87,12 +88,12 @@ class Plan:
 
 
 def tracked_hook_line_endings(target: Path) -> list[str]:
-    """Return tracked hook paths whose worktree bytes are not LF-only.
+    """Return unsafe tracked executable text paths in this clone's worktrees.
 
-    ``.gitattributes`` can describe the desired checkout without rewriting an
-    unchanged file.  Git's own ``ls-files --eol`` is the cheap, authoritative
-    observation we need here; a failed or non-Git target simply has no warning
-    to add to the adoption plan.
+    The paths are discovered from Git's executable mode and the files'
+    shebangs, not from a directory or adapter-name allowlist. ``.githooks``
+    remains a fixed Git hook root even when a pre-existing file has not yet
+    recorded its executable mode.
     """
     unsafe: list[str] = []
     worktrees = [target]
@@ -112,24 +113,14 @@ def tracked_hook_line_endings(target: Path) -> list[str]:
 
     for checkout in worktrees:
         try:
-            proc = subprocess.run(
-                ["git", "-C", str(checkout), "ls-files", "--eol", "--", ".githooks"],
-                capture_output=True, text=True, check=False,
-            )
+            paths = line_endings.tracked_unsafe_paths(checkout)
         except (FileNotFoundError, OSError):
             continue
-        if proc.returncode != 0:
-            continue
-        for line in proc.stdout.splitlines():
-            metadata, separator, path = line.partition("\t")
-            fields = metadata.split()
-            if not separator or len(fields) < 2:
-                continue
-            if fields[1] in {"w/crlf", "w/mixed"}:
-                label = path.strip()
-                if checkout != target:
-                    label = f"{checkout}: {label}"
-                unsafe.append(label)
+        for path in paths:
+            label = path
+            if checkout != target:
+                label = f"{checkout}: {path}"
+            unsafe.append(label)
     return unsafe
 
 
@@ -323,6 +314,18 @@ def build_plan(
         "written."
     )
 
+    # Installed unconditionally: a project receives executable framework text
+    # content from this framework whenever it takes the hooks or an adapter,
+    # and a CRLF checkout makes those inert. Cheap, and wrong to make
+    # conditional on remembering a flag.
+    line_endings_src = ROOT / "tools" / "line_endings.py"
+    with line_endings_src.open("rb") as stream:
+        line_endings_executable = stream.readline().startswith(b"#!")
+    add(
+        "tools/line_endings.py", line_endings_src.read_text(encoding="utf-8"),
+        executable=line_endings_executable,
+    )
+
     # Installed unconditionally: a project receives `#!/bin/sh` content from
     # this framework whenever it takes the hooks or an adapter, and a CRLF
     # checkout makes those inert. Cheap, and wrong to make conditional on
@@ -332,11 +335,11 @@ def build_plan(
     stale_hooks = tracked_hook_line_endings(target)
     if stale_hooks:
         plan.notes.append(
-            "WARNING: tracked hook(s) still have CRLF or mixed working-tree "
-            "line endings: " + ", ".join(stale_hooks) + ". Run `git ls-files "
-            "--eol -- .githooks`, then follow docs/agents/git-and-isolation.md's safe "
-            "stash, renormalize, restore and reapply steps before relying on "
-            "the hook. The effect depends on the platform and shell."
+            "WARNING: tracked executable framework text file(s) still have "
+            "CRLF or mixed working-tree line endings: " + ", ".join(stale_hooks)
+            + ". Run `python3 tools/line_endings.py check`, then follow "
+            "docs/agents/git-and-isolation.md's stash-free refresh steps before "
+            "relying on the script. The effect depends on the platform and shell."
         )
 
     if hooks:
