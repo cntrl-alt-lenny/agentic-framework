@@ -32,6 +32,7 @@ project."*
 | `tools/textblocks.py` *(when neutrality is enabled)* | Shared counterexample parsing used by the optional installed guards. |
 | `tools/checkout.py` | The first-action checkout check. |
 | `tools/report.py` | The provider-neutral completion-report writer every Worker and Verifier contract requires — installed unconditionally, with no `--adapter` needed. See `reports.md`. |
+| `tools/line_endings.py` | Detects and safely refreshes tracked executable text files whose working-tree bytes are CRLF or mixed. It discovers paths from Git and the files themselves, not from an adapter list. |
 | `.gitattributes` | LF normalization for installed scripts and hooks. |
 | `.gitignore` | Adoption appends `.worktrees/` without changing existing rules. |
 | `.githooks/pre-push` *(optional)* | A client-side gate, if the project has validation worth running early. |
@@ -75,17 +76,73 @@ declarations as carefully as the text they exempt.
 
 ## Updating an adopted framework consistently
 
-The canonical documents and the installed neutrality guard are one versioned
-surface. When updating an adopted project, move these together in one change:
-all documents listed in `tools/adopt.py`'s `VERBATIM_DOCS` (installed under
-`docs/agents/`), and, when neutrality is enabled, `tools/neutrality.py`,
-`tools/textblocks.py`, `tools/authority.py`, and
-`tests/test_role_neutrality.py`. The adoption plan names this coupling when it
-writes the guard. Updating only the scanner leaves copied canonical documents
-stale; updating only the documents leaves the installed guard stale. Either
-mixed state can report findings caused by the framework's old copies rather
-than by project-authored text. This is a migration constraint for a consistent
-update, not a synchronisation mechanism.
+The canonical documents and installed tools are one versioned surface. For a
+consistent framework update, move these together in one change:
+
+1. Every document in `tools/adopt.py`'s `VERBATIM_DOCS`, installed under
+   `docs/agents/` — the complete set is listed in the adoption table above.
+2. The baseline installed tools `tools/checkout.py`, `tools/report.py`,
+   `tools/line_endings.py`, and `tests/test_checkout.py` and
+   `tests/test_report.py`.
+3. When neutrality is enabled, `tools/neutrality.py`, `tools/textblocks.py`,
+   `tools/authority.py`, and `tests/test_role_neutrality.py`.
+4. The installed root `.gitattributes`, and `.githooks/pre-push` when the
+   project opted into that hook.
+
+The framework repository's `tools/adopt.py` is the installer and is not copied
+into an adopted project; update it by using the same framework revision that
+supplies the files above. Updating only the scanner or report tool leaves
+copied canonical documents stale; updating only the documents leaves the
+installed guard or report mechanism stale. Either mixed state can report
+findings caused by the framework's old copies rather than by project-authored
+text, or can make a new delivery/line-ending rule unavailable to the adopter.
+This is a migration constraint for a consistent update, not a synchronisation
+mechanism.
+
+### Existing working trees and line endings
+
+The `.gitattributes` rule is installed unconditionally, but Git does not
+rewrite an unchanged working file merely because a new attribute now applies
+to it. After adoption, check every checkout in this clone that can run a
+framework hook. A separate clone has a separate Git index and must be checked
+there independently; the adoption warning cannot inspect it. From each
+checkout run:
+
+```
+python3 tools/line_endings.py check
+```
+
+The detector discovers every tracked executable text file (including adapter
+hooks) from Git's executable mode and the file's shebang, and always includes
+the `.githooks/` root because Git treats it as a hook topology even before its
+mode is committed correctly. It does not claim to inspect another clone.
+Treat `w/crlf` or `w/mixed` on a tracked framework script as a portability hazard. The
+effect depends on the platform and the shell: on macOS the framework's CRLF
+`#!/bin/sh` hook was refused by Git with `cannot exec ... No such file or
+directory`; on Windows 11 Pro 10.0.26200 with Git 2.54.0.windows.1 and its
+bundled GNU bash 5.3.9 (`igncr` off), the same hook executed its real logic and
+rejected a protected-branch push normally. WSL Git, Cygwin Git, and other
+Windows shells were not tested. This is not evidence of a Windows guard
+bypass; it is why a clone that later moves to macOS or Linux must be repaired.
+
+After the adoption change containing `.gitattributes` is committed, refresh
+without a stash. The refresh tool changes only line-ending bytes in the files
+it identifies and stages only those paths; it never pops an older stash, drops
+local content, or changes another linked worktree. Run it once in each
+checkout:
+
+```
+python3 tools/line_endings.py refresh
+git diff --check
+git diff --cached --check
+```
+
+Review the staged diff before committing, then commit only the intended
+normalization. `tools/adopt.py` also warns during its plan when it detects an
+existing unsafe tracked framework script in this clone or one of its linked
+worktrees. No stash operation is part of this recovery, so an older stash in
+this clone — including one held by another seat's worktree — is neither read
+nor dropped.
 
 ## Branch namespace declarations
 
@@ -165,6 +222,11 @@ after each declared role.
 
 The script never overwrites an existing file: it writes a `.framework` sibling
 and reports the collision instead. Re-running it is safe.
+
+On Windows, the script may complete with a warning because Windows does not
+preserve POSIX executable bits. That warning is not a claim that a later POSIX
+clone is safe: apply each printed `git update-index --chmod=+x <path>` command
+before committing, and check the committed mode from a POSIX environment.
 
 ### 5. Write `AGENTS.md` properly
 

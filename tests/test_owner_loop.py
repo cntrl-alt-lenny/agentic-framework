@@ -261,6 +261,37 @@ class TestDeliveryCommand(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("delivered:", proc.stdout)
 
+    def test_advanced_branch_without_local_report_is_not_retryable_delivery(self):
+        """A pushed branch cannot make another clone's private inbox appear."""
+        tmp, seed, base = self._repo()
+        self.addCleanup(tmp.cleanup)
+        remote = Path(tmp.name) / "origin.git"
+        self._git(seed, "init", "--bare", "-q", str(remote))
+        self._git(seed, "remote", "add", "origin", str(remote))
+        self._git(seed, "push", "-q", "origin", "main")
+
+        builder = Path(tmp.name) / "builder"
+        verifier = Path(tmp.name) / "verifier"
+        for clone in (builder, verifier):
+            subprocess.run(
+                ["git", "clone", "-q", "-b", "main", str(remote), str(clone)],
+                check=True,
+            )
+            self._git(clone, "config", "user.email", "test@example.invalid")
+            self._git(clone, "config", "user.name", "Test")
+
+        self._git(builder, "switch", "-c", "worker/task")
+        (builder / "change.txt").write_text("delivered\n", encoding="utf-8")
+        self._git(builder, "add", "change.txt")
+        self._git(builder, "commit", "-q", "-m", "deliver")
+        self._git(builder, "push", "-q", "-u", "origin", "worker/task")
+
+        proc = self._check(verifier, base)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("branch delivered but report unavailable in this clone", proc.stdout)
+        self.assertIn("obtain the report from the source clone", proc.stdout)
+        self.assertNotIn("not delivered yet", proc.stdout)
+
     def test_legacy_latest_only_inbox_still_delivers(self):
         tmp, repo, base = self._repo()
         self.addCleanup(tmp.cleanup)

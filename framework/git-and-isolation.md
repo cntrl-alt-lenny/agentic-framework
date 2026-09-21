@@ -178,6 +178,47 @@ Two wrinkles worth knowing before you trust a `pre-push` hook:
 **Treat a green local hook as "I probably did not just waste a CI round", never
 as "this is enforced."**
 
+### Existing working trees and line endings
+
+Adoption installs `.gitattributes` with `eol=lf`, but Git does not rewrite an
+unchanged working file just because a new attribute applies to it. After an
+update, check every checkout in the current clone that can run a framework
+hook. A separate clone must be checked independently:
+
+```bash
+python3 tools/line_endings.py check
+```
+
+The detector derives its paths from Git's executable mode and each file's
+shebang, so adapter hooks are covered without a hard-coded adapter directory;
+it also includes the fixed `.githooks/` root. Treat `w/crlf` or `w/mixed` on a
+tracked framework script as a portability hazard. The
+effect depends on the platform and shell: macOS Git refused the framework's
+CRLF `#!/bin/sh` hook with `cannot exec ... No such file or directory`; Windows
+11 Pro 10.0.26200 with Git 2.54.0.windows.1 and its bundled GNU bash 5.3.9
+(`igncr` off) executed the same hook's real logic and rejected a protected
+branch push normally. WSL Git, Cygwin Git, and other Windows shells were not
+tested. This is not evidence of a Windows guard bypass; it is why a clone that
+later moves to macOS or Linux must be repaired.
+
+After the adoption change containing `.gitattributes` is committed, refresh
+without a stash. Run this in each checkout:
+
+```bash
+python3 tools/line_endings.py refresh
+git diff --check
+git diff --cached --check
+```
+
+The tool changes only line-ending bytes in every file it identified and stages
+only those paths. It does not use, inspect, apply or drop any stash, restore
+from another revision, or modify another worktree, so it is safe while other
+seats hold work. Review the staged diff before committing. Repeat the check in
+each checkout, and remember that a separate clone is not inspected by a run in
+this clone. The framework repository's `tools/adopt.py` warns during its plan
+when it detects an existing unsafe tracked framework script in this clone or
+one of its linked worktrees.
+
 ## The identity limit
 
 When every agent authenticates with the same repository credentials, the server

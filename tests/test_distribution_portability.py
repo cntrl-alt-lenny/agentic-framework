@@ -85,8 +85,14 @@ def committed_crlf_files(root: Path = ROOT) -> list[str]:
         if mode == "120000" or not is_git_text(path, root):
             continue
         try:
-            blob = (root / path).read_bytes()
-        except OSError:
+            # Read the indexed blob, not the working file. On Windows with
+            # core.autocrlf enabled, the latter may be CRLF even when the
+            # committed text is LF, which would make this guard report the
+            # platform's checkout conversion as a repository defect.
+            blob = subprocess.check_output(
+                ["git", "show", f":{path}"], cwd=root,
+            )
+        except (OSError, subprocess.CalledProcessError):
             continue
         if b"\r\n" in blob:
             offenders.append(path)
@@ -132,13 +138,20 @@ class TestLineEndingsArePinned(unittest.TestCase):
             repo = Path(tmp)
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             subprocess.run(
+                ["git", "config", "core.autocrlf", "false"],
+                cwd=repo, check=True,
+            )
+            subprocess.run(
                 ["git", "config", "user.email", "tests@example.com"],
                 cwd=repo, check=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Tests"], cwd=repo, check=True,
             )
-            (repo / ".gitattributes").write_text("*.bin text=auto\n", encoding="utf-8")
+            # Use bytes so this fixture stays LF on Windows before Git indexes
+            # it; the test is about the indexed CRLF in notes.txt, not the
+            # host's newline translation of the attributes file.
+            (repo / ".gitattributes").write_bytes(b"*.bin text=auto\n")
             (repo / "payload.bin").write_bytes(b"\x00\r\n\xff\x01")
             (repo / "notes.txt").write_bytes(b"line one\r\nline two\n")
             subprocess.run(

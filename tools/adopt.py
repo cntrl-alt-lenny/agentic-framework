@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import adapters as adapter_manifests  # noqa: E402
+import line_endings  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FRAMEWORK = ROOT / "framework"
@@ -83,6 +85,44 @@ class Plan:
     notes: list[str] = field(default_factory=list)
     ensure_worktrees_ignore: bool = False
     target: Path = Path(".")
+
+
+def tracked_hook_line_endings(target: Path) -> list[str]:
+    """Return unsafe tracked executable text paths in this clone's worktrees.
+
+    The paths are discovered from Git's executable mode and the files'
+    shebangs, not from a directory or adapter-name allowlist. ``.githooks``
+    remains a fixed Git hook root even when a pre-existing file has not yet
+    recorded its executable mode.
+    """
+    unsafe: list[str] = []
+    target = target.resolve()
+    worktrees = [target]
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(target), "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, OSError):
+        listed = None
+    if listed is not None and listed.returncode == 0:
+        for line in listed.stdout.splitlines():
+            if line.startswith("worktree "):
+                checkout = Path(line.removeprefix("worktree ")).resolve()
+                if checkout not in worktrees:
+                    worktrees.append(checkout)
+
+    for checkout in worktrees:
+        try:
+            paths = line_endings.tracked_unsafe_paths(checkout)
+        except (FileNotFoundError, OSError):
+            continue
+        for path in paths:
+            label = path
+            if checkout != target:
+                label = f"{checkout}: {path}"
+            unsafe.append(label)
+    return unsafe
 
 
 def topology_diagram(coordinator: str, workers: list[str], verifier: bool) -> str:
@@ -275,11 +315,33 @@ def build_plan(
         "written."
     )
 
+    # Installed unconditionally: a project receives executable framework text
+    # content from this framework whenever it takes the hooks or an adapter,
+    # and a CRLF checkout makes those inert. Cheap, and wrong to make
+    # conditional on remembering a flag.
+    line_endings_src = ROOT / "tools" / "line_endings.py"
+    with line_endings_src.open("rb") as stream:
+        line_endings_executable = stream.readline().startswith(b"#!")
+    add(
+        "tools/line_endings.py", line_endings_src.read_text(encoding="utf-8"),
+        executable=line_endings_executable,
+    )
+
     # Installed unconditionally: a project receives `#!/bin/sh` content from
     # this framework whenever it takes the hooks or an adapter, and a CRLF
     # checkout makes those inert. Cheap, and wrong to make conditional on
     # remembering a flag.
     add(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"))
+
+    stale_hooks = tracked_hook_line_endings(target)
+    if stale_hooks:
+        plan.notes.append(
+            "WARNING: tracked executable framework text file(s) still have "
+            "CRLF or mixed working-tree line endings: " + ", ".join(stale_hooks)
+            + ". Run `python3 tools/line_endings.py check`, then follow "
+            "docs/agents/git-and-isolation.md's stash-free refresh steps before "
+            "relying on the script. The effect depends on the platform and shell."
+        )
 
     if hooks:
         add(".githooks/pre-push",
@@ -440,14 +502,22 @@ def main(argv: list[str] | None = None) -> int:
     if unset:
         print(
             "\nadopt: WARNING -- the executable bit did not take on these "
-            "files. This host cannot set it (Windows discards it silently), "
-            "so a POSIX clone would receive them inert. Fix before "
-            "committing:",
+            "files. This host cannot set it (Windows discards it silently). "
+            "Windows can use the installed files, but a POSIX clone would "
+            "receive them inert. Fix before committing:",
             file=sys.stderr,
         )
         for dst in unset:
             print(f"  git update-index --chmod=+x {dst.relative_to(target)}",
                   file=sys.stderr)
+        if os.name == "nt":
+            print(
+                "adopt: Windows completed the local copy with this warning; "
+                "set the Git executable mode before a POSIX clone consumes it.",
+                file=sys.stderr,
+            )
+            print("\nadopt: done.")
+            return 0
         return 1
     print("\nadopt: done.")
     return 0

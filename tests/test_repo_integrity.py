@@ -96,6 +96,21 @@ class TestCIRunsTheSameDiscovery(unittest.TestCase):
             "collection guarantee above says nothing about CI",
         )
 
+    def test_workflow_runs_the_suite_on_windows(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "name: framework invariants (Windows)", text,
+            "Windows portability must be exercised by CI, not inferred from "
+            "simulated faults",
+        )
+        self.assertIn("runs-on: windows-latest", text)
+
+    def test_existing_framework_invariants_job_remains_unchanged_and_macos_is_exercised(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("name: framework invariants\n", text)
+        self.assertIn("name: framework invariants (macOS)", text)
+        self.assertIn("runs-on: macos-latest", text)
+
 
 class TestDocumentLinksResolve(unittest.TestCase):
     def _tracked_paths(self) -> set[Path]:

@@ -19,3 +19,25 @@ jobs:
       # asserts this is the same discovery the suite runs locally.
       - name: Run the invariant suite
         run: python -m unittest discover -s tests -t . -v
+
+  windows:
+    name: framework invariants (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the invariant suite
+        run: python -m unittest discover -s tests -t . -v
+
+  macos:
+    name: framework invariants (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the invariant suite
+        run: python -m unittest discover -s tests -t . -v

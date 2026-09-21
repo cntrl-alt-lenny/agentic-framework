@@ -9,6 +9,9 @@ but never executed" failure this framework catalogues.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -63,6 +66,7 @@ class TestDefaultAdoption(AdoptionCase):
             "tools/textblocks.py",
             "tools/checkout.py",
             "tools/report.py",
+            "tools/line_endings.py",
             "tests/test_role_neutrality.py",
             "tests/test_checkout.py",
             "tests/test_report.py",
@@ -85,12 +89,18 @@ class TestDefaultAdoption(AdoptionCase):
         self.assertTrue((self.target / "docs" / "agents" / "reports.md").is_file())
 
     def test_shebang_tools_are_installed_executable(self):
+        if os.name == "nt":
+            self.skipTest(
+                "Windows cannot preserve POSIX executable bits; adopt.py warns "
+                "and the committed-mode guard runs from the Git index"
+            )
         for rel in (
             "tools/authority.py",
             "tools/neutrality.py",
             "tools/textblocks.py",
             "tools/checkout.py",
             "tools/report.py",
+            "tools/line_endings.py",
         ):
             with self.subTest(path=rel):
                 self.assertTrue((self.target / rel).stat().st_mode & 0o111)
@@ -382,6 +392,11 @@ class TestTopologyOptions(AdoptionCase):
         self.assertIn("docs/agents/roles/worker.md", adapter.read_text(encoding="utf-8"))
 
     def test_adapter_shebang_files_are_installed_executable(self):
+        if os.name == "nt":
+            self.skipTest(
+                "Windows cannot preserve POSIX executable bits; adopt.py warns "
+                "and the committed-mode guard runs from the Git index"
+            )
         self.assertEqual(run_adopt(self.target, "--adapter", "claude-code"), 0)
         for rel in (
             ".claude/hooks/run_python.sh",
@@ -407,6 +422,166 @@ class TestTopologyOptions(AdoptionCase):
     def test_hooks_are_installed_only_when_asked(self):
         self.assertEqual(run_adopt(self.target, "--hooks"), 0)
         self.assertTrue((self.target / ".githooks/pre-push").is_file())
+
+
+class TestLineEndingWarnings(AdoptionCase):
+    def test_adoption_warns_on_existing_crlf_hooks_using_git_ls_files_eol(self):
+        attributes = self.target / ".gitattributes"
+        attributes.write_text("* text=auto eol=lf\n", encoding="utf-8")
+        hook = self.target / ".githooks/pre-push"
+        hook.parent.mkdir()
+        hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        subprocess.run(["git", "add", ".gitattributes", ".githooks"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "old hook"], cwd=self.target, check=True,
+        )
+        # Reproduce the real migration hazard: the index is normalized, but an
+        # unchanged pre-existing worktree file remains CRLF.
+        hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        linked = self.target / ".worktrees" / "old"
+        subprocess.run(
+            ["git", "worktree", "add", "-q", str(linked), "HEAD"],
+            cwd=self.target, check=True,
+        )
+        linked_hook = linked / ".githooks" / "pre-push"
+        linked_hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        eol = subprocess.run(
+            ["git", "ls-files", "--eol", "--", ".githooks"],
+            cwd=self.target, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("i/lf", eol)
+        self.assertIn("w/crlf", eol)
+        self.assertIn("attr/text=auto eol=lf", eol)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target), 0)
+        self.assertIn("tracked executable framework text file(s)", output.getvalue())
+        self.assertIn("tools/line_endings.py check", output.getvalue())
+        self.assertIn(str(linked.resolve()), output.getvalue())
+
+    def test_adoption_warns_on_a_tracked_adapter_script_not_in_githooks(self):
+        script = self.target / ".claude" / "hooks" / "run_python.sh"
+        script.parent.mkdir(parents=True)
+        script.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        script.chmod(0o755)
+        subprocess.run(["git", "add", ".claude"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "old adapter hook"],
+            cwd=self.target, check=True,
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target, "--adapter", "claude-code"), 0)
+        self.assertIn("WARNING: tracked executable framework text file(s)", output.getvalue())
+        self.assertIn(".claude/hooks/run_python.sh", output.getvalue())
+
+    def test_adoption_discovers_an_executable_script_outside_known_hook_roots(self):
+        script = self.target / "future-adapter" / "hooks" / "stop.sh"
+        script.parent.mkdir(parents=True)
+        script.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        script.chmod(0o755)
+        subprocess.run(["git", "add", "future-adapter"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "future adapter hook"],
+            cwd=self.target, check=True,
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target), 0)
+        self.assertIn("future-adapter/hooks/stop.sh", output.getvalue())
+
+
+class TestLineEndingRefresh(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name) / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.repo, check=True)
+        for rel in (".githooks/pre-push", ".claude/hooks/run_python.sh"):
+            path = self.repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+            path.chmod(0o755)
+        (self.repo / "seat.txt").write_text("seat\n", encoding="utf-8")
+        (self.repo / ".gitignore").write_text(".worktrees/\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=self.repo, check=True)
+        (self.repo / ".gitattributes").write_text("* text=auto eol=lf\n", encoding="utf-8")
+        subprocess.run(["git", "add", ".gitattributes"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "adopt attributes"], cwd=self.repo, check=True)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _stash_list(self, cwd=None):
+        return subprocess.run(
+            ["git", "stash", "list"], cwd=cwd or self.repo,
+            capture_output=True, text=True, check=True,
+        ).stdout
+
+    def test_refresh_does_not_pop_an_older_stash_from_a_clean_tree(self):
+        (self.repo / "seat.txt").write_text("older local work\n", encoding="utf-8")
+        subprocess.run(["git", "stash", "push", "-q", "-m", "older unrelated stash"], cwd=self.repo, check=True)
+        self.assertEqual(
+            subprocess.run(["git", "status", "--short"], cwd=self.repo,
+                           capture_output=True, text=True, check=True).stdout,
+            "",
+            "the CRLF worktree bytes are clean under eol=lf",
+        )
+        before = self._stash_list()
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "line_endings.py"), "refresh"],
+            cwd=self.repo, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self._stash_list(), before)
+        self.assertEqual((self.repo / ".claude/hooks/run_python.sh").read_bytes(), b"#!/bin/sh\nexit 0\n")
+        self.assertEqual((self.repo / ".githooks/pre-push").read_bytes(), b"#!/bin/sh\nexit 0\n")
+        self.assertEqual((self.repo / "seat.txt").read_text(encoding="utf-8"), "seat\n")
+
+    def test_refresh_is_safe_in_a_worktree_while_another_seat_holds_a_stash(self):
+        other = self.repo / ".worktrees" / "other"
+        subprocess.run(["git", "worktree", "add", "-q", str(other), "HEAD"], cwd=self.repo, check=True)
+        (other / "seat.txt").write_text("other seat work\n", encoding="utf-8")
+        subprocess.run(["git", "stash", "push", "-q", "-m", "other seat stash"], cwd=other, check=True)
+        self.assertEqual(
+            subprocess.run(["git", "status", "--short"], cwd=other,
+                           capture_output=True, text=True, check=True).stdout,
+            "",
+            "the CRLF worktree bytes are clean under eol=lf",
+        )
+        for rel in (".githooks/pre-push", ".claude/hooks/run_python.sh"):
+            (self.repo / rel).write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        self.assertEqual(
+            subprocess.run(["git", "status", "--short"], cwd=self.repo,
+                           capture_output=True, text=True, check=True).stdout,
+            "",
+            "the primary CRLF worktree bytes are clean under eol=lf",
+        )
+        before = self._stash_list(other)
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "line_endings.py"), "refresh"],
+            cwd=self.repo, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self._stash_list(other), before)
+        self.assertEqual((self.repo / ".claude/hooks/run_python.sh").read_bytes(), b"#!/bin/sh\nexit 0\n")
+        self.assertEqual((self.repo / ".githooks/pre-push").read_bytes(), b"#!/bin/sh\nexit 0\n")
+
+
+class TestLineEndingGuidance(unittest.TestCase):
+    def test_guidance_is_stash_free_and_uses_the_complete_refresh_tool(self):
+        for rel in ("framework/adoption.md", "framework/git-and-isolation.md"):
+            text = (ROOT / rel).read_text(encoding="utf-8")
+            with self.subTest(document=rel):
+                self.assertIn("python3 tools/line_endings.py check", text)
+                self.assertIn("python3 tools/line_endings.py refresh", text)
+                self.assertNotIn("git stash push", text)
+                self.assertNotIn("git stash pop", text)
+                self.assertIn("separate clone", text)
 
 
 class TestSafety(AdoptionCase):
@@ -490,6 +665,7 @@ class TestVerbatimDocsStayInSync(unittest.TestCase):
             "tools/textblocks.py",
             "tools/checkout.py",
             "tools/report.py",
+            "tools/line_endings.py",
         )
         for rel in copied:
             with self.subTest(path=rel):
