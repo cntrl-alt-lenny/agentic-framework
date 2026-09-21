@@ -47,6 +47,30 @@ and may never restate policy — see
 Adding or retiring a role is a strategic decision and goes to the owner. A
 provider never creates a lane.
 
+## Project branch namespaces
+
+If this project has milestone, coordination, release, feature, or other
+project-owned branch namespaces in addition to role branches, declare the
+bounded forms it uses in this file:
+
+```text
+<!-- guard:branch-namespaces prefixes="m<N>,meta" -->
+```
+
+`m<N>` covers milestone namespaces and `meta` covers project-coordination
+branches. A custom lower-case alphanumeric label such as `release` or `feature`
+also needs a tracked `docs/branch-namespaces/<name>.md` witness. When the
+optional neutrality guard is installed, its test and command-line scanner
+discover this same declaration. The witness establishes project-owned
+structure; the scanner does not identify providers or prove that a declared
+label is provider-neutral. Declaring a custom namespace is a reviewed human
+decision. A malformed, unsupported, or unevidenced declaration is a failure of
+the installed guard.
+Declarations inside fenced or four-space-indented Markdown code, and inside
+raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are examples
+and inert. A declaration embedded in arbitrary inline HTML or a non-standard
+renderer block remains a human-review case.
+
 ## Non-negotiable project invariants
 
 <!-- Replace this block. These outrank any process below, and they are what an

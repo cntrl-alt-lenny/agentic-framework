@@ -32,6 +32,19 @@ import textblocks  # noqa: E402
 ROLES: tuple[str, ...] = {{ROLES}}
 COORDINATOR = "{{COORDINATOR}}"
 
+# A project may declare the framework's bounded structural forms or a custom
+# lower-case label with tracked project-structure evidence in AGENTS.md. The
+# installed guard carries that declaration to every normative document. It
+# checks syntax and evidence, not provider identity.
+_BRANCH_NAMESPACE_ERROR = None
+try:
+    BRANCH_NAMESPACES = neutrality.branch_namespaces_for_paths([str(ROOT)])
+except ValueError as exc:
+    # Keep the guard as a unittest failure with a summary instead of aborting
+    # test discovery before any result can be reported.
+    BRANCH_NAMESPACES = ()
+    _BRANCH_NAMESPACE_ERROR = str(exc)
+
 #: A name that must appear nowhere else in this repository, so that "it gets
 #: rejected" proves something about providers nobody has heard of yet.
 NOVEL = "NebulaAI"
@@ -55,6 +68,9 @@ def normative_files() -> list[Path]:
 
 
 class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
+    def test_branch_namespace_declaration_is_valid(self):
+        self.assertIsNone(_BRANCH_NAMESPACE_ERROR, _BRANCH_NAMESPACE_ERROR)
+
     def test_scan_set_is_not_empty(self):
         # Fail closed: a guard that scanned nothing must not report success.
         self.assertTrue(
@@ -68,6 +84,7 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             result = neutrality.scan(
                 path.read_text(encoding="utf-8"), ROLES,
                 source=path.relative_to(ROOT).as_posix(), coordinator=COORDINATOR,
+                branch_namespaces=BRANCH_NAMESPACES,
             )
             problems += [str(f) for f in result.findings]
         self.assertEqual(problems, [], "\n".join(problems))
@@ -142,6 +159,7 @@ class TestNovelProviderIsRejected(unittest.TestCase):
         result = neutrality.scan(
             f"Hand the brief to the {NOVEL} {role} this round.",
             ROLES, coordinator=COORDINATOR,
+            branch_namespaces=BRANCH_NAMESPACES,
         )
         self.assertTrue(
             any(f.rule == "compound-lane" for f in result.findings),
@@ -152,6 +170,7 @@ class TestNovelProviderIsRejected(unittest.TestCase):
         result = neutrality.scan(
             f"The queue is nebula-{ROLES[0]} for now.",
             ROLES, coordinator=COORDINATOR,
+            branch_namespaces=BRANCH_NAMESPACES,
         )
         self.assertTrue(
             any(f.rule == "prefixed-lane" for f in result.findings),
@@ -162,6 +181,7 @@ class TestNovelProviderIsRejected(unittest.TestCase):
         result = neutrality.scan(
             f"Cut your branch: git switch -c nebula/{ROLES[0]}-task origin/main",
             ROLES, coordinator=COORDINATOR,
+            branch_namespaces=BRANCH_NAMESPACES,
         )
         self.assertTrue(
             any(f.rule == "branch-namespace" for f in result.findings),
@@ -176,7 +196,10 @@ class TestNovelProviderIsRejected(unittest.TestCase):
             f"You are the **{role.capitalize()}**. Cut your branch: "
             f"git switch -c {role}/some-scope origin/main"
         )
-        result = neutrality.scan(accepted, ROLES, coordinator=COORDINATOR)
+        result = neutrality.scan(
+            accepted, ROLES, coordinator=COORDINATOR,
+            branch_namespaces=BRANCH_NAMESPACES,
+        )
         self.assertEqual(
             [str(f) for f in result.findings], [],
             "a role-named lane must be accepted no matter which tool runs it",

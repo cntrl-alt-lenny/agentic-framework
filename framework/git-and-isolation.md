@@ -101,10 +101,18 @@ above — so it is acceptable only for the coordinating seat.
 
 The prefix left of the slash identifies **which role owns pushes to that
 branch** — never which provider ran it. A project may use a different scheme
-(milestone prefixes, for example) as long as the namespace derives from roles or
-project structure and never from a provider.
+(milestone, coordination, release, or feature prefixes, for example) as long
+as the namespace derives from roles or project structure and never from a
+provider. Declare it in the adopting project's root `AGENTS.md` with
+`<!-- guard:branch-namespaces prefixes="m<N>,meta" -->`. The built-in forms
+are `m<N>` and `meta`; a custom lower-case alphanumeric label also needs a
+tracked `docs/branch-namespaces/<name>.md` witness. The installed and
+command-line guards discover the same declaration, and reject unsupported
+labels or labels without that structural evidence.
 
 <!-- guard:counterexample -->
+<!-- guard:violation branch-namespace roles=builder text="claude/<task>" -->
+<!-- guard:violation branch-namespace roles=builder text="codex/<task>" -->
 <!-- guard:violation branch-namespace roles=builder text="gemini/<task>" -->
 Never: `claude/<task>`, `codex/<task>`, `gemini/<task>`, or any branch namespace
 named after the tool that happened to run the round.

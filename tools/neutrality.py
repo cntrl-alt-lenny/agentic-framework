@@ -17,6 +17,14 @@ to this file.
 function words — not a vendor list. A test asserts it contains no proper nouns,
 so it cannot quietly become one.
 
+BRANCH NAMESPACE DECLARATIONS are deliberately structural, not an arbitrary
+allowlist. A project's AGENTS.md may declare the bounded structural forms
+`m<N>` and `meta`, or a lower-case project namespace backed by a tracked
+`docs/branch-namespaces/<name>.md` evidence file. The scanner checks that
+syntax and evidence, but it cannot identify providers or prove that a custom
+label is provider-neutral. The declaration is therefore a reviewed human
+decision, not a machine-verified guarantee.
+
 HISTORICAL TEXT IS OUT OF SCOPE. Case studies, round logs, archived briefs and
 failure catalogues record which tool actually ran. That is a record of events,
 never a lane definition. Callers pass only their *normative* surface.
@@ -30,12 +38,16 @@ demonstrates:
     ... text that SHOULD be rejected ...
     <!-- /guard:counterexample -->
 
-The declaration names the exact offending text and the roles with which it is
+The declaration names the exact scanner match and the roles with which it is
 invalid. The probe runs that text through the real scanner with those declared
 roles, not the adopting project's roles. A missing, absent or unflagged
-declaration is inert. Findings inside such a block are suppressed by the outer
-scan but still reported separately, so `ScanResult.inert_counterexamples()` can
-make a useless exemption fail.
+declaration is inert. The outer scan suppresses only a validated finding whose
+rule and `Finding.matched` text are covered by the declaration; other findings
+in the same block remain visible. Matching collapses whitespace and removes
+balanced outer backticks, but otherwise requires equality. A partial word or a
+whole surrounding sentence is not a key for the finding. The block is still
+reported separately, so `ScanResult.inert_counterexamples()` can make a
+useless exemption fail.
 """
 
 from __future__ import annotations
@@ -45,13 +57,21 @@ import sys
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
-from textblocks import counterexample_blocks, logical_lines, negated
+from textblocks import (
+    COUNTEREXAMPLE_CLOSE,
+    COUNTEREXAMPLE_OPEN,
+    counterexample_blocks,
+    logical_lines,
+    negated,
+)
 
 __all__ = [
     "Finding",
     "Counterexample",
     "ScanResult",
     "GRAMMAR_QUALIFIERS",
+    "branch_namespace_declarations",
+    "branch_namespaces_for_paths",
     "scan",
     "scan_counterexample",
     "scan_adapter_blocks",
@@ -163,9 +183,268 @@ def _compound_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
 
 
 def _prefixed_lane_re(roles: Sequence[str]) -> re.Pattern[str]:
-    """`<something>-<role>` / `<something>_<role>` — a lane token built by
-    prefixing a role. No prefix is ever legitimate."""
-    return re.compile(r"(?<![\w])([a-z0-9][\w.+]*)[-_](" + _role_alt(roles) + r")\b")
+    """Find a role-suffixed token; the caller supplies identity context.
+
+    Token shape alone is insufficient: ``deck-builder`` can be ordinary
+    English or a filename. `_prefixed_lane_is_identity` below requires a lane
+    cue, an explicit identifier, or a role-suffixed path before emitting it.
+    """
+    return re.compile(
+        r"(?<![\w-])(?P<prefix>[a-z0-9][\w.+-]*?)[-_]"
+        r"(?P<role>" + _role_alt(roles) + r")\b"
+    )
+
+
+_LANE_IDENTITY_NOUN = re.compile(
+    r"^\s+(?:lane|lanes|queue|queues|seat|seats|role|roles|session|sessions|"
+    r"worktree|worktrees|checkout|checkouts|branch|branches|namespace|"
+    r"namespaces)\b",
+    re.IGNORECASE,
+)
+_LANE_ROUTING_VERB = re.compile(
+    r"\b(?:send|hand|route|assign|dispatch|use|run|launch|start|open|cut|create)\b",
+    re.IGNORECASE,
+)
+_LANE_IDENTITY_BEFORE = re.compile(
+    r"\b(?:lane|lanes|queue|queues|seat|seats|role|roles|session|sessions|"
+    r"worktree|worktrees|checkout|checkouts|branch|branches|namespace|"
+    r"namespaces)\s+(?:is|are|was|were|named|called|uses|routes)\s*$",
+    re.IGNORECASE,
+)
+_ORDINARY_TOKEN_SUFFIX = re.compile(
+    r"^\s+(?:module|modules|path|paths|file|files|ui|tool|tools|"
+    r"pattern|patterns|brief|briefs|prompt|prompts|note|notes|guide|"
+    r"guidance|document|documents|directory|directories)\b",
+    re.IGNORECASE,
+)
+_BRANCH_NAMESPACE_DECLARATION = re.compile(
+    r'^\s*<!--\s*guard:branch-namespaces\s+'
+    r'prefixes="(?P<prefixes>[^"]+)"\s*-->\s*$'
+)
+_STRUCTURAL_BRANCH_NAMESPACES = frozenset(("m<N>", "meta"))
+_MILESTONE_NAMESPACE = re.compile(r"m[0-9]+\Z")
+_PROJECT_NAMESPACE = re.compile(r"[a-z][a-z0-9]*\Z")
+_FENCE = re.compile(r"^( {0,3})(?P<run>(?P<char>`|~){2,})(?P<info>.*)$")
+_HTML_EXAMPLE_OPEN = re.compile(
+    r"<\s*(?P<tag>pre|code|textarea|script|style)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HTML_EXAMPLE_CLOSE = re.compile(
+    r"</\s*(?P<tag>pre|code|textarea|script|style)\s*>",
+    re.IGNORECASE,
+)
+
+
+def _live_lines(text: str) -> list[str]:
+    """Return lines outside common Markdown and HTML example constructs.
+
+    Declarations in fenced or four-space-indented Markdown code, or in raw
+    HTML ``pre``, ``code``, ``textarea``, ``script`` or ``style`` blocks, are
+    examples rather than live project policy. This is deliberately a
+    line-oriented guard: an inline comment embedded in arbitrary HTML or a
+    non-standard renderer construct can still look live and needs review.
+    """
+    live: list[str] = []
+    fence_char: str | None = None
+    fence_length = 0
+    html_tag: str | None = None
+    for line in text.splitlines():
+        if fence_char is not None:
+            stripped = line.lstrip()
+            if (
+                stripped.startswith(fence_char * fence_length)
+                and stripped[len(fence_char) * fence_length:].strip() == ""
+            ):
+                fence_char = None
+                fence_length = 0
+            continue
+        if html_tag is not None:
+            close = _HTML_EXAMPLE_CLOSE.search(line)
+            if close and close.group("tag").lower() == html_tag:
+                html_tag = None
+            continue
+        if line.startswith("\t") or line.startswith("    "):
+            continue
+        match = _FENCE.match(line)
+        if match:
+            run = match.group("run")
+            fence_char = match.group("char")
+            fence_length = len(run)
+            continue
+        html = _HTML_EXAMPLE_OPEN.search(line)
+        if html:
+            tag = html.group("tag").lower()
+            if not _HTML_EXAMPLE_CLOSE.search(line, html.end()):
+                html_tag = tag
+            continue
+        live.append(line)
+    return live
+
+
+def _namespace_evidence(root: "Path", prefix: str) -> bool:
+    """Require a tracked project-structure witness for custom namespaces.
+
+    This proves project-owned structure exists; it does not prove anything
+    about whether the chosen label resembles a provider.
+    """
+    import subprocess
+
+    evidence = root / "docs" / "branch-namespaces" / f"{prefix}.md"
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(root), "ls-files", "--error-unmatch",
+                str(evidence.relative_to(root)),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def branch_namespace_declarations(
+    text: str, *, root: "Path | None" = None,
+) -> tuple[str, ...]:
+    """Read the bounded declaration from a project document.
+
+    ``m<N>`` and ``meta`` are built-in structural forms. A custom lower-case
+    namespace is accepted only when ``root`` proves it with a tracked
+    ``docs/branch-namespaces/<name>.md`` document.
+    """
+    marker_lines = [
+        line for line in _live_lines(text)
+        if "guard:branch-namespaces" in line
+    ]
+    if not marker_lines:
+        return ()
+    if len(marker_lines) != 1:
+        raise ValueError("only one branch-namespace declaration is allowed")
+    match = _BRANCH_NAMESPACE_DECLARATION.match(marker_lines[0])
+    if not match:
+        raise ValueError(
+            'branch namespace declaration must be '
+            '<!-- guard:branch-namespaces prefixes="m<N>,meta" -->'
+        )
+    prefixes = tuple(
+        prefix.strip() for prefix in match.group("prefixes").split(",")
+        if prefix.strip()
+    )
+    if not prefixes or len(set(prefixes)) != len(prefixes):
+        raise ValueError("branch namespace declaration must name unique prefixes")
+    invalid = [prefix for prefix in prefixes if not (
+        prefix in _STRUCTURAL_BRANCH_NAMESPACES
+        or _PROJECT_NAMESPACE.fullmatch(prefix)
+    )]
+    if invalid:
+        raise ValueError(
+            "unsupported branch namespace declaration(s): "
+            + ", ".join(invalid)
+            + "; custom names must be lower-case project namespaces"
+        )
+    if root is not None:
+        missing = [
+            prefix for prefix in prefixes
+            if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
+            and not _namespace_evidence(root, prefix)
+        ]
+        if missing:
+            raise ValueError(
+                "custom branch namespace(s) lack tracked project-structure "
+                "evidence under docs/branch-namespaces/: "
+                + ", ".join(missing)
+            )
+    return prefixes
+
+
+def _project_root_for_paths(paths: Sequence[str]) -> "Path | None":
+    from pathlib import Path
+
+    roots = []
+    for raw in paths:
+        path = Path(raw).resolve()
+        start = path.parent if path.is_file() else path
+        for parent in (start, *start.parents):
+            if (parent / "AGENTS.md").is_file():
+                roots.append(parent)
+                break
+    if not roots:
+        return None
+    unique = {root.resolve() for root in roots}
+    if len(unique) != 1:
+        raise ValueError("scanned paths belong to different AGENTS.md projects")
+    return roots[0]
+
+
+def branch_namespaces_for_paths(paths: Sequence[str]) -> tuple[str, ...]:
+    """Discover the same AGENTS.md declaration used by the installed guard."""
+    root = _project_root_for_paths(paths)
+    if root is None:
+        return ()
+    return branch_namespace_declarations(
+        (root / "AGENTS.md").read_text(encoding="utf-8"), root=root,
+    )
+
+
+def _branch_namespace_allowed(
+    prefix: str,
+    role_prefixes: set[str],
+    declared: Sequence[str],
+) -> bool:
+    if prefix in role_prefixes:
+        return True
+    return (
+        prefix in declared
+        or ("m<N>" in declared and _MILESTONE_NAMESPACE.fullmatch(prefix) is not None)
+    )
+
+
+def _prefixed_lane_is_identity(line: str, match: re.Match[str]) -> bool:
+    """Require evidence that a role-suffixed token names a lane.
+
+    A role-suffixed path component, a token directly used as a lane/queue/etc.,
+    or a routing target is an identity claim. A token used as an adjective for
+    a module, file, UI, tool, or path is ordinary prose even when that sentence
+    mentions a queue or checkout elsewhere.
+    """
+    _, end = match.span("role")
+    token_start = match.start("prefix")
+    token_end = end
+    after = line[token_end:]
+    if after.startswith("/"):
+        return True
+    if after.startswith(("-", "_")):
+        return False
+
+    previous = line[:token_start]
+    if line[token_start - 1:token_start] == "/" and not (
+        previous.endswith("../") or previous.endswith("./")
+    ):
+        return True
+
+    after_unquoted = after
+    if after.startswith("`"):
+        if token_start > 0 and line[token_start - 1] == "`":
+            return True
+        after_unquoted = after[1:]
+    if _LANE_IDENTITY_NOUN.match(after_unquoted):
+        return True
+    if _ORDINARY_TOKEN_SUFFIX.match(after_unquoted):
+        return False
+
+    if previous.endswith("../") or previous.endswith("./"):
+        return False
+    left_boundary = max(
+        (line.rfind(mark, 0, token_start) for mark in ".!?;"),
+        default=-1,
+    )
+    sentence_before = line[left_boundary + 1:token_start]
+    if (
+        _LANE_ROUTING_VERB.search(sentence_before)
+        or _LANE_IDENTITY_BEFORE.search(sentence_before)
+    ):
+        return True
+    return False
 
 
 #: A branch PRESCRIPTION. Deliberately narrow: a branch name is only claimed
@@ -206,6 +485,7 @@ def scan(
     *,
     source: str = "<text>",
     coordinator: str = "brain",
+    branch_namespaces: Iterable[str] = (),
     queue_pattern: str | None = None,
     max_lanes: int | None = None,
 ) -> ScanResult:
@@ -214,6 +494,8 @@ def scan(
     ``roles``       the project's declared executor roles. The single source of
                     truth for lane identity; everything below derives from it.
     ``coordinator`` the coordinating role, which may also own branches.
+    ``branch_namespaces`` bounded structural namespace forms declared by the
+                    adopting project's AGENTS.md (`m<N>` and/or `meta`).
     ``queue_pattern`` optional regex with one capture group yielding the stem of
                     a canonical (non-archived) queue path. Enabled only for
                     projects that keep such files.
@@ -226,6 +508,20 @@ def scan(
         raise ValueError("at least one role must be declared; an empty role set "
                          "would make every rule vacuous")
 
+    declared_namespaces = tuple(branch_namespaces)
+    invalid_namespaces = [
+        name for name in declared_namespaces
+        if not (
+            name in _STRUCTURAL_BRANCH_NAMESPACES
+            or _PROJECT_NAMESPACE.fullmatch(name)
+        )
+    ]
+    if invalid_namespaces:
+        raise ValueError(
+            "unsupported branch namespace form(s): "
+            + ", ".join(invalid_namespaces)
+        )
+
     compound_re = _compound_lane_re(roles)
     prefixed_re = _prefixed_lane_re(roles)
     queue_re = re.compile(queue_pattern) if queue_pattern else None
@@ -237,19 +533,32 @@ def scan(
     )
 
     result = ScanResult()
-    blocks, suppressed = counterexample_blocks(text)
-    lines = text.splitlines()
+    blocks, _ = counterexample_blocks(text)
+    scan_text = _counterexample_scan_text(text)
+    exemptions = _counterexample_exemptions(
+        text, roles, coordinator=coordinator,
+        branch_namespaces=declared_namespaces,
+        queue_pattern=queue_pattern, max_lanes=max_lanes,
+    )
+    lines = scan_text.splitlines()
     result.lines_scanned = len(lines)
 
     def emit(n: int, rule: str, message: str, *, matched: str = "") -> None:
+        for start, end, declarations in exemptions:
+            if not start <= n <= end:
+                continue
+            if any(
+                rule == declared_rule
+                and _same_counterexample_match(matched, declared_text)
+                for declared_rule, declared_text in declarations
+            ):
+                return
         result.findings.append(Finding(source, n, rule, message, matched))
 
     # Token-adjacency rules run over LOGICAL lines, so a compound split across a
     # soft wrap -- "the SomeProvider" ending one line and "Worker" starting the
     # next -- is still caught.
-    for n, line in logical_lines(text):
-        if n in suppressed:
-            continue
+    for n, line in logical_lines(scan_text):
         for match in compound_re.finditer(line):
             qualifier, role = match.groups()
             words = [w for w in qualifier.split() if w]
@@ -266,7 +575,9 @@ def scan(
                 )
 
         for match in prefixed_re.finditer(line):
-            prefix, role = match.groups()
+            prefix, role = match.group("prefix"), match.group("role")
+            if not _prefixed_lane_is_identity(line, match):
+                continue
             emit(
                 n, "prefixed-lane",
                 f"'{prefix}-{role}' prefixes a role to make a lane token; "
@@ -278,9 +589,6 @@ def scan(
     # word "branch" anywhere in it enable backtick-branch detection for the
     # whole thing, which is how this kind of detector starts crying wolf.
     for n, line in enumerate(lines, 1):
-        if n in suppressed:
-            continue
-
         candidates: list[tuple[str, str]] = []
         for match in BRANCH_COMMAND.finditer(line):
             candidates.extend(
@@ -298,7 +606,9 @@ def scan(
                     continue  # a file path, not a branch
                 candidates.append((prefix, match.group(0)))
         for prefix, matched in candidates:
-            if prefix in branch_prefixes:
+            if _branch_namespace_allowed(
+                prefix, branch_prefixes, declared_namespaces
+            ):
                 continue
             emit(
                 n, "branch-namespace",
@@ -353,6 +663,7 @@ def scan(
             body, roles,
             source=f"{source}#counterexample@{start}",
             coordinator=coordinator,
+            branch_namespaces=declared_namespaces,
             queue_pattern=queue_pattern,
             max_lanes=max_lanes,
         )
@@ -371,6 +682,29 @@ _COUNTEREXAMPLE_DECLARATION = re.compile(
 )
 
 
+def _normalise_counterexample_match(text: str) -> str:
+    """Return the comparison form for a declared scanner match.
+
+    Declarations are written by people and scanner matches are assembled from
+    tokens, so insignificant whitespace and presentation backticks should not
+    create a false mismatch. Nothing else is normalised: this does not strip
+    words from a sentence or compare substrings. Keeping the scanner's complete
+    ``Finding.matched`` token as the key prevents a short declaration such as
+    ``builder`` from exempting ``nebula-builder``.
+    """
+    value = " ".join(text.split())
+    while len(value) >= 2 and value[0] == value[-1] == "`":
+        value = " ".join(value[1:-1].strip().split())
+    return value
+
+
+def _same_counterexample_match(found: str, declared: str) -> bool:
+    """Whether a declaration names precisely the scanner's matched token."""
+    return _normalise_counterexample_match(found) == _normalise_counterexample_match(
+        declared
+    )
+
+
 def _counterexample_declarations(text: str) -> list[tuple[str, tuple[str, ...], str]]:
     """Parse exact declarations without inferring anything from nearby prose."""
     declarations: list[tuple[str, tuple[str, ...], str]] = []
@@ -386,12 +720,68 @@ def _counterexample_declarations(text: str) -> list[tuple[str, tuple[str, ...], 
     return declarations
 
 
+def _counterexample_scan_text(text: str) -> str:
+    """Remove only counterexample metadata while keeping every body line.
+
+    Markers and declarations describe an exemption; they are not normative
+    prose. The body must remain in the scan so an undeclared finding cannot
+    hide behind a neighbouring declaration. Blank replacements preserve the
+    physical line numbers used in findings.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped in {COUNTEREXAMPLE_OPEN, COUNTEREXAMPLE_CLOSE}:
+            lines[index] = ""
+        elif _COUNTEREXAMPLE_DECLARATION.match(line):
+            lines[index] = ""
+    return "\n".join(lines)
+
+
+def _counterexample_exemptions(
+    text: str,
+    roles: Sequence[str],
+    *,
+    coordinator: str,
+    branch_namespaces: Sequence[str],
+    queue_pattern: str | None,
+    max_lanes: int | None,
+) -> list[tuple[int, int, tuple[tuple[str, str], ...]]]:
+    """Return validated ``(start, end, rule/text)`` exemptions.
+
+    A declaration earns an exemption only after the real probe accepts the
+    whole block. Matching is intentionally exact at the structural level:
+    both the declared rule and the scanner's matched text must agree. This
+    makes a block that demonstrates one defect unable to shelter another.
+    """
+    exemptions: list[tuple[int, int, tuple[tuple[str, str], ...]]] = []
+    for start, body in counterexample_blocks(text)[0]:
+        declarations = _counterexample_declarations(body)
+        if not declarations:
+            continue
+        if not scan_counterexample(
+            body, roles, source=f"<counterexample@{start}>",
+            coordinator=coordinator, branch_namespaces=branch_namespaces,
+            queue_pattern=queue_pattern, max_lanes=max_lanes,
+        ):
+            continue
+        body_lines = body.splitlines()
+        if not body_lines:
+            continue
+        exemptions.append(
+            (start + 1, start + len(body_lines),
+             tuple((rule, text) for rule, _, text in declarations))
+        )
+    return exemptions
+
+
 def scan_counterexample(
     text: str,
     roles: Iterable[str],
     *,
     source: str = "<text>",
     coordinator: str = "brain",
+    branch_namespaces: Iterable[str] = (),
     queue_pattern: str | None = None,
     max_lanes: int | None = None,
 ) -> list[Finding]:
@@ -422,12 +812,17 @@ def scan_counterexample(
     )
     findings: list[Finding] = []
     for rule, declared_roles, offending_text in declarations:
-        if not offending_text or offending_text not in body:
+        if (
+            not offending_text
+            or _normalise_counterexample_match(offending_text)
+            not in _normalise_counterexample_match(body)
+        ):
             return []
         try:
             result = scan(
                 body, declared_roles, source=source,
                 coordinator=coordinator, queue_pattern=queue_pattern,
+                branch_namespaces=branch_namespaces,
                 max_lanes=max_lanes,
             )
         except ValueError:
@@ -435,10 +830,8 @@ def scan_counterexample(
         matching = [
             finding
             for finding in result.findings
-            if finding.rule == rule and (
-                offending_text in finding.matched
-                or finding.matched in offending_text
-            )
+            if finding.rule == rule
+            and _same_counterexample_match(finding.matched, offending_text)
         ]
         if not matching:
             return []
@@ -583,6 +976,13 @@ def main(argv: Sequence[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
+    try:
+        discovered_namespaces = branch_namespaces_for_paths(args.paths)
+    except (OSError, ValueError) as exc:
+        print(f"neutrality: cannot read branch namespace declaration: {exc}", file=sys.stderr)
+        return 2
+    branch_namespaces = discovered_namespaces
+
     findings: list[Finding] = []
     inert: list[str] = []
     for path in files:
@@ -591,13 +991,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, UnicodeDecodeError) as exc:
             print(f"neutrality: cannot read {path}: {exc}", file=sys.stderr)
             return 2
-        result = scan(
-            text, roles,
-            source=str(path),
-            coordinator=args.coordinator,
-            queue_pattern=args.queue_pattern,
-            max_lanes=args.max_lanes,
-        )
+        try:
+            result = scan(
+                text, roles,
+                source=str(path),
+                coordinator=args.coordinator,
+                branch_namespaces=branch_namespaces,
+                queue_pattern=args.queue_pattern,
+                max_lanes=args.max_lanes,
+            )
+        except ValueError as exc:
+            print(f"neutrality: {exc}", file=sys.stderr)
+            return 2
         findings += result.findings
         findings += scan_adapter_blocks(text, source=str(path))
         # An exemption that protects nothing is a silent widening of the guard.

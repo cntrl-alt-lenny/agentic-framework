@@ -24,12 +24,12 @@ project."*
 | `docs/agents/roles/verifier.md` | Optional Verifier contract, copied verbatim. |
 | `docs/state.md` | The durable state document, starting nearly empty. |
 | `docs/briefs/` | `README.md` (lifecycle), `active.md`, `delivered/`, `archive/`. |
-| `tests/test_role_neutrality.py` | The neutrality guard, pointed at the project's declared role set. |
+| `tests/test_role_neutrality.py` *(when neutrality is enabled)* | The optional neutrality guard, pointed at the project's declared role set. |
 | `tests/test_checkout.py` | The first-action checkout guard. |
 | `tests/test_report.py` | Behavioural tests for the installed completion-report tool. |
-| `tools/neutrality.py` | The scanner the test uses. |
-| `tools/authority.py` | The authority scanner used by the installed guard. |
-| `tools/textblocks.py` | Shared counterexample parsing used by the installed guards. |
+| `tools/neutrality.py` *(when neutrality is enabled)* | The scanner used by the optional neutrality guard. |
+| `tools/authority.py` *(when neutrality is enabled)* | The authority scanner used by the optional installed guard. |
+| `tools/textblocks.py` *(when neutrality is enabled)* | Shared counterexample parsing used by the optional installed guards. |
 | `tools/checkout.py` | The first-action checkout check. |
 | `tools/report.py` | The provider-neutral completion-report writer every Worker and Verifier contract requires — installed unconditionally, with no `--adapter` needed. See `reports.md`. |
 | `.gitattributes` | LF normalization for installed scripts and hooks. |
@@ -38,7 +38,11 @@ project."*
 | A provider adapter's files *(optional)* | Installed **where that adapter declares**, which is a property of the tool and not of the adapter's name — see [`adapters.md`](adapters.md). `adopt.py` prints the destination and the seats it installed. |
 
 The mechanical copy can be done by [`../tools/adopt.py`](../tools/adopt.py). The
-judgement cannot.
+judgement cannot. Adoption installs the neutrality guard by default and prints
+that choice in its plan. An adopter that deliberately defers it can pass
+`--no-neutrality`; the four guard files above are then omitted, and the plan
+prints that the guard is not installed. The copied documents below describe
+the conditional state, not an installation that did not happen.
 
 The framework's own `framework/state.md` is author guidance for this repository
 and is deliberately not copied. An adopting project has one durable state file:
@@ -56,13 +60,60 @@ Hand this to the Acme Builder.
 <!-- /guard:counterexample -->
 
 The rule is the scanner rule name, `roles=` is the comma-separated role set
-against which the example is invalid, and `text=` is the offending text that
-must occur in the block. The probe runs the block through the real structural
-scanner with the declared roles, independently of the adopting project's role
-set. A missing, malformed, absent, or unflagged declaration is inert. A
-declaration is a visible, reviewable claim, not a magic exemption: a made-up
-role in a declaration can make harmless prose appear to be a real violation,
-so review declarations as carefully as the text they exempt.
+against which the example is invalid, and `text=` is the scanner's complete
+`Finding.matched` token that must occur in the block. Matching collapses
+whitespace and removes balanced outer backticks, but otherwise requires exact
+equality: a partial role suffix cannot name a longer matched token, and a
+surrounding sentence cannot name the shorter matched token. The probe runs the
+block through the real structural scanner with the declared roles,
+independently of the adopting project's role set. Only that declared rule and
+matched text are exempted; another finding in the same block remains visible. A
+missing, malformed, absent, or unflagged declaration is inert. A declaration is
+a visible, reviewable claim, not a magic exemption: a made-up role in a
+declaration can make harmless prose appear to be a real violation, so review
+declarations as carefully as the text they exempt.
+
+## Updating an adopted framework consistently
+
+The canonical documents and the installed neutrality guard are one versioned
+surface. When updating an adopted project, move these together in one change:
+all documents listed in `tools/adopt.py`'s `VERBATIM_DOCS` (installed under
+`docs/agents/`), and, when neutrality is enabled, `tools/neutrality.py`,
+`tools/textblocks.py`, `tools/authority.py`, and
+`tests/test_role_neutrality.py`. The adoption plan names this coupling when it
+writes the guard. Updating only the scanner leaves copied canonical documents
+stale; updating only the documents leaves the installed guard stale. Either
+mixed state can report findings caused by the framework's old copies rather
+than by project-authored text. This is a migration constraint for a consistent
+update, not a synchronisation mechanism.
+
+## Branch namespace declarations
+
+The scanner accepts role names and the coordinator as branch namespaces. A
+project whose established branch structure also has milestone, coordination, or
+other project-owned namespaces may declare them in its root `AGENTS.md`:
+
+```text
+<!-- guard:branch-namespaces prefixes="m<N>,meta" -->
+```
+
+`m<N>` means a literal `m` followed by one or more decimal digits; `meta` means
+the literal `meta/` namespace. A custom namespace such as `release` or
+`feature` must be a single lower-case alphanumeric label and must have a
+tracked project-structure witness at
+`docs/branch-namespaces/<name>.md`. That witness is what keeps the declaration
+from being a caller-controlled allowlist. The tracked witness establishes
+project-owned structure, but the scanner does not identify providers or prove
+that a label is not provider-shaped. Declaring a custom namespace is therefore
+a reviewed human decision, not a machine-verified neutrality guarantee. When
+neutrality is enabled, its test and command-line scanner discover the same
+declaration and apply it to every normative document. A malformed, duplicate,
+unsupported, or unsupported-by-evidence declaration fails the installed guard.
+Declarations inside fenced or four-space-indented Markdown code, and inside
+raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are treated as
+examples and are inert. This is a deliberately common-construct boundary: a
+declaration embedded in arbitrary inline HTML or a non-standard renderer block
+can still look live and needs human review.
 
 ## Procedure
 
@@ -152,10 +203,12 @@ coordinator -- because its completion-report inbox is private to it; see
 
 ### 7. Make the guard real
 
-Run the test suite and confirm the neutrality test passes against the project's
-declared roles. Then **prove it fails** on a mutation — add a provider-shaped
-branch example to a normative document, watch it go red, and remove it. A guard
-nobody has watched fail is not yet a guard.
+If neutrality is enabled, run the test suite and confirm the neutrality test
+passes against the project's declared roles. Then **prove it fails** on a
+mutation — add a structurally invalid branch example to a normative document,
+watch it go red, and remove it. If `--no-neutrality` was selected, record that
+the neutrality guard was intentionally deferred; the framework documents do
+not imply that it is present.
 
 ### 8. Configure protections honestly
 
@@ -180,8 +233,11 @@ files.
 Migrate, do not bulldoze.
 
 - **Keep the project's existing branch convention** if it already derives from
-  roles or project structure. A milestone prefix is fine. Only a
-  provider-derived namespace is a defect.
+  roles or project structure. Declare the bounded structural forms `m<N>`
+  and/or `meta` in `AGENTS.md` using the marker above; a milestone prefix is
+  fine. A custom namespace needs the tracked project-structure witness and a
+  human review of its meaning; the scanner cannot determine whether the label
+  itself came from a provider.
 - **Do not rename active branches.** Preserve in-flight work; apply the
   convention to new branches.
 - **Retire, do not delete.** Move superseded queues and roles to a clearly

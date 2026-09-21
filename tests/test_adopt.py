@@ -197,6 +197,123 @@ class TestDefaultAdoption(AdoptionCase):
 
 
 class TestTopologyOptions(AdoptionCase):
+    def test_neutrality_plan_names_the_canonical_document_coupling(self):
+        plan = adopt.build_plan(
+            self.target, project="Test Project", coordinator="brain",
+            workers=["worker"], verifier=False, hooks=False, adapters=[],
+        )
+        notes = "\n".join(plan.notes)
+        self.assertIn("every docs/agents document copied from VERBATIM_DOCS", notes)
+        for module in (
+            "tools/neutrality.py", "tools/textblocks.py", "tools/authority.py",
+            "tests/test_role_neutrality.py",
+        ):
+            self.assertIn(module, notes)
+
+    def test_neutrality_installation_can_be_deferred_explicitly(self):
+        plan = adopt.build_plan(
+            self.target, project="Test Project", coordinator="brain",
+            workers=["worker"], verifier=False, hooks=False, adapters=[],
+            neutrality=False,
+        )
+        self.assertTrue(
+            any("deferred by --no-neutrality" in note for note in plan.notes)
+        )
+        self.assertEqual(run_adopt(self.target, "--no-neutrality"), 0)
+        for rel in (
+            "tools/neutrality.py",
+            "tools/authority.py",
+            "tools/textblocks.py",
+            "tests/test_role_neutrality.py",
+        ):
+            with self.subTest(path=rel):
+                self.assertFalse((self.target / rel).exists())
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            cwd=self.target, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_declared_milestone_namespace_is_installed_and_bounded(self):
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "builder", "--verifier"),
+            0,
+        )
+        agents = self.target / "AGENTS.md"
+        original = agents.read_text(encoding="utf-8")
+        declared = (
+            original
+            + '\n<!-- guard:branch-namespaces prefixes="m<N>,meta" -->\n'
+            + "Create `m3/feature-work` and `meta/coordination` as project "
+              "branch namespaces.\n"
+        )
+        agents.write_text(declared, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+            agents.write_text(
+                declared.replace('prefixes="m<N>,meta"', 'prefixes="m<N>,vendor-ai"'),
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("unsupported branch namespace", proc.stdout + proc.stderr)
+        finally:
+            agents.write_text(original, encoding="utf-8")
+
+    def test_declared_custom_namespaces_need_tracked_structure(self):
+        self.assertEqual(
+            run_adopt(self.target, "--workers", "builder", "--verifier"),
+            0,
+        )
+        evidence = self.target / "docs" / "branch-namespaces"
+        evidence.mkdir(parents=True)
+        for name in ("release", "feature"):
+            (evidence / f"{name}.md").write_text(
+                f"This project owns the {name} branch namespace.\n",
+                encoding="utf-8",
+            )
+        subprocess.run(["git", "add", "docs/branch-namespaces"], cwd=self.target, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "namespace evidence"],
+            cwd=self.target, check=True, capture_output=True, text=True,
+        )
+        agents = self.target / "AGENTS.md"
+        original = agents.read_text(encoding="utf-8")
+        declared = (
+            original
+            + '\n<!-- guard:branch-namespaces prefixes="release,feature" -->\n'
+            + "Create branch `release/next` and branch `feature/queue` here.\n"
+        )
+        agents.write_text(declared, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+            agents.write_text(
+                declared + "Create branch `vendor/release` for this round.\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                cwd=self.target, capture_output=True, text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("branch-namespace", proc.stdout + proc.stderr)
+        finally:
+            agents.write_text(original, encoding="utf-8")
+
     def test_builder_verifier_adoption_runs_the_installed_guard(self):
         self.assertEqual(
             run_adopt(self.target, "--workers", "builder", "--verifier"),

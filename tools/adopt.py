@@ -15,6 +15,7 @@ Options:
     --verifier         Include the independent reviewer seat.
     --coordinator NAME Name of the coordinating role (default: brain).
     --hooks            Install the sample git pre-push hook.
+    --no-neutrality    Do not install the optional provider-neutrality guard.
     --adapter NAME     Install a bundled provider adapter (repeatable). Its
                        destination comes from that adapter's own `adapter.json`
                        manifest — never from its name. See `tools/adapters.py`.
@@ -172,6 +173,7 @@ def build_plan(
     verifier: bool,
     hooks: bool,
     adapters: list[str],
+    neutrality: bool = True,
 ) -> Plan:
     plan = Plan(target=target)
 
@@ -208,25 +210,27 @@ def build_plan(
         add(f"docs/briefs/{sub}/.gitkeep",
             (TEMPLATES / f"docs/briefs/{sub}/.gitkeep").read_text(encoding="utf-8"))
 
-    # Every module the installed test imports, or it fails on import in the
-    # target rather than guarding anything there. These are executable tools:
-    # the shebang is a promise that an adopting project can run them directly,
-    # just like the adapter hooks below.
-    for module in ("neutrality.py", "authority.py", "textblocks.py"):
-        src = ROOT / "tools" / module
-        with src.open("rb") as stream:
-            executable = stream.readline().startswith(b"#!")
-        add(
-            f"tools/{module}", src.read_text(encoding="utf-8"),
-            executable=executable,
-        )
+    if neutrality:
+        # Every module the installed test imports, or it fails on import in the
+        # target rather than guarding anything there. These are executable
+        # tools: the shebang is a promise that an adopting project can run them
+        # directly, just like the adapter hooks below.
+        for module in ("neutrality.py", "authority.py", "textblocks.py"):
+            src = ROOT / "tools" / module
+            with src.open("rb") as stream:
+                executable = stream.readline().startswith(b"#!")
+            add(
+                f"tools/{module}", src.read_text(encoding="utf-8"),
+                executable=executable,
+            )
     # Without this, `unittest discover -s tests` refuses the directory and the
     # installed guard never runs at all. Caught by tests/test_adopt.py, which
     # runs the guard in the adopted tree rather than checking it exists.
     add("tests/__init__.py", "")
-    add("tests/test_role_neutrality.py",
-        render((TEMPLATES / "tests/test_role_neutrality.py").read_text(encoding="utf-8"),
-               values))
+    if neutrality:
+        add("tests/test_role_neutrality.py",
+            render((TEMPLATES / "tests/test_role_neutrality.py").read_text(encoding="utf-8"),
+                   values))
     add("tests/test_checkout.py",
         (TEMPLATES / "tests/test_checkout.py").read_text(encoding="utf-8"))
     add("tests/test_report.py",
@@ -259,6 +263,16 @@ def build_plan(
     add(
         "tools/report.py", report_src.read_text(encoding="utf-8"),
         executable=report_executable,
+    )
+
+    plan.notes.append(
+        "Neutrality guard installed (tools/neutrality.py, tools/textblocks.py, "
+        "tools/authority.py and tests/test_role_neutrality.py). Update these "
+        "together with every docs/agents document copied from VERBATIM_DOCS."
+        if neutrality else
+        "Neutrality guard deferred by --no-neutrality; no neutrality scanner, "
+        "shared parser, authority scanner or installed neutrality test was "
+        "written."
     )
 
     # Installed unconditionally: a project receives `#!/bin/sh` content from
@@ -382,6 +396,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--verifier", action="store_true")
     ap.add_argument("--coordinator", default="brain")
     ap.add_argument("--hooks", action="store_true")
+    ap.add_argument(
+        "--no-neutrality", action="store_false", dest="neutrality",
+        help="defer installation of the optional provider-neutrality guard",
+    )
     ap.add_argument("--adapter", action="append", default=[])
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
@@ -409,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         workers=workers,
         verifier=args.verifier,
         hooks=args.hooks,
+        neutrality=args.neutrality,
         adapters=args.adapter,
     )
 

@@ -241,6 +241,50 @@ class TestScannersAreRunnableWithoutGlue(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
+    def test_neutrality_cli_discovers_the_project_declaration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            docs = root / "docs" / "agents"
+            evidence = root / "docs" / "branch-namespaces"
+            docs.mkdir(parents=True)
+            evidence.mkdir(parents=True)
+            (root / "AGENTS.md").write_text(
+                '<!-- guard:branch-namespaces prefixes="codex" -->\n',
+                encoding="utf-8",
+            )
+            (evidence / "codex.md").write_text(
+                "The project owns codex branches.\n", encoding="utf-8"
+            )
+            policy = docs / "policy.md"
+            policy.write_text(
+                "Create branch `codex/next` for this project.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=root, check=True)
+
+            proc = self._run(
+                "neutrality.py", str(docs), str(root / "AGENTS.md"),
+                "--roles", "worker",
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("0 finding(s)", proc.stderr)
+
+            (root / "AGENTS.md").write_text(
+                (root / "AGENTS.md").read_text(encoding="utf-8")
+                + "Create branch `vendor/release` for this round.\n",
+                encoding="utf-8",
+            )
+            proc = self._run(
+                "neutrality.py", str(docs), str(root / "AGENTS.md"),
+                "--roles", "worker",
+            )
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("branch-namespace", proc.stdout)
+
     def test_neutrality_finds_a_provider_shaped_lane_and_exits_one(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.md"
