@@ -148,7 +148,10 @@ class TestLineEndingsArePinned(unittest.TestCase):
             subprocess.run(
                 ["git", "config", "user.name", "Tests"], cwd=repo, check=True,
             )
-            (repo / ".gitattributes").write_text("*.bin text=auto\n", encoding="utf-8")
+            # Use bytes so this fixture stays LF on Windows before Git indexes
+            # it; the test is about the indexed CRLF in notes.txt, not the
+            # host's newline translation of the attributes file.
+            (repo / ".gitattributes").write_bytes(b"*.bin text=auto\n")
             (repo / "payload.bin").write_bytes(b"\x00\r\n\xff\x01")
             (repo / "notes.txt").write_bytes(b"line one\r\nline two\n")
             subprocess.run(
