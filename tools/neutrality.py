@@ -38,13 +38,16 @@ demonstrates:
     ... text that SHOULD be rejected ...
     <!-- /guard:counterexample -->
 
-The declaration names the exact offending text and the roles with which it is
+The declaration names the exact scanner match and the roles with which it is
 invalid. The probe runs that text through the real scanner with those declared
 roles, not the adopting project's roles. A missing, absent or unflagged
 declaration is inert. The outer scan suppresses only a validated finding whose
-rule and matched text are covered by the declaration; other findings in the
-same block remain visible. The block is still reported separately, so
-`ScanResult.inert_counterexamples()` can make a useless exemption fail.
+rule and `Finding.matched` text are covered by the declaration; other findings
+in the same block remain visible. Matching collapses whitespace and removes
+balanced outer backticks, but otherwise requires equality. A partial word or a
+whole surrounding sentence is not a key for the finding. The block is still
+reported separately, so `ScanResult.inert_counterexamples()` can make a
+useless exemption fail.
 """
 
 from __future__ import annotations
@@ -546,7 +549,7 @@ def scan(
                 continue
             if any(
                 rule == declared_rule
-                and (matched in declared_text or declared_text in matched)
+                and _same_counterexample_match(matched, declared_text)
                 for declared_rule, declared_text in declarations
             ):
                 return
@@ -679,6 +682,29 @@ _COUNTEREXAMPLE_DECLARATION = re.compile(
 )
 
 
+def _normalise_counterexample_match(text: str) -> str:
+    """Return the comparison form for a declared scanner match.
+
+    Declarations are written by people and scanner matches are assembled from
+    tokens, so insignificant whitespace and presentation backticks should not
+    create a false mismatch. Nothing else is normalised: this does not strip
+    words from a sentence or compare substrings. Keeping the scanner's complete
+    ``Finding.matched`` token as the key prevents a short declaration such as
+    ``builder`` from exempting ``nebula-builder``.
+    """
+    value = " ".join(text.split())
+    while len(value) >= 2 and value[0] == value[-1] == "`":
+        value = " ".join(value[1:-1].strip().split())
+    return value
+
+
+def _same_counterexample_match(found: str, declared: str) -> bool:
+    """Whether a declaration names precisely the scanner's matched token."""
+    return _normalise_counterexample_match(found) == _normalise_counterexample_match(
+        declared
+    )
+
+
 def _counterexample_declarations(text: str) -> list[tuple[str, tuple[str, ...], str]]:
     """Parse exact declarations without inferring anything from nearby prose."""
     declarations: list[tuple[str, tuple[str, ...], str]] = []
@@ -786,7 +812,11 @@ def scan_counterexample(
     )
     findings: list[Finding] = []
     for rule, declared_roles, offending_text in declarations:
-        if not offending_text or offending_text not in body:
+        if (
+            not offending_text
+            or _normalise_counterexample_match(offending_text)
+            not in _normalise_counterexample_match(body)
+        ):
             return []
         try:
             result = scan(
@@ -800,10 +830,8 @@ def scan_counterexample(
         matching = [
             finding
             for finding in result.findings
-            if finding.rule == rule and (
-                offending_text in finding.matched
-                or finding.matched in offending_text
-            )
+            if finding.rule == rule
+            and _same_counterexample_match(finding.matched, offending_text)
         ]
         if not matching:
             return []

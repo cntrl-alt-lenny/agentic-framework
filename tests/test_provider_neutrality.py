@@ -339,25 +339,25 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
         for body, rule in (
             (
                 '<!-- guard:violation compound-lane roles=builder '
-                'text="Hand it to the Acme Builder." -->\n'
+                'text="Acme Builder" -->\n'
                 "Hand it to the Acme Builder.\n",
                 "compound-lane",
             ),
             (
                 '<!-- guard:violation prefixed-lane roles=builder '
-                'text="Use the `codex-builder` queue." -->\n'
+                'text="codex-builder" -->\n'
                 "Use the `codex-builder` queue.\n",
                 "prefixed-lane",
             ),
             (
                 '<!-- guard:violation branch-namespace roles=builder '
-                'text="Cut `acme/some-scope` for this branch." -->\n'
+                'text="acme/some-scope" -->\n'
                 "Cut `acme/some-scope` for this branch.\n",
                 "branch-namespace",
             ),
             (
                 '<!-- guard:violation prefixed-lane roles=scaffolder '
-                'text="Use `codex-scaffolder` as a queue name." -->\n'
+                'text="codex-scaffolder" -->\n'
                 "Use `codex-scaffolder` as a queue name.\n",
                 "prefixed-lane",
             ),
@@ -373,41 +373,40 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
 
     def test_counterexample_declarations_cover_adversarial_real_violations(self):
         cases = (
-            ("compound-lane", "builder", "Hand it to the Acme Builder."),
-            ("prefixed-lane", "builder", "Use the `codex-builder` queue."),
-            ("branch-namespace", "builder", "Cut `acme/some-scope` for this branch."),
-            ("prefixed-lane", "scaffolder", "Send the task to `codex-scaffolder`."),
-            ("prefixed-lane", "researcher", "Use the `gemini-researcher` queue."),
-            ("prefixed-lane", "researcher", "Route everything through the claude-researcher lane."),
-            ("prefixed-lane", "scaffolder", "Use the `codex-scaffolder` queue."),
-            ("branch-namespace", "decomper", "Cut `claude-decomper/fix-123` for this."),
-            ("compound-lane", "scaffolder", "Hand it to the Acme Scaffolder."),
-            ("compound-lane", "reviewer", "Send this to the Polaris Reviewer."),
-            ("prefixed-lane", "worker", "Use the `orbit-worker` queue."),
-            ("branch-namespace", "builder", "Create `nova/release` as a branch namespace."),
-            ("compound-lane", "researcher", "Hand it to the Polaris Researcher."),
-            ("compound-lane", "worker", "Route this to the Delta Worker."),
-            ("compound-lane", "decomper", "Assign the Acme Decomper."),
-            ("prefixed-lane", "verifier", "Use the `nebula-verifier` queue."),
-            ("prefixed-lane", "researcher", "Route it through the `orion-researcher` lane."),
-            ("prefixed-lane", "scaffolder", "Send it to the `atlas-scaffolder` queue."),
-            ("branch-namespace", "builder", "Cut `quasar-builder/issue-42` for this."),
-            ("branch-namespace", "researcher", "Create `atlas-researcher/design` as a branch namespace."),
-            ("prefixed-lane", "decomper", "Use the `lumen-decomper` lane."),
-            ("prefixed-lane", "verifier", "Send it to the `nova-verifier` queue."),
+            ("compound-lane", "builder", "Acme Builder", "Hand it to the Acme Builder."),
+            ("prefixed-lane", "builder", "codex-builder", "Use the `codex-builder` queue."),
+            ("branch-namespace", "builder", "acme/some-scope", "Cut `acme/some-scope` for this branch."),
+            ("prefixed-lane", "scaffolder", "codex-scaffolder", "Send the task to `codex-scaffolder`."),
+            ("prefixed-lane", "researcher", "gemini-researcher", "Use the `gemini-researcher` queue."),
+            ("prefixed-lane", "researcher", "claude-researcher", "Route everything through the claude-researcher lane."),
+            ("branch-namespace", "decomper", "claude-decomper/fix-123", "Cut `claude-decomper/fix-123` for this."),
+            ("compound-lane", "scaffolder", "Acme Scaffolder", "Hand it to the Acme Scaffolder."),
+            ("compound-lane", "reviewer", "Polaris Reviewer", "Send this to the Polaris Reviewer."),
+            ("prefixed-lane", "worker", "orbit-worker", "Use the `orbit-worker` queue."),
+            ("branch-namespace", "builder", "nova/release", "Create `nova/release` as a branch namespace."),
+            ("compound-lane", "researcher", "Polaris Researcher", "Hand it to the Polaris Researcher."),
+            ("compound-lane", "worker", "Delta Worker", "Route this to the Delta Worker."),
+            ("compound-lane", "decomper", "Acme Decomper", "Assign the Acme Decomper."),
+            ("prefixed-lane", "verifier", "nebula-verifier", "Use the `nebula-verifier` queue."),
+            ("prefixed-lane", "researcher", "orion-researcher", "Route it through the `orion-researcher` lane."),
+            ("prefixed-lane", "scaffolder", "atlas-scaffolder", "Send it to the `atlas-scaffolder` queue."),
+            ("branch-namespace", "builder", "quasar-builder/issue-42", "Cut `quasar-builder/issue-42` for this."),
+            ("branch-namespace", "researcher", "atlas-researcher/design", "Create `atlas-researcher/design` as a branch namespace."),
+            ("prefixed-lane", "decomper", "lumen-decomper", "Use the `lumen-decomper` lane."),
+            ("prefixed-lane", "verifier", "nova-verifier", "Send it to the `nova-verifier` queue."),
         )
-        for rule, declared_roles, offending in cases:
+        for rule, declared_roles, matched, body in cases:
             declaration = (
                 f'<!-- guard:violation {rule} roles={declared_roles} '
-                f'text="{offending}" -->\n{offending}\n'
+                f'text="{matched}" -->\n{body}\n'
             )
-            with self.subTest(offending=offending):
+            with self.subTest(matched=matched):
                 findings = neutrality.scan_counterexample(
                     declaration, ("builder", "verifier")
                 )
                 self.assertTrue(
                     any(f.rule == rule for f in findings),
-                    f"{offending!r} was not reported as {rule}: {findings}",
+                    f"{matched!r} was not reported as {rule}: {findings}",
                 )
 
     def test_counterexample_exempts_only_declared_rule_and_text(self):
@@ -416,7 +415,7 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 "declared branch, undeclared branch and compound",
                 '<!-- guard:counterexample -->\n'
                 '<!-- guard:violation branch-namespace roles=builder '
-                'text="Cut `acme/some-scope` for this branch." -->\n'
+                'text="acme/some-scope" -->\n'
                 "Cut `acme/some-scope` for this branch.\n"
                 "git checkout -b nebula/builder-task origin/master\n"
                 "Hand this to the NebulaAI Builder.\n"
@@ -427,7 +426,7 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 "declared compound, undeclared prefixed lane",
                 '<!-- guard:counterexample -->\n'
                 '<!-- guard:violation compound-lane roles=builder '
-                'text="Hand it to the Acme Builder." -->\n'
+                'text="Acme Builder" -->\n'
                 "Hand it to the Acme Builder. Use the `nebula-builder` queue.\n"
                 "<!-- /guard:counterexample -->\n",
                 {"prefixed-lane"},
@@ -436,7 +435,7 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 "declared prefixed lane, undeclared branch",
                 '<!-- guard:counterexample -->\n'
                 '<!-- guard:violation prefixed-lane roles=builder '
-                'text="Use the `codex-builder` queue." -->\n'
+                'text="codex-builder" -->\n'
                 "Use the `codex-builder` queue.\n"
                 "Create branch `nebula/release` for this round.\n"
                 "<!-- /guard:counterexample -->\n",
@@ -455,12 +454,12 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
         for body in (
             '<!-- guard:counterexample -->\n'
             '<!-- guard:violation compound-lane roles=builder '
-            'text="Hand it to the Acme Builder." -->\n'
+            'text="Acme Builder" -->\n'
             "Hand it to the Acme Builder.\n"
             "<!-- /guard:counterexample -->\n",
             '<!-- guard:counterexample -->\n'
             '<!-- guard:violation branch-namespace roles=builder '
-            'text="Cut `acme/some-scope` for this branch." -->\n'
+            'text="acme/some-scope" -->\n'
             "Cut `acme/some-scope` for this branch.\n"
             "<!-- /guard:counterexample -->\n",
         ):
@@ -468,6 +467,63 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 self.assertEqual(
                     neutrality.scan(body, ("builder", "verifier")).findings,
                     [],
+                )
+
+        normalised = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="  `Acme   Builder`  " -->\n'
+            "Hand it to the Acme Builder.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            neutrality.scan(normalised, ("builder", "verifier")).findings,
+            [],
+            "only presentation whitespace and outer backticks are ignored",
+        )
+
+    def test_partial_counterexample_declarations_do_not_exempt_any_rule(self):
+        """A declaration is an exact matched-token key, never a substring."""
+        cases = (
+            (
+                "compound-lane", "Builder", "Hand it to the Acme Builder.", {},
+            ),
+            (
+                "prefixed-lane", "builder", "Use the `nebula-builder` queue.", {},
+            ),
+            (
+                "branch-namespace", "nebula",
+                "Create branch `nebula/release` for this round.", {},
+            ),
+            (
+                "queue-identity", "nebula",
+                "The live queue is docs/queue/nebula/active.md.",
+                {"queue_pattern": r"docs/queue/([a-z]+)/"},
+            ),
+            (
+                "lane-count", "three", "There are three standing lanes.",
+                {"max_lanes": 2},
+            ),
+            (
+                "compound-lane", "Acme Builder extra",
+                "Hand it to the Acme Builder extra.", {},
+            ),
+        )
+        for rule, declared, body, options in cases:
+            text = (
+                '<!-- guard:counterexample -->\n'
+                f'<!-- guard:violation {rule} roles=builder text="{declared}" -->\n'
+                f"{body}\n"
+                "<!-- /guard:counterexample -->\n"
+            )
+            with self.subTest(rule=rule, declared=declared):
+                result = neutrality.scan(
+                    text, ("builder", "verifier"), **options
+                )
+                self.assertTrue(
+                    any(f.rule == rule for f in result.findings),
+                    f"partial/long declaration incorrectly exempted {rule}: "
+                    f"{result.findings}",
                 )
 
     def test_counterexample_declaration_must_be_present_and_true(self):
