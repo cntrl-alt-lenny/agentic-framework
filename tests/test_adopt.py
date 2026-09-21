@@ -456,7 +456,7 @@ class TestLineEndingWarnings(AdoptionCase):
             self.assertEqual(run_adopt(self.target), 0)
         self.assertIn("tracked hook(s) still have CRLF", output.getvalue())
         self.assertIn("git ls-files --eol -- .githooks", output.getvalue())
-        self.assertIn(str(linked), output.getvalue())
+        self.assertIn(str(linked.resolve()), output.getvalue())
 
 
 class TestSafety(AdoptionCase):

@@ -45,7 +45,7 @@ class TestCheckoutCheck(unittest.TestCase):
         self.assertEqual(checkout.check("brain", self.repo)[0], 0)
         code, message = checkout.check("builder", self.repo)
         self.assertEqual(code, 1)
-        self.assertIn(str(self.repo), message)
+        self.assertIn(str(self.repo.resolve()), message)
         self.assertIn(".worktrees/builder", message)
 
     def test_linked_worktrees_match_unusual_role_names_and_reject_cross_claims(self):
@@ -58,13 +58,18 @@ class TestCheckoutCheck(unittest.TestCase):
 
     def test_nonportable_role_names_are_refused_before_work_starts(self):
         """Checkout identity and report paths must share one portable rule."""
-        for role in ("vérifier", "Builder", "bad?role", "con"):
+        for role in ("vérifier", "Builder", "bad?role"):
             with self.subTest(role=role):
                 path = self._worktree(role)
                 code, message = checkout.check(role, path)
                 self.assertEqual(code, 1)
                 self.assertIn("invalid role name", message)
                 self.assertIn(role, message)
+        # Windows reserves this name at the filesystem layer, so creating a
+        # worktree named `con` is impossible there. Exercise the same guard's
+        # validation directly instead of letting the fixture fail first.
+        with self.assertRaises(checkout.CheckoutError):
+            checkout.validate_role_name("con")
 
     def test_unassigned_separate_clone_is_the_coordinating_seat(self):
         clone = Path(self.tmp.name) / "separate-clone"

@@ -85,8 +85,14 @@ def committed_crlf_files(root: Path = ROOT) -> list[str]:
         if mode == "120000" or not is_git_text(path, root):
             continue
         try:
-            blob = (root / path).read_bytes()
-        except OSError:
+            # Read the indexed blob, not the working file. On Windows with
+            # core.autocrlf enabled, the latter may be CRLF even when the
+            # committed text is LF, which would make this guard report the
+            # platform's checkout conversion as a repository defect.
+            blob = subprocess.check_output(
+                ["git", "show", f":{path}"], cwd=root,
+            )
+        except (OSError, subprocess.CalledProcessError):
             continue
         if b"\r\n" in blob:
             offenders.append(path)

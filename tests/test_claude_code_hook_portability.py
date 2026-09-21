@@ -37,6 +37,7 @@ reading the script's source for the word "python3".
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,12 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import adopt  # noqa: E402
 import report  # noqa: E402
+
+POSIX_HOOK_SKIP = unittest.skipIf(
+    os.name == "nt",
+    "these tests execute the Claude Code POSIX shell adapter; native Windows "
+    "hook behavior is covered separately by the workflow and remains shell-dependent",
+)
 
 IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".pytest_cache")
 
@@ -171,6 +178,7 @@ class HookHarness(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
 
 
+@POSIX_HOOK_SKIP
 class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
     """Behaviour, not installation: actually run what settings.json names."""
 
@@ -241,6 +249,7 @@ class TestConfiguredLaunchPathFindsAWorkingInterpreter(HookHarness):
         )
 
 
+@POSIX_HOOK_SKIP
 class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
     """The health-check path: item 6's actual mechanism."""
 
@@ -280,6 +289,7 @@ class TestNoInterpreterIsDistinctFromNoReport(HookHarness):
         )
 
 
+@POSIX_HOOK_SKIP
 class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
     """Item 8: the primary checkout is not named after a role."""
 
@@ -323,6 +333,7 @@ class TestRoleTaggingFollowsTheIsolationConvention(HookHarness):
         self.assertFalse((inbox / "brain-latest.md").exists())
 
 
+@POSIX_HOOK_SKIP
 class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
     """Red-before-green: the exact incident, and the exact stale role tag.
 
@@ -423,6 +434,7 @@ class TestTheDefectReproducesAgainstTheReportedShape(unittest.TestCase):
         self.assertFalse((inbox / "brain-latest.md").exists())
 
 
+@POSIX_HOOK_SKIP
 class TestHookNeverOverwritesTheAgentsOwnReport(HookHarness):
     """The reported incident, in a real adopted project on 2026-09-16: the
     agent wrote its own completion report, with the real brief identifier,
@@ -570,6 +582,7 @@ class TestHookNeverOverwritesTheAgentsOwnReport(HookHarness):
         )
 
 
+@POSIX_HOOK_SKIP
 class TestTheOverwriteDefectReproducesAgainstTheReportedShape(unittest.TestCase):
     """Red-before-green for the 2026-09-16 incident: restore the hook's
     unconditional overwrite and prove it clobbers the agent's own report."""

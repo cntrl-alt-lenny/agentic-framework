@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -370,6 +371,11 @@ class TestAdoptedDocReferenceGuardFires(MutationCase):
         )
 
 
+@unittest.skipIf(
+    os.name == "nt",
+    "the mutated Claude Code hook tests require the POSIX shell adapter; "
+    "native Windows hook behavior is shell-dependent and covered separately",
+)
 class TestClaudeCodeHookPortabilityGuardFires(MutationCase):
     """The reported incident, reproduced by mutation as well as by fixture.
 
