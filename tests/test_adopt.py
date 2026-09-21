@@ -425,6 +425,13 @@ class TestLineEndingWarnings(AdoptionCase):
         # Reproduce the real migration hazard: the index is normalized, but an
         # unchanged pre-existing worktree file remains CRLF.
         hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        linked = self.target / ".worktrees" / "old"
+        subprocess.run(
+            ["git", "worktree", "add", "-q", str(linked), "HEAD"],
+            cwd=self.target, check=True,
+        )
+        linked_hook = linked / ".githooks" / "pre-push"
+        linked_hook.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
         eol = subprocess.run(
             ["git", "ls-files", "--eol", "--", ".githooks"],
             cwd=self.target, capture_output=True, text=True, check=True,
@@ -438,6 +445,7 @@ class TestLineEndingWarnings(AdoptionCase):
             self.assertEqual(run_adopt(self.target), 0)
         self.assertIn("tracked hook(s) still have CRLF", output.getvalue())
         self.assertIn("git ls-files --eol -- .githooks", output.getvalue())
+        self.assertIn(str(linked), output.getvalue())
 
 
 class TestSafety(AdoptionCase):

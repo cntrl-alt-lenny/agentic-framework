@@ -94,24 +94,42 @@ def tracked_hook_line_endings(target: Path) -> list[str]:
     observation we need here; a failed or non-Git target simply has no warning
     to add to the adoption plan.
     """
+    unsafe: list[str] = []
+    worktrees = [target]
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(target), "ls-files", "--eol", "--", ".githooks"],
+        listed = subprocess.run(
+            ["git", "-C", str(target), "worktree", "list", "--porcelain"],
             capture_output=True, text=True, check=False,
         )
     except (FileNotFoundError, OSError):
-        return []
-    if proc.returncode != 0:
-        return []
-    unsafe: list[str] = []
-    for line in proc.stdout.splitlines():
-        metadata, separator, path = line.partition("\t")
-        fields = metadata.split()
-        if not separator or len(fields) < 2:
+        listed = None
+    if listed is not None and listed.returncode == 0:
+        for line in listed.stdout.splitlines():
+            if line.startswith("worktree "):
+                checkout = Path(line.removeprefix("worktree "))
+                if checkout not in worktrees:
+                    worktrees.append(checkout)
+
+    for checkout in worktrees:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(checkout), "ls-files", "--eol", "--", ".githooks"],
+                capture_output=True, text=True, check=False,
+            )
+        except (FileNotFoundError, OSError):
             continue
-        worktree_eol = fields[1]
-        if worktree_eol in {"w/crlf", "w/mixed"}:
-            unsafe.append(path.strip())
+        if proc.returncode != 0:
+            continue
+        for line in proc.stdout.splitlines():
+            metadata, separator, path = line.partition("\t")
+            fields = metadata.split()
+            if not separator or len(fields) < 2:
+                continue
+            if fields[1] in {"w/crlf", "w/mixed"}:
+                label = path.strip()
+                if checkout != target:
+                    label = f"{checkout}: {label}"
+                unsafe.append(label)
     return unsafe
 
 
