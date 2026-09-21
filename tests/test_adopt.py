@@ -507,6 +507,7 @@ class TestLineEndingRefresh(unittest.TestCase):
             path.write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
             path.chmod(0o755)
         (self.repo / "seat.txt").write_text("seat\n", encoding="utf-8")
+        (self.repo / ".gitignore").write_text(".worktrees/\n", encoding="utf-8")
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=self.repo, check=True)
         (self.repo / ".gitattributes").write_text("* text=auto eol=lf\n", encoding="utf-8")
@@ -545,23 +546,29 @@ class TestLineEndingRefresh(unittest.TestCase):
         subprocess.run(["git", "worktree", "add", "-q", str(other), "HEAD"], cwd=self.repo, check=True)
         (other / "seat.txt").write_text("other seat work\n", encoding="utf-8")
         subprocess.run(["git", "stash", "push", "-q", "-m", "other seat stash"], cwd=other, check=True)
-        for rel in (".githooks/pre-push", ".claude/hooks/run_python.sh"):
-            (other / rel).write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
         self.assertEqual(
             subprocess.run(["git", "status", "--short"], cwd=other,
                            capture_output=True, text=True, check=True).stdout,
             "",
             "the CRLF worktree bytes are clean under eol=lf",
         )
+        for rel in (".githooks/pre-push", ".claude/hooks/run_python.sh"):
+            (self.repo / rel).write_bytes(b"#!/bin/sh\r\nexit 0\r\n")
+        self.assertEqual(
+            subprocess.run(["git", "status", "--short"], cwd=self.repo,
+                           capture_output=True, text=True, check=True).stdout,
+            "",
+            "the primary CRLF worktree bytes are clean under eol=lf",
+        )
         before = self._stash_list(other)
         proc = subprocess.run(
             [sys.executable, str(ROOT / "tools" / "line_endings.py"), "refresh"],
-            cwd=other, capture_output=True, text=True,
+            cwd=self.repo, capture_output=True, text=True,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertEqual(self._stash_list(other), before)
-        self.assertEqual((other / ".claude/hooks/run_python.sh").read_bytes(), b"#!/bin/sh\nexit 0\n")
-        self.assertEqual((other / ".githooks/pre-push").read_bytes(), b"#!/bin/sh\nexit 0\n")
+        self.assertEqual((self.repo / ".claude/hooks/run_python.sh").read_bytes(), b"#!/bin/sh\nexit 0\n")
+        self.assertEqual((self.repo / ".githooks/pre-push").read_bytes(), b"#!/bin/sh\nexit 0\n")
 
 
 class TestLineEndingGuidance(unittest.TestCase):
