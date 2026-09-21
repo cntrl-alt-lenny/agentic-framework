@@ -126,9 +126,12 @@ def normative_files() -> list[Path]:
         if path.suffix.lower() == ".md"
         and any(path.is_relative_to(root.resolve()) for root in roots)
     )
-    readme = (ROOT / "README.md").resolve()
-    if readme in tracked:
-        paths.append(readme)
+    # Root-level documents that state this repository's own policy or standing
+    # decisions are scanned like the framework's, not left outside the guard.
+    for rel in ("README.md", "docs/state.md"):
+        doc = (ROOT / rel).resolve()
+        if doc in tracked:
+            paths.append(doc)
     return [
         p for p in paths if p.resolve() not in excluded
     ]
