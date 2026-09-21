@@ -60,15 +60,32 @@ Hand this to the Acme Builder.
 <!-- /guard:counterexample -->
 
 The rule is the scanner rule name, `roles=` is the comma-separated role set
-against which the example is invalid, and `text=` is the offending text that
-must occur in the block. The probe runs the block through the real structural
-scanner with the declared roles, independently of the adopting project's role
-set. Only that declared rule and matched text are exempted; another finding in
-the same block remains visible. A missing, malformed, absent, or unflagged
-declaration is inert. A declaration is a visible, reviewable claim, not a magic
-exemption: a made-up role in a declaration can make harmless prose appear to
-be a real violation, so review declarations as carefully as the text they
-exempt.
+against which the example is invalid, and `text=` is the scanner's complete
+`Finding.matched` token that must occur in the block. Matching collapses
+whitespace and removes balanced outer backticks, but otherwise requires exact
+equality: a partial role suffix cannot name a longer matched token, and a
+surrounding sentence cannot name the shorter matched token. The probe runs the
+block through the real structural scanner with the declared roles,
+independently of the adopting project's role set. Only that declared rule and
+matched text are exempted; another finding in the same block remains visible. A
+missing, malformed, absent, or unflagged declaration is inert. A declaration is
+a visible, reviewable claim, not a magic exemption: a made-up role in a
+declaration can make harmless prose appear to be a real violation, so review
+declarations as carefully as the text they exempt.
+
+## Updating an adopted framework consistently
+
+The canonical documents and the installed neutrality guard are one versioned
+surface. When updating an adopted project, move these together in one change:
+all documents listed in `tools/adopt.py`'s `VERBATIM_DOCS` (installed under
+`docs/agents/`), and, when neutrality is enabled, `tools/neutrality.py`,
+`tools/textblocks.py`, `tools/authority.py`, and
+`tests/test_role_neutrality.py`. The adoption plan names this coupling when it
+writes the guard. Updating only the scanner leaves copied canonical documents
+stale; updating only the documents leaves the installed guard stale. Either
+mixed state can report findings caused by the framework's old copies rather
+than by project-authored text. This is a migration constraint for a consistent
+update, not a synchronisation mechanism.
 
 ## Branch namespace declarations
 

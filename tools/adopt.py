@@ -267,7 +267,8 @@ def build_plan(
 
     plan.notes.append(
         "Neutrality guard installed (tools/neutrality.py, tools/textblocks.py, "
-        "tools/authority.py and tests/test_role_neutrality.py)."
+        "tools/authority.py and tests/test_role_neutrality.py). Update these "
+        "together with every docs/agents document copied from VERBATIM_DOCS."
         if neutrality else
         "Neutrality guard deferred by --no-neutrality; no neutrality scanner, "
         "shared parser, authority scanner or installed neutrality test was "

@@ -197,6 +197,19 @@ class TestDefaultAdoption(AdoptionCase):
 
 
 class TestTopologyOptions(AdoptionCase):
+    def test_neutrality_plan_names_the_canonical_document_coupling(self):
+        plan = adopt.build_plan(
+            self.target, project="Test Project", coordinator="brain",
+            workers=["worker"], verifier=False, hooks=False, adapters=[],
+        )
+        notes = "\n".join(plan.notes)
+        self.assertIn("every docs/agents document copied from VERBATIM_DOCS", notes)
+        for module in (
+            "tools/neutrality.py", "tools/textblocks.py", "tools/authority.py",
+            "tests/test_role_neutrality.py",
+        ):
+            self.assertIn(module, notes)
+
     def test_neutrality_installation_can_be_deferred_explicitly(self):
         plan = adopt.build_plan(
             self.target, project="Test Project", coordinator="brain",
