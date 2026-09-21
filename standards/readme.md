@@ -1,8 +1,9 @@
-# README standard (draft)
+# README standard
 
-One consistent house style for every public repository. Each project's Brain applies this in its own presentation round — this file is the reference, not an instruction to edit anything yet.
+One consistent house style for every public repository. This is the active standard: each project's Brain applies it in its presentation round.
 
-Repository names below reflect the renames of 2026-09-15.
+The repository names and planning table below are a dated snapshot from
+2026-09-15, retained as historical planning context rather than current state.
 
 ## The principle
 
@@ -33,7 +34,7 @@ Aim for **250–500 words visible by default**. Anything longer goes in `docs/`,
 
 Stop there.
 
-- **Banner:** 1280×640, so the same image doubles as the repository's GitHub social preview (Settings → General → Social preview), which is what shows when a link is shared.
+- **Banner:** 1280×640. For the repository's GitHub social preview (Settings → General → Social preview), the owner uploads a raster 1280×640 export in PNG, JPG or GIF format; an SVG banner is not a social-preview upload. Uploading that repository setting is an owner action, not an agent action.
 - **Tagline:** one sentence in plain words. edopro-hd-cards' "Every card in HD. One double-click." is the model.
 - **Credits:** upstream projects and trademarks. For game projects, state plainly that no game files, ROMs or copyrighted assets are included, and that you supply your own.
 
@@ -43,8 +44,8 @@ They are called **badges**, and almost all are made with [shields.io](https://sh
 
 - **One style everywhere: `flat`**, as in gx-spirit-caller. `for-the-badge` is much larger and fights a row.
 - **One fixed order:** CI → release → progress → platform → language → license. Four or five at most; a long row is noise.
-- **Anything that can change must be live.** Take it from GitHub or CI, never type it in: a typed-in "PASS" stays green after the build breaks.
-- **Static badges only for facts that do not change**: platform, runtime floor, "early development".
+- **Anything whose value is expected to move during normal work must be live.** Take it from GitHub or CI, never type it in: a typed-in "PASS" stays green after the build breaks. This includes CI, releases, progress, development stage and other status.
+- **Static badges are only for deliberately declared compatibility facts** such as platform or runtime floor. Keep them accurate when that declaration changes; never use a static badge for a status.
 - **Every badge links to its evidence**: CI → workflow runs, release → releases, license → LICENSE.
 - **Label spelling: `license`**, matching GitHub's own interface.
 
@@ -52,7 +53,7 @@ They are called **badges**, and almost all are made with [shields.io](https://sh
 |---|---|
 | CI status | `https://github.com/<owner>/<repo>/actions/workflows/<file>.yml/badge.svg` |
 | Latest release | `https://img.shields.io/github/v/release/<owner>/<repo>` |
-| License | `https://img.shields.io/github/license/<owner>/<repo>` (needs GitHub to recognise LICENSE — see below) |
+| License | Live `https://img.shields.io/github/license/<owner>/<repo>` when GitHub recognises LICENSE; otherwise use the static path below |
 | Anything CI computes | CI writes a small JSON file; the badge reads it: `https://img.shields.io/endpoint?url=<raw URL of that JSON>` |
 
 ## Live project graphics
@@ -77,7 +78,9 @@ GitHub runs no JavaScript in a README, so "alive" means clickable SVGs, `<detail
 
 ## Per repository
 
-Word counts measured 2026-09-15.
+Historical planning snapshot — word counts and recommendations measured
+2026-09-15. These values are intentionally retained as a dated snapshot, not
+as current repository state; re-measure before acting on them.
 
 | Repository | Words | Priority | Badge row |
 |---|---|---|---|
@@ -86,12 +89,12 @@ Word counts measured 2026-09-15.
 | agentic-framework | 933 | Add a banner and a header; trim; align the landing page with this standard | CI · Python · license |
 | edopro-hd-cards | 998 | Trim; update old repository names in the README, badges and the app's update URL | release · build · Windows · Python 3.11+ · license |
 | mgs-mc-modkit | 1,950 | Trim hard; switch badges from `for-the-badge` to `flat`; license unrecognised | release · CI · Steam Deck · Windows · license |
-| edopro-next | 2,011 | Keep the hero opening; move the rest into `docs/`; license unrecognised | CI · early development · Qt 6 · license |
+| edopro-next | 2,011 | Keep the hero opening; move the rest into `docs/`; license unrecognised | CI · Qt 6 · license |
 | smt3hd-deck-modkit | — | Add a banner and a header; no CI, so no CI badge; license unrecognised | release · Steam Deck · license |
 
 ## License recognition
 
-GitHub shows "no license", and the live license badge shows "not specified", unless LICENSE contains the **unmodified** standard text. Three repositories report `NOASSERTION` (present but unrecognised): edopro-next, mgs-mc-modkit and smt3hd-deck-modkit. Keep the standard text in LICENSE and put project-specific notes in the README.
+GitHub shows "no license", and the live license badge shows "not specified", unless LICENSE contains text GitHub recognises. Do not edit a LICENSE to satisfy this standard: licensing is the owner's decision. When a project must keep an upstream LICENSE legally fixed and verbatim, a static license badge is acceptable; its text must state what that LICENSE actually grants, and it must link to LICENSE. Three repositories report `NOASSERTION` (present but unrecognised): edopro-next, mgs-mc-modkit and smt3hd-deck-modkit. For those projects, the static badge path is the correct one if the upstream text must remain unchanged. Put project-specific notes in the README.
 
 ## Out of scope
 
