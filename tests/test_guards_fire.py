@@ -16,7 +16,6 @@ on every run, which is the difference the framework's own rules insist on.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,21 +26,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def copy_repo(dest: Path) -> Path:
     target = dest / "repo"
-    tracked = subprocess.check_output(
-        ["git", "ls-files", "-z"], cwd=ROOT
-    ).decode().split("\0")
-    for raw in tracked:
-        if not raw:
-            continue
-        src = ROOT / raw
-        dst = target / raw
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst, follow_symlinks=False)
-    # The copied tree is a test repository, not an arbitrary filesystem tree.
-    # Give tracked-path guards an index so later mutations remain untracked and
-    # cannot silently redefine the repository surface.
-    subprocess.run(["git", "init", "-q"], cwd=target, check=True)
-    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    # Cloning the committed snapshot preserves the complete tracked index and
+    # avoids rebuilding it file by file. This is materially faster on Windows,
+    # where the old copy-and-``git add .`` setup made the mutation suite time
+    # out before exercising the guards.
+    subprocess.run(["git", "clone", "-q", str(ROOT), str(target)], check=True)
     return target
 
 
