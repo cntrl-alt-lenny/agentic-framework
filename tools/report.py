@@ -602,9 +602,11 @@ def delivery_status(
     inbox must contain the named role's report with matching task and HEAD
     provenance. The named branch is fetched from ``origin`` first; a Verifier
     performs this check from a linked worktree, while separate clones remain
-    coordinator-only because their inboxes are private. A missing report, a
-    missing branch, or a branch still at the base all return the same retryable
-    "not delivered yet" state.
+    coordinator-only because their inboxes are private. A missing branch, an
+    unavailable base, or a branch still at the base is retryable. Once the
+    branch is strictly ahead of the base, an absent matching report is a
+    different state: the work may have been delivered in another clone, but
+    delivery is not established from this clone.
     """
     _fetch_branch(branch, cwd)
     head, conflict = _delivery_branch_head(branch, cwd)
@@ -625,7 +627,13 @@ def delivery_status(
 
     report_path = find_report(role=role, task=task, cwd=cwd)
     if report_path is None:
-        return 1, f"not delivered yet: no report for role '{role}'"
+        return 1, (
+            "branch delivered but report unavailable in this clone: no matching "
+            f"report for role '{role}' and task '{task}' at branch head {head}; "
+            "obtain the report from the source clone or have the owner carry its "
+            "exact body, then verify the role, task and head. Delivery is not "
+            "established by this check"
+        )
     provenance = _read_provenance(report_path)
     if provenance is None:
         return 1, f"not delivered yet: report for role '{role}' has no header"
