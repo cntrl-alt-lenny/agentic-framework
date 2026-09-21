@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -87,6 +88,11 @@ class TestDefaultAdoption(AdoptionCase):
         self.assertTrue((self.target / "docs" / "agents" / "reports.md").is_file())
 
     def test_shebang_tools_are_installed_executable(self):
+        if os.name == "nt":
+            self.skipTest(
+                "Windows cannot preserve POSIX executable bits; adopt.py warns "
+                "and the committed-mode guard runs from the Git index"
+            )
         for rel in (
             "tools/authority.py",
             "tools/neutrality.py",
@@ -384,6 +390,11 @@ class TestTopologyOptions(AdoptionCase):
         self.assertIn("docs/agents/roles/worker.md", adapter.read_text(encoding="utf-8"))
 
     def test_adapter_shebang_files_are_installed_executable(self):
+        if os.name == "nt":
+            self.skipTest(
+                "Windows cannot preserve POSIX executable bits; adopt.py warns "
+                "and the committed-mode guard runs from the Git index"
+            )
         self.assertEqual(run_adopt(self.target, "--adapter", "claude-code"), 0)
         for rel in (
             ".claude/hooks/run_python.sh",

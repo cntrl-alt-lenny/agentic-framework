@@ -498,14 +498,22 @@ def main(argv: list[str] | None = None) -> int:
     if unset:
         print(
             "\nadopt: WARNING -- the executable bit did not take on these "
-            "files. This host cannot set it (Windows discards it silently), "
-            "so a POSIX clone would receive them inert. Fix before "
-            "committing:",
+            "files. This host cannot set it (Windows discards it silently). "
+            "Windows can use the installed files, but a POSIX clone would "
+            "receive them inert. Fix before committing:",
             file=sys.stderr,
         )
         for dst in unset:
             print(f"  git update-index --chmod=+x {dst.relative_to(target)}",
                   file=sys.stderr)
+        if os.name == "nt":
+            print(
+                "adopt: Windows completed the local copy with this warning; "
+                "set the Git executable mode before a POSIX clone consumes it.",
+                file=sys.stderr,
+            )
+            print("\nadopt: done.")
+            return 0
         return 1
     print("\nadopt: done.")
     return 0

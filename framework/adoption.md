@@ -214,6 +214,11 @@ after each declared role.
 The script never overwrites an existing file: it writes a `.framework` sibling
 and reports the collision instead. Re-running it is safe.
 
+On Windows, the script may complete with a warning because Windows does not
+preserve POSIX executable bits. That warning is not a claim that a later POSIX
+clone is safe: apply each printed `git update-index --chmod=+x <path>` command
+before committing, and check the committed mode from a POSIX environment.
+
 ### 5. Write `AGENTS.md` properly
 
 The template gives the structure. The project-specific parts are yours to write:
