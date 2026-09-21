@@ -79,7 +79,16 @@ explicitly by the owner.
    exists at the exact head under a different task, say so rather than pointing
    at another clone. Seen in round 18.
 6. **This repository adopts itself fully.** This file is the first step.
-7. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
+7. **Lessons from the first run in a second tool** (edopro-next, 2026-09-21). Say
+   in the adapter guidance that some tools start every command in a fixed folder,
+   so a seat must run the checkout and report tools from inside its own worktree;
+   say that anything a seat reports about itself (tool, model, operating system)
+   is a claim to verify, with the operating system taken from a command; and warn
+   that text captured through Windows PowerShell can change its line endings.
+8. **The authority tool, run on its own, reports every neutrality example block
+   as "suppresses nothing"** — including framework/git-and-isolation.md — while
+   the test suite accepts those blocks. The two should agree.
+9. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
    part of closing a round. Removing files is a reviewed round like any other
    change, and nothing that is the only record of something is deleted.
 
