@@ -474,6 +474,7 @@ class TestLineEndingWarnings(AdoptionCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(run_adopt(self.target, "--adapter", "claude-code"), 0)
+        self.assertIn("WARNING: tracked executable framework text file(s)", output.getvalue())
         self.assertIn(".claude/hooks/run_python.sh", output.getvalue())
 
     def test_adoption_discovers_an_executable_script_outside_known_hook_roots(self):
