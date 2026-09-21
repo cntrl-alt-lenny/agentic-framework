@@ -138,6 +138,10 @@ class TestLineEndingsArePinned(unittest.TestCase):
             repo = Path(tmp)
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             subprocess.run(
+                ["git", "config", "core.autocrlf", "false"],
+                cwd=repo, check=True,
+            )
+            subprocess.run(
                 ["git", "config", "user.email", "tests@example.com"],
                 cwd=repo, check=True,
             )

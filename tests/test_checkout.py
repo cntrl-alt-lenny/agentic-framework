@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -58,13 +59,23 @@ class TestCheckoutCheck(unittest.TestCase):
 
     def test_nonportable_role_names_are_refused_before_work_starts(self):
         """Checkout identity and report paths must share one portable rule."""
-        for role in ("vérifier", "Builder", "bad?role"):
+        invalid_roles = ("vérifier", "Builder", "bad?role")
+        worktree_roles = invalid_roles
+        if os.name == "nt":
+            # `?` cannot appear in a Windows filename, so validate that role
+            # without asking the filesystem to create its deliberately bad
+            # worktree path.
+            worktree_roles = ("vérifier", "Builder")
+        for role in worktree_roles:
             with self.subTest(role=role):
                 path = self._worktree(role)
                 code, message = checkout.check(role, path)
                 self.assertEqual(code, 1)
                 self.assertIn("invalid role name", message)
                 self.assertIn(role, message)
+        if os.name == "nt":
+            with self.assertRaises(checkout.CheckoutError):
+                checkout.validate_role_name("bad?role")
         # Windows reserves this name at the filesystem layer, so creating a
         # worktree named `con` is impossible there. Exercise the same guard's
         # validation directly instead of letting the fixture fail first.
