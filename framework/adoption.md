@@ -61,18 +61,26 @@ Hand this to the Acme Builder.
 <!-- /guard:counterexample -->
 
 The rule is the scanner rule name, `roles=` is the comma-separated role set
-against which the example is invalid, and `text=` is the scanner's complete
-`Finding.matched` token that must occur in the block. Matching collapses
-whitespace and removes balanced outer backticks, but otherwise requires exact
-equality: a partial role suffix cannot name a longer matched token, and a
-surrounding sentence cannot name the shorter matched token. The probe runs the
-block through the real structural scanner with the declared roles,
-independently of the adopting project's role set. Only that declared rule and
-matched text are exempted; another finding in the same block remains visible. A
-missing, malformed, absent, or unflagged declaration is inert. A declaration is
-a visible, reviewable claim, not a magic exemption: a made-up role in a
-declaration can make harmless prose appear to be a real violation, so review
-declarations as carefully as the text they exempt.
+against which the example is invalid, and `text=` is that rule's complete
+canonical matched text. Matching collapses whitespace and removes balanced
+outer backticks, but otherwise requires exact equality: a partial role suffix
+cannot name a longer matched token, and a surrounding sentence cannot name the
+shorter matched token. The canonical matched text is:
+
+- `compound-lane`: the complete proper-noun-plus-role token;
+- `prefixed-lane`: the complete prefixed role token;
+- `branch-namespace`: the complete `namespace`/`scope` branch name, whether it
+  was written in a Git command or as a backticked branch in prose;
+- `queue-identity`: the complete matched queue path; and
+- `lane-count`: the complete phrase that quantifies the lanes.
+
+The probe runs the block through the real structural scanner with the declared
+roles, independently of the adopting project's role set. Only that declared
+rule and matched text are exempted; another finding in the same block remains
+visible. A missing, malformed, absent, or unflagged declaration is inert. A
+declaration is a visible, reviewable claim, not a magic exemption: a made-up
+role in a declaration can make harmless prose appear to be a real violation,
+so review declarations as carefully as the text they exempt.
 
 ## Updating an adopted framework consistently
 
@@ -158,14 +166,19 @@ other project-owned namespaces may declare them in its root `AGENTS.md`:
 the literal `meta/` namespace. A custom namespace such as `release` or
 `feature` must be a single lower-case alphanumeric label and must have a
 tracked project-structure witness at
-`docs/branch-namespaces/<name>.md`. That witness is what keeps the declaration
-from being a caller-controlled allowlist. The tracked witness establishes
+`docs/branch-namespaces/<name>.md`. A hyphenated name such as `modern-ui` is
+valid, but a custom namespace carrying a declared role or coordinator, such as
+acme-builder, remains refused. The witness must explain which established
+project-owned structure uses the namespace, where that structure is visible,
+and why the namespace is not a role or provider identity; a filename-only
+formality is not sufficient review. The tracked witness establishes
 project-owned structure, but the scanner does not identify providers or prove
 that a label is not provider-shaped. Declaring a custom namespace is therefore
 a reviewed human decision, not a machine-verified neutrality guarantee. When
 neutrality is enabled, its test and command-line scanner discover the same
 declaration and apply it to every normative document. A malformed, duplicate,
-unsupported, or unsupported-by-evidence declaration fails the installed guard.
+unsupported, role-bearing, or unsupported-by-evidence declaration fails the
+installed guard.
 Declarations inside fenced or four-space-indented Markdown code, and inside
 raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are treated as
 examples and are inert. This is a deliberately common-construct boundary: a

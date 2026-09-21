@@ -21,9 +21,10 @@ Options:
                        manifest — never from its name. See `tools/adapters.py`.
     --dry-run          Print the plan; write nothing.
 
-Safety: an existing file is never overwritten. The framework version is written
-alongside it as `<name>.framework` and reported as a collision to merge by hand.
-Re-running is therefore safe and idempotent.
+Safety: an existing file is never overwritten. A byte-identical file is
+reported as already current; a different file gets the framework version
+alongside it as `<name>.framework` and is reported as a collision to merge by
+hand. Re-running is therefore safe and idempotent.
 """
 
 from __future__ import annotations
@@ -81,6 +82,7 @@ DOCS_DEST = "docs/agents"
 @dataclass
 class Plan:
     writes: list[tuple[Path, str, bool]] = field(default_factory=list)
+    current: list[Path] = field(default_factory=list)
     collisions: list[tuple[Path, Path]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     ensure_worktrees_ignore: bool = False
@@ -219,8 +221,18 @@ def build_plan(
 
     def add(rel: str, content: str, executable: bool = False) -> None:
         dst = target / rel
+        installed = content.replace("\r\n", "\n").replace("\r", "\n")
         if dst.exists():
+            if dst.is_file() and dst.read_bytes() == installed.encode("utf-8"):
+                plan.current.append(dst)
+                return
             sibling = dst.with_name(dst.name + ".framework")
+            while sibling.exists():
+                if sibling.is_file() and sibling.read_bytes() == installed.encode("utf-8"):
+                    plan.collisions.append((dst, sibling))
+                    plan.current.append(sibling)
+                    return
+                sibling = sibling.with_name(sibling.name + ".framework")
             plan.collisions.append((dst, sibling))
             plan.writes.append((sibling, content, executable))
         else:
@@ -389,6 +401,8 @@ def render_plan(plan: Plan, target: Path) -> str:
     for dst, _, executable in plan.writes:
         rel = dst.relative_to(target)
         out.append(f"  write  {rel}{' (exec)' if executable else ''}")
+    for dst in plan.current:
+        out.append(f"  current {dst.relative_to(target)} (already current)")
     for existing, sibling in plan.collisions:
         out.append(
             f"  KEEP   {existing.relative_to(target)} (exists) — framework "

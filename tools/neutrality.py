@@ -62,6 +62,7 @@ from textblocks import (
     COUNTEREXAMPLE_OPEN,
     counterexample_blocks,
     logical_lines,
+    logical_lines_with_positions,
     negated,
 )
 
@@ -223,7 +224,7 @@ _BRANCH_NAMESPACE_DECLARATION = re.compile(
 )
 _STRUCTURAL_BRANCH_NAMESPACES = frozenset(("m<N>", "meta"))
 _MILESTONE_NAMESPACE = re.compile(r"m[0-9]+\Z")
-_PROJECT_NAMESPACE = re.compile(r"[a-z][a-z0-9]*\Z")
+_PROJECT_NAMESPACE = re.compile(r"[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*\Z")
 _FENCE = re.compile(r"^( {0,3})(?P<run>(?P<char>`|~){2,})(?P<info>.*)$")
 _HTML_EXAMPLE_OPEN = re.compile(
     r"<\s*(?P<tag>pre|code|textarea|script|style)\b[^>]*>",
@@ -303,14 +304,46 @@ def _namespace_evidence(root: "Path", prefix: str) -> bool:
     return result.returncode == 0
 
 
+def _validate_namespace_forms(
+    prefixes: Sequence[str], *, roles: Iterable[str] = (), coordinator: str = "brain",
+) -> None:
+    invalid = [prefix for prefix in prefixes if not (
+        prefix in _STRUCTURAL_BRANCH_NAMESPACES
+        or _PROJECT_NAMESPACE.fullmatch(prefix)
+    )]
+    if invalid:
+        raise ValueError(
+            "unsupported branch namespace declaration(s): "
+            + ", ".join(invalid)
+            + "; custom names must be lower-case project namespaces using "
+            "letters, digits, and single hyphens"
+        )
+    role_prefixes = set(roles) | {coordinator}
+    role_bearing = [
+        prefix for prefix in prefixes
+        if prefix not in _STRUCTURAL_BRANCH_NAMESPACES
+        and prefix not in role_prefixes
+        and bool(set(re.split(r"[-_]", prefix)) & role_prefixes)
+    ]
+    if role_bearing:
+        raise ValueError(
+            "unsupported branch namespace declaration(s): "
+            + ", ".join(role_bearing)
+            + "; a custom namespace may not carry a declared role or coordinator"
+        )
+
+
 def branch_namespace_declarations(
     text: str, *, root: "Path | None" = None,
+    roles: Iterable[str] = (), coordinator: str = "brain",
 ) -> tuple[str, ...]:
     """Read the bounded declaration from a project document.
 
     ``m<N>`` and ``meta`` are built-in structural forms. A custom lower-case
-    namespace is accepted only when ``root`` proves it with a tracked
-    ``docs/branch-namespaces/<name>.md`` document.
+    namespace, including a single-hyphen project namespace, is accepted only
+    when ``root`` proves it with a tracked
+    ``docs/branch-namespaces/<name>.md`` document. If roles are supplied, a
+    custom namespace carrying a declared role is refused.
     """
     marker_lines = [
         line for line in _live_lines(text)
@@ -332,16 +365,7 @@ def branch_namespace_declarations(
     )
     if not prefixes or len(set(prefixes)) != len(prefixes):
         raise ValueError("branch namespace declaration must name unique prefixes")
-    invalid = [prefix for prefix in prefixes if not (
-        prefix in _STRUCTURAL_BRANCH_NAMESPACES
-        or _PROJECT_NAMESPACE.fullmatch(prefix)
-    )]
-    if invalid:
-        raise ValueError(
-            "unsupported branch namespace declaration(s): "
-            + ", ".join(invalid)
-            + "; custom names must be lower-case project namespaces"
-        )
+    _validate_namespace_forms(prefixes, roles=roles, coordinator=coordinator)
     if root is not None:
         missing = [
             prefix for prefix in prefixes
@@ -376,13 +400,16 @@ def _project_root_for_paths(paths: Sequence[str]) -> "Path | None":
     return roots[0]
 
 
-def branch_namespaces_for_paths(paths: Sequence[str]) -> tuple[str, ...]:
+def branch_namespaces_for_paths(
+    paths: Sequence[str], *, roles: Iterable[str] = (), coordinator: str = "brain",
+) -> tuple[str, ...]:
     """Discover the same AGENTS.md declaration used by the installed guard."""
     root = _project_root_for_paths(paths)
     if root is None:
         return ()
     return branch_namespace_declarations(
         (root / "AGENTS.md").read_text(encoding="utf-8"), root=root,
+        roles=roles, coordinator=coordinator,
     )
 
 
@@ -509,18 +536,9 @@ def scan(
                          "would make every rule vacuous")
 
     declared_namespaces = tuple(branch_namespaces)
-    invalid_namespaces = [
-        name for name in declared_namespaces
-        if not (
-            name in _STRUCTURAL_BRANCH_NAMESPACES
-            or _PROJECT_NAMESPACE.fullmatch(name)
-        )
-    ]
-    if invalid_namespaces:
-        raise ValueError(
-            "unsupported branch namespace form(s): "
-            + ", ".join(invalid_namespaces)
-        )
+    _validate_namespace_forms(
+        declared_namespaces, roles=roles, coordinator=coordinator,
+    )
 
     compound_re = _compound_lane_re(roles)
     prefixed_re = _prefixed_lane_re(roles)
@@ -558,7 +576,7 @@ def scan(
     # Token-adjacency rules run over LOGICAL lines, so a compound split across a
     # soft wrap -- "the SomeProvider" ending one line and "Worker" starting the
     # next -- is still caught.
-    for n, line in logical_lines(scan_text):
+    for _, line, positions in logical_lines_with_positions(scan_text):
         for match in compound_re.finditer(line):
             qualifier, role = match.groups()
             words = [w for w in qualifier.split() if w]
@@ -568,7 +586,7 @@ def scan(
             ]
             if bad:
                 emit(
-                    n, "compound-lane",
+                    positions[match.start()] if positions else 1, "compound-lane",
                     f"'{qualifier.strip()} {role}' binds a proper noun to a role; "
                     f"lanes are the bare roles {roles}",
                     matched=match.group(0).strip(),
@@ -579,7 +597,7 @@ def scan(
             if not _prefixed_lane_is_identity(line, match):
                 continue
             emit(
-                n, "prefixed-lane",
+                positions[match.start()] if positions else 1, "prefixed-lane",
                 f"'{prefix}-{role}' prefixes a role to make a lane token; "
                 f"the lane is '{role}'",
                 matched=match.group(0),
@@ -591,10 +609,11 @@ def scan(
     for n, line in enumerate(lines, 1):
         candidates: list[tuple[str, str]] = []
         for match in BRANCH_COMMAND.finditer(line):
-            candidates.extend(
-                (group, match.group(0))
-                for group in match.groups() if group
-            )
+            command = match.group(0)
+            for prefix in (group for group in match.groups() if group):
+                marker = f"{prefix}/"
+                start = command.rfind(marker)
+                candidates.append((prefix, command[start:] if start >= 0 else command))
         if BRANCH_LINE.search(line):
             for match in BRANCH_BACKTICK.finditer(line):
                 prefix, rest = match.groups()
@@ -604,7 +623,7 @@ def scan(
                     prefix, rest = rest.split("/", 1)
                 if FILE_SUFFIX.search(rest):
                     continue  # a file path, not a branch
-                candidates.append((prefix, match.group(0)))
+                candidates.append((prefix, f"{prefix}/{rest}"))
         for prefix, matched in candidates:
             if _branch_namespace_allowed(
                 prefix, branch_prefixes, declared_namespaces
@@ -977,7 +996,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        discovered_namespaces = branch_namespaces_for_paths(args.paths)
+        discovered_namespaces = branch_namespaces_for_paths(
+            args.paths, roles=roles, coordinator=args.coordinator,
+        )
     except (OSError, ValueError) as exc:
         print(f"neutrality: cannot read branch namespace declaration: {exc}", file=sys.stderr)
         return 2

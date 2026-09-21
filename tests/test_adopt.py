@@ -275,7 +275,7 @@ class TestTopologyOptions(AdoptionCase):
                 cwd=self.target, capture_output=True, text=True,
             )
             self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("unsupported branch namespace", proc.stdout + proc.stderr)
+            self.assertIn("tracked project-structure", proc.stdout + proc.stderr)
         finally:
             agents.write_text(original, encoding="utf-8")
 
@@ -602,13 +602,29 @@ class TestSafety(AdoptionCase):
         first = (self.target / "docs/agents/CONSTITUTION.md").read_text(
             encoding="utf-8"
         )
+        before = sorted(self.target.rglob("*.framework"))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(run_adopt(self.target), 0)
+        self.assertIn("already current", output.getvalue())
+        self.assertEqual(sorted(self.target.rglob("*.framework")), before)
         self.assertEqual(run_adopt(self.target), 0)
-        # Second run collides with itself and writes siblings rather than
-        # clobbering; the original is untouched either way.
         self.assertEqual(
             (self.target / "docs/agents/CONSTITUTION.md").read_text(encoding="utf-8"),
             first,
         )
+
+    def test_a_real_collision_gets_a_sibling_without_overwriting_either_file(self):
+        agents = self.target / "AGENTS.md"
+        agents.write_text("project-owned\n", encoding="utf-8")
+        self.assertEqual(run_adopt(self.target), 0)
+        sibling = self.target / "AGENTS.md.framework"
+        self.assertTrue(sibling.is_file())
+        sibling_before = sibling.read_bytes()
+        self.assertEqual(agents.read_text(encoding="utf-8"), "project-owned\n")
+        self.assertEqual(run_adopt(self.target), 0)
+        self.assertEqual(agents.read_text(encoding="utf-8"), "project-owned\n")
+        self.assertEqual(sibling.read_bytes(), sibling_before)
 
     def test_missing_target_is_refused(self):
         self.assertEqual(

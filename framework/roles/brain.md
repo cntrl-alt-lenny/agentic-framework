@@ -152,7 +152,9 @@ before its first other instruction.
    whichever reads more confidently.
 10. **Accept, reject, or issue a corrective brief.** A corrective brief goes to a
     *fresh* context with neutral framing. Never hand an agent its own rejected
-    reasoning back to defend.
+    reasoning back to defend. If Brain prescribes wording because a constraint
+    must be preserved, it checks every correction literally and together first
+    and reconciles anything that would leave the result false or contradictory.
 11. **On acceptance, merge it.** Before merging, confirm all four and say so:
     - the work was reviewed at **this exact head SHA**, not an earlier one;
     - Brain independently checked every blocking finding and every unproven

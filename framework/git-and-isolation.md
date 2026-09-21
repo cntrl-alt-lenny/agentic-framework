@@ -105,10 +105,11 @@ branch** — never which provider ran it. A project may use a different scheme
 as the namespace derives from roles or project structure and never from a
 provider. Declare it in the adopting project's root `AGENTS.md` with
 `<!-- guard:branch-namespaces prefixes="m<N>,meta" -->`. The built-in forms
-are `m<N>` and `meta`; a custom lower-case alphanumeric label also needs a
-tracked `docs/branch-namespaces/<name>.md` witness. The installed and
-command-line guards discover the same declaration, and reject unsupported
-labels or labels without that structural evidence.
+are `m<N>` and `meta`; a custom lower-case label using single hyphens also
+needs a tracked `docs/branch-namespaces/<name>.md` witness. The installed and
+command-line guards discover the same declaration, and reject unsupported,
+role-bearing, or unevidenced labels. The witness must justify the established
+project-owned structure, not merely exist under the expected filename.
 
 <!-- guard:counterexample -->
 <!-- guard:violation branch-namespace roles=builder text="claude/<task>" -->
