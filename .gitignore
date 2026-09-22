@@ -7,5 +7,5 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
-# Isolated agent checkouts (see framework/git-and-isolation.md)
+# Optional linked checkouts for running several seats on one machine
 .worktrees/

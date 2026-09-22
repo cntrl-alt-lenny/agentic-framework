@@ -1,11 +1,85 @@
 # Changelog
 
-Numbered releases start here. Each entry states what changed, why, and what
-an adopting project must do to move to it — see
-[`framework/update.md`](framework/update.md) for the procedure that reads
-this file. Releases are tagged by Brain after the round that produces them
-merges; this file is the record an executor writes and a tag only points at,
-never the other way around.
+Each entry states what changed, why, and what an adopting project must do to
+move to it. `tools/adopt.py --update` prints the "What an adopter must do"
+section of every release between a project's pinned release and the new one.
+Releases are tagged by Brain after the round that produces them merges.
+
+## 3.0.0 — lean core, handoffs in git, one-command updates
+
+An independent audit found the framework cost more time than it saved. Its
+reports stayed on the machine where they were written; Workers could not run
+in cloud tools or fresh clones; dormant projects had no way to learn a newer
+release existed; updates were reconciled by hand; and agents read 10,000 to
+21,000 words before starting. This release keeps the operating model — roles,
+independent review, evidence over narrative, git as memory — and replaces the
+machinery.
+
+- **One core document and three role cards** (about 2,800 words in total)
+  replace 14 copied documents (about 21,000 words). Word budgets are tested.
+- **Rounds live in `docs/rounds/<id>/`:** the brief and each seat's report,
+  committed and pushed. A round can start on one machine or tool and finish
+  on another. The private report inbox, `leave-check` and the carry-the-report
+  procedure are gone; `fw.py status --leaving` checks what matters (anything
+  not pushed) and works with squash merges.
+- **Seats are not tied to a folder.** `fw.py start` puts any clone, cloud
+  workspace or tool-named branch on the right commit.
+- **`tools/fw.py` replaces** `checkout.py`, `report.py` and `line_endings.py`.
+  Reports are files with required sections, stamped with the exact commit.
+- **`fw.py status`** reports the pinned release against the latest, local
+  edits to framework files, rounds in flight, unpushed work and uninitialised
+  submodules. **`fw.py check`** (and the installed `tests/test_framework.py`)
+  keeps `docs/state.md` short and free of stored commit ids, makes tool entry
+  files point at `AGENTS.md`, and keeps personal paths and email addresses
+  out of the documents agents read.
+- **Updates are one command:** `tools/adopt.py <project> --update`, guided by
+  a fingerprint of every installed file in `docs/agents/framework.json`.
+- **The merge rule is a project setting**, `owner-approves` (default) or
+  `brain-merges`, with a four-line merge card. The wording scanners
+  (`neutrality.py`, `authority.py`, `textblocks.py`) and their declaration
+  grammar are removed.
+- **Tiers** 0, 1 and 2 scale the ceremony to the risk.
+- **Commands are shell-neutral:** no heredocs; `python3`, `py -3` or `python`.
+- **Framework feedback goes to GitHub issues**, with triage, reproduction,
+  batching and a freeze after each release (`docs/feedback.md`).
+- **Adapters only point.** The Claude Code adapter now installs `CLAUDE.md`
+  (importing `AGENTS.md`), seat files and `/status`; its Stop hook is retired
+  because reports are now committed by the seat itself. A `gemini` adapter adds
+  a `GEMINI.md` pointer.
+
+### What an adopter must do
+
+Run this as one Tier 2 round, with no other round in flight.
+
+1. From a clone of the framework at `v3.0.0`, run
+   `python3 tools/adopt.py <project> --update --dry-run`, read the plan, then
+   run it without `--dry-run`. It installs the new files, replaces and
+   removes 2.x copies it can prove were never edited, and keeps everything
+   else, saying why.
+2. **Merge edited copies.** For each `<file>.framework` it wrote, move any
+   project-specific content into `AGENTS.md` (or `docs/agents/local/`), then
+   replace the file with the `.framework` copy.
+3. **Retire what it kept on purpose.** For each file listed as "still refers
+   to it", remove the reference (usually the Stop hook entry in
+   `.claude/settings.json`, or a project hook calling `tools/line_endings.py`
+   or `tools/report.py`), then delete the file. Delete the project's own
+   2.x-only documents that restate the framework (for example a local
+   `reports.md` or `push-gate.md`) once their project-specific content is in
+   `AGENTS.md`.
+4. **Make `AGENTS.md` the entry point.** Add `Merge rule: owner-approves` (or
+   `brain-merges`), point it at `docs/agents/FRAMEWORK.md`, and move rules
+   that live only in `CLAUDE.md` into it. Replace `CLAUDE.md` with a pointer
+   (`@AGENTS.md`), or keep its project facts and add that line at the top.
+5. **Trim `docs/state.md`** to decisions, parked items and pointers (1,000
+   words by default). Move history into an archive document. Keep any commit
+   ids under `## Historical anchors`. If project tools genuinely need a longer
+   file, raise `settings.state_words` in `docs/agents/framework.json` and say
+   why in `AGENTS.md`.
+6. **Start new rounds in `docs/rounds/`.** Leave `docs/briefs/` as history,
+   and delete `docs/briefs/active.md` once its round is finished
+   (`fw.py status` mentions it until then).
+7. Run the project's full test suite and `python3 tools/fw.py check`, paste
+   both outputs, and remove personal paths the check reports.
 
 ## 2.1.0 — conventions, lessons and the active README standard
 
