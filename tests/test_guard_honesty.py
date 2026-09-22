@@ -66,7 +66,16 @@ class TestCounterexampleBlocksAreHonest(unittest.TestCase):
         self.assertEqual(inert, [], "\n".join(inert))
 
     def test_every_tracked_markdown_counterexample_has_a_live_declaration(self):
-        """Every tracked block, including history, must prove its exemption."""
+        """Every tracked block, including history, must prove its exemption --
+        against WHICHEVER scanner's rule it actually declares. Both scanners
+        share the `guard:counterexample` wrapper and `guard:violation` syntax
+        (see `framework/adoption.md`'s "Counterexample declarations"), so a
+        block validated only by `tools/authority.py`'s own probe -- one
+        declaring `routine-approval` or the sibling self-merge rule, never a
+        `tools/neutrality.py` rule -- must not be reported inert here merely
+        because `neutrality.scan_counterexample` cannot recognise a rule it
+        does not own.
+        """
         inert: list[str] = []
         for path in docset.tracked_markdown_files():
             rel = path.relative_to(ROOT).as_posix()
@@ -74,7 +83,11 @@ class TestCounterexampleBlocksAreHonest(unittest.TestCase):
                 path.read_text(encoding="utf-8")
             )
             for line, body in blocks:
-                if not neutrality.scan_counterexample(body, ROLES):
+                live = (
+                    neutrality.scan_counterexample(body, ROLES)
+                    or authority.scan_counterexample(body)
+                )
+                if not live:
                     inert.append(f"{rel}:{line} — declaration probe is inert")
         self.assertEqual(inert, [], "\n".join(inert))
 
