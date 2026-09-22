@@ -9,7 +9,7 @@ Live state — current commit, open pull requests, CI, branches, worktrees — i
 **derived**, never stored here. Anything below that carries a date is a historical
 anchor, not a claim about now.
 
-Last updated: 2026-09-21, by the framework's Brain.
+Last updated: 2026-09-22, by the Builder (round-022-adopter-lifecycle).
 
 ## Starting the framework's Brain
 
@@ -24,11 +24,14 @@ Before anything else, run python3 tools/checkout.py --seat brain from this repos
 These override the framework's defaults for this owner's projects. Each was made
 explicitly by the owner.
 
-- **Merges need the owner's explicit approval** (2026-09-16). Brain reviews,
-  recommends accepting or rejecting, and merges with `gh pr merge --merge` only
-  after the owner says yes. This departs from framework/roles/brain.md, which lets
-  Brain merge routine work itself; a sanctioned way to record such an override is
-  queued below.
+- **Merges need the owner's explicit approval** (2026-09-16). This departs from
+  framework/roles/brain.md, which lets Brain merge routine work itself, and is
+  now recorded in the recognised, machine-checked form `tools/authority.py`
+  understands — see `framework/CONSTITUTION.md`'s "Recording an override":
+
+  <!-- guard:owner-override routine-approval text="Brain reviews and adjudicates, then merges reviewed work only on the owner's approval, using `gh pr merge --merge` once the owner says yes." -->
+  Brain reviews and adjudicates, then merges reviewed work only on the
+  owner's approval, using `gh pr merge --merge` once the owner says yes.
 - **The owner is not a programmer.** Explain in plain English, briefly, without
   commit hashes or git jargon unless they matter.
 - **Prompts** are code blocks with each paragraph on one line. Always say the send
@@ -41,8 +44,14 @@ explicitly by the owner.
 - **One machine at a time** (2026-09-21). The owner alternates between a Mac and a
   Windows 11 desktop in blocks, and switches only between rounds. Before leaving a
   machine: "I'm switching machines. Make sure nothing is left behind and update
-  the state file." On arrival: "I've switched to this machine. Catch up from
-  GitHub and the Dev Hub, then tell me where we are."
+  the state file." That instruction means: run
+  `python3 tools/report.py leave-check --base main` from a clone that can see
+  this repository's inbox (see `framework/reports.md`'s "Leaving a machine")
+  before saying it is safe to go. A clean result means every local report is
+  confirmed merged; anything else names the round still waiting and tells the
+  owner, in plain words, which round to wait for or ask about before switching —
+  never "it's probably fine". On arrival: "I've switched to this machine. Catch
+  up from GitHub and the Dev Hub, then tell me where we are."
 - **The README standard** lives in this repository at `standards/readme.md`. Do not
   suggest a GitHub profile repository for it.
 
@@ -63,33 +72,25 @@ explicitly by the owner.
 
 ## Queued, in order
 
-1. **A sanctioned way to record an owner override.** `tools/authority.py` judges
-   wording rather than meaning, so the owner's approval rule is flagged in one
-   phrasing and passes in another, and there is no official format for recording
-   it. Reported by gx-spirit-caller, reproduced here.
-2. **Adoption bootstrap.** A project's own adoption round must run
-   `tools/checkout.py` and `tools/report.py` before they exist in the project;
-   document running the framework's copies by absolute path. Hit by two projects.
-3. **The Brains' mailbox and upstream feedback,** written into the framework as an
+1. **The Brains' mailbox and upstream feedback,** written into the framework as an
    optional convention that names no particular storage.
-4. **Releases and updates.** Numbered framework releases, a written procedure for
-   a project to update to a pinned release as a normal reviewed round, and the
-   adopted framework version recorded in the project. Then ask
-   edopro-retro-formats to update.
-5. **Name a task mismatch in the delivery check.** When a report for the role
-   exists at the exact head under a different task, say so rather than pointing
-   at another clone. Seen in round 18.
-6. **This repository adopts itself fully.** This file is the first step.
-7. **Lessons from the first run in a second tool** (edopro-next, 2026-09-21). Say
-   in the adapter guidance that some tools start every command in a fixed folder,
-   so a seat must run the checkout and report tools from inside its own worktree;
-   say that anything a seat reports about itself (tool, model, operating system)
-   is a claim to verify, with the operating system taken from a command; and warn
-   that text captured through Windows PowerShell can change its line endings.
-8. **The authority tool, run on its own, reports every neutrality example block
+2. **Ask edopro-retro-formats to update.** Numbered releases, an update
+   procedure, and adopted-version recording now exist (round-022); the first
+   numbered release still needs tagging after this lands (Brain's step, not an
+   executor's), and edopro-retro-formats — on an older, pre-release framework
+   copy — still needs to actually be asked to update to it.
+3. **This repository adopts itself fully.** This file is the first step.
+4. **Lessons from the first run in a second tool** (edopro-next, 2026-09-21).
+   Say that anything a seat reports about itself (tool, model, operating
+   system) is a claim to verify, with the operating system taken from a
+   command; and warn that text captured through Windows PowerShell can change
+   its line endings. (The fixed-folder lesson from the same report is
+   resolved: round-022 documents `--cwd` and single-command `cd &&` as the
+   fix, in `framework/adoption.md`.)
+5. **The authority tool, run on its own, reports every neutrality example block
    as "suppresses nothing"** — including framework/git-and-isolation.md — while
    the test suite accepts those blocks. The two should agree.
-9. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
+6. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
    part of closing a round. Removing files is a reviewed round like any other
    change, and nothing that is the only record of something is deleted.
 

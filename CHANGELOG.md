@@ -1,5 +1,74 @@
 # Changelog
 
+Numbered releases start here. Each entry states what changed, why, and what
+an adopting project must do to move to it — see
+[`framework/update.md`](framework/update.md) for the procedure that reads
+this file. Releases are tagged by Brain after the round that produces them
+merges; this file is the record an executor writes and a tag only points at,
+never the other way around.
+
+## 2.0.0 — first numbered release
+
+The first framework release with a number a project can pin to. Everything
+below the "v2" heading further down this file happened first, under no
+release number at all — every adopted project has effectively been tracking
+an unpinned, unversioned copy of the framework since v2 replaced v1. This
+release is the point where that stops: `VERSION` at this repository's root
+now names the current release, `tools/adopt.py` derives it (and this
+repository's own remote address) automatically into an adopting project's
+`AGENTS.md`, and [`framework/update.md`](framework/update.md) gives that
+project a written procedure to move to a newer pinned release later, as an
+ordinary reviewed round rather than an ad hoc copy.
+
+### What an adopter must do
+
+A project adopted before this release has no recorded framework version or
+repository address in its `AGENTS.md`, and no `docs/agents/update.md`. Bring
+it current the same way any later update works —
+[`framework/update.md`](framework/update.md)'s procedure, run once against
+this release — which installs `docs/agents/update.md` itself, adds the
+"Framework" section recording `2.0.0` and this repository's address to
+`AGENTS.md`, and leaves every other project-authored file untouched.
+
+### Added
+
+- **Numbered releases.** `VERSION` at this repository's root; this file's new
+  per-release structure, each entry stating what changed and what an
+  adopter must do.
+- **The adopted release and repository address recorded automatically.**
+  `tools/adopt.py` derives both — `VERSION`'s content and this clone's Git
+  `origin` remote — and writes them into `AGENTS.md`'s new "Framework"
+  section. Neither is ever typed by whoever runs adoption.
+- **[`framework/update.md`](framework/update.md)**, copied verbatim to every
+  adopting project, describing the update procedure: what moves together,
+  how to reconcile a diverged file instead of overwriting it, checking line
+  endings, and running the round as an ordinary Worker-and-Verifier change
+  that never starts mid-round. How a project learns a new release exists is
+  left to the owner's own channel; this document does not prescribe one.
+- **A recognised, reviewable form for an owner's standing override of the
+  routine-merge gate.** `<!-- guard:owner-override <rule>
+  text="<sentence>" -->`, validated by `tools/authority.py` against the real
+  scanner rather than judged by wording alone — see
+  [`framework/CONSTITUTION.md`](framework/CONSTITUTION.md)'s "Recording an
+  override" and `templates/AGENTS.md`'s "Owner overrides".
+- **A sanctioned route for the round that performs a project's own
+  adoption**, before `tools/checkout.py` and `tools/report.py` exist in the
+  target — the framework repository's own copies, invoked by path and
+  pointed at the target checkout with `--cwd` — and the requirement that
+  every framework command run pointed at the seat's own worktree, documented
+  in [`framework/adoption.md`](framework/adoption.md). `tools/report.py
+  write` gained `--cwd` to make this possible.
+- **The delivery check names a task mismatch instead of blaming an
+  unavailable report.** When a report for the requested role exists at the
+  exact delivered head under a different Brief-ID, `tools/report.py
+  delivery` says so by name and still never reports delivery — see
+  [`framework/reports.md`](framework/reports.md).
+- **A leave-machine check.** `tools/report.py leave-check --base
+  <default-branch>` reports every local completion report describing work
+  not yet merged into the default branch, so switching machines mid-round is
+  visible before it happens rather than discovered cold on the other
+  machine. Unresolvable state is reported as unknown, never as safe.
+
 ## v2 — general-purpose agentic project framework
 
 v1 was `decomp-agent-framework`: a three-agent, decompilation-specific,

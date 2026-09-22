@@ -49,6 +49,130 @@ class TestNormativeSurfaceIsClean(unittest.TestCase):
             ]
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_no_inert_owner_override_declarations(self):
+        """A declaration protecting nothing is a silent widening waiting to
+        happen -- including one accidentally live inside a documentation
+        example of the declaration syntax itself (templates/AGENTS.md)."""
+        problems = []
+        for path in docset.normative_files():
+            text = path.read_text(encoding="utf-8")
+            rel = path.relative_to(ROOT).as_posix()
+            problems += [
+                f"{rel}:{line} owner-override declaration exempts nothing"
+                for line in authority.inert_override_declarations(text, source=rel)
+            ]
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_no_inert_counterexample_blocks(self):
+        """`python3 tools/authority.py framework` reported "counterexample
+        block suppresses nothing" at framework/evidence.md,
+        framework/failure-catalogue.md, framework/git-and-isolation.md,
+        framework/topologies.md and framework/adoption.md -- every one of
+        them a block declaring a NEUTRALITY violation
+        (`guard:violation compound-lane ...`), which this guard's own rules
+        never fire on. Never checked against the real documents before; see
+        TestCounterexampleBlockOwnership for the synthetic, narrower proofs.
+        """
+        problems = []
+        for path in docset.normative_files():
+            text = path.read_text(encoding="utf-8")
+            rel = path.relative_to(ROOT).as_posix()
+            problems += [
+                f"{rel}:{line} counterexample block suppresses nothing"
+                for line in authority.inert_counterexamples(text, source=rel)
+            ]
+        self.assertEqual(problems, [], "\n".join(problems))
+
+
+class TestCounterexampleBlockOwnership(unittest.TestCase):
+    """A block genuinely owned by a DIFFERENT scanner must not be judged
+    "inert" here -- but a block this guard genuinely does own, and that
+    genuinely exempts nothing, must still be caught. Fixes the class: not
+    just the four reported documents, but the general mechanism, proven with
+    synthetic cases beyond them.
+
+    Ownership is only ever a TIE-BREAKER for an already-empty scan, never a
+    reason to stop looking: a block whose scan finds SOMETHING is not inert
+    regardless of which rule its declaration names, because the wrapper is
+    genuinely suppressing real content -- exactly the property this check
+    exists to prove. Skipping that block just because its declaration names
+    a foreign rule would silently lose coverage of real stale-authority text
+    that happens to share a block with an unrelated neutrality declaration.
+    """
+
+    NEUTRALITY_OWNED = (
+        '<!-- guard:counterexample -->\n'
+        '<!-- guard:violation compound-lane roles=builder text="Acme Builder" -->\n'
+        "Hand this to the Acme Builder.\n"
+        "<!-- /guard:counterexample -->\n"
+    )
+
+    def test_a_block_declaring_only_a_neutrality_rule_is_not_inert_here(self):
+        self.assertEqual(
+            authority.inert_counterexamples(self.NEUTRALITY_OWNED), [],
+            "a block this guard does not own, and that contains nothing "
+            "this guard would ever find, was reported as this guard's own "
+            "inert exemption",
+        )
+
+    def test_a_block_declaring_only_a_neutrality_rule_produces_no_top_level_finding(self):
+        # The wrapper still suppresses the whole block from top-level
+        # findings, same as any counterexample block -- ownership filtering
+        # only changes what inert_counterexamples() reports, never scan()'s
+        # ordinary suppression of wrapped content.
+        self.assertEqual(authority.scan(self.NEUTRALITY_OWNED), [])
+
+    def test_a_block_with_a_foreign_declaration_but_real_authority_content_is_not_inert(self):
+        """Real stale-authority text sharing a block with an unrelated
+        neutrality declaration must still be recognised as "not inert" --
+        the wrapper IS suppressing something real, even though it is not
+        specifically declared under an authority-shaped rule. Ownership
+        filtering must never turn into a way to stop looking at a block's
+        actual content.
+        """
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Acme Builder" -->\n'
+            "Hand this to the Acme Builder, who will offer to merge it.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            authority.inert_counterexamples(body), [],
+            "a block containing real stale-authority text was reported as "
+            "inert merely because its declaration named a different rule",
+        )
+
+    def test_a_block_this_guard_genuinely_owns_and_exempts_nothing_is_still_caught(self):
+        """The other half of the fix: ownership-filtering must not become a
+        way to silence a real defect in this guard's own declarations. Uses
+        harmless declared text (not itself stale-shaped) so the assertion
+        tests the real prose, not the declaration comment's own wording.
+        """
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="Brain reviews carefully." -->\n'
+            "Brain reviews carefully.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            authority.inert_counterexamples(body), [1],
+            "a block genuinely declared for this guard's own rule, that "
+            "exempts nothing real, must still be caught",
+        )
+
+    def test_a_block_this_guard_genuinely_owns_and_does_exempt_something_is_clean(self):
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="offer to merge" -->\n'
+            "Brain will offer to merge once reviewed.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(authority.inert_counterexamples(body), [])
+        self.assertEqual(authority.scan(body), [])
+
 
 class TestGuardCatchesTheRealV1Text(unittest.TestCase):
     """Red-before-green, against the actual broken state."""
@@ -131,6 +255,232 @@ class TestNegationIsHandled(unittest.TestCase):
                     "a correct prohibition was reported as a violation; a guard "
                     "that cries wolf gets disabled by whoever trips it",
                 )
+
+
+class TestOwnerOverride(unittest.TestCase):
+    """The owner's standing override now has a recognised, reviewable form.
+
+    Reported by gx-spirit-caller: the same meaning ("Brain merges only after
+    the owner's approval") passed or failed depending on phrasing alone, and
+    there was no sanctioned place to record it. `<!-- guard:owner-override
+    <rule> text="<sentence>" -->` fixes the class, not the one reported
+    phrasing -- see `tools/authority.py`'s module docstring.
+    """
+
+    def _declared(self, sentence: str, *, rule: str = "routine-approval") -> str:
+        return (
+            f'<!-- guard:owner-override {rule} text="{sentence}" -->\n{sentence}\n'
+        )
+
+    def test_reproduces_the_reported_inconsistency_undeclared(self):
+        """The bug report's own two commands, unmodified."""
+        flagged = "Brain merges on the owner's approval."
+        self.assertTrue(
+            authority.scan(flagged),
+            "the wording-sensitive phrasing must still be caught when not "
+            "declared as an override -- otherwise this stops being the bug",
+        )
+
+    def test_the_declared_form_is_recognised_not_judged_by_wording(self):
+        doc = self._declared("Brain merges on the owner's approval.")
+        self.assertEqual(authority.scan(doc), [], "a declared override must "
+                          "not surface as a finding")
+        overrides = authority.scan_overrides(doc)
+        self.assertTrue(overrides, "the override was not recognised at all")
+        self.assertEqual(authority.inert_override_declarations(doc), [])
+
+    def test_a_second_natural_phrasing_of_the_same_policy_is_also_recognised(self):
+        """Different wording, same standing decision -- both must work
+        uniformly once declared, closing the "passes or fails on phrasing"
+        gap rather than fixing one example of it."""
+        doc = self._declared(
+            "Brain reviews and adjudicates, then merges reviewed work only "
+            "on the owner's approval."
+        )
+        self.assertEqual(authority.scan(doc), [])
+        self.assertTrue(authority.scan_overrides(doc))
+        self.assertEqual(authority.inert_override_declarations(doc), [])
+
+    def test_override_does_not_silence_an_unrelated_finding_elsewhere(self):
+        doc = (
+            self._declared("Brain merges on the owner's approval.")
+            + "\nElsewhere: the scaffolder offers to merge before Brain decides.\n"
+        )
+        findings = authority.scan(doc)
+        self.assertTrue(
+            findings, "the guard must still catch stale language the "
+            "override does not govern"
+        )
+        self.assertTrue(all(f.rule == "routine-approval" for f in findings))
+        self.assertIn("offers to merge", " ".join(f.matched for f in findings))
+
+    def test_override_does_not_widen_across_a_different_rule_same_line(self):
+        """A declared override for one rule must not blanket-exempt a
+        different rule's finding on the same physical line."""
+        sentence = (
+            "Brain merges on the owner's approval and the executor may "
+            "self-merge."
+        )
+        doc = self._declared(sentence, rule="routine-approval")
+        findings = authority.scan(doc)
+        self.assertTrue(
+            findings, "executor-self-merge on the same line must survive an "
+            "override declared only for routine-approval"
+        )
+        self.assertEqual({f.rule for f in findings}, {"executor-self-merge"})
+
+    def test_inert_when_declared_text_is_not_actually_flagged(self):
+        """A blanket exemption cannot be manufactured for harmless prose."""
+        doc = self._declared("Brain reviews the work carefully.")
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(authority.inert_override_declarations(doc), [1])
+
+    def test_inert_when_declared_rule_does_not_match_the_real_finding(self):
+        doc = self._declared(
+            "Brain merges on the owner's approval.", rule="executor-self-merge",
+        )
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(authority.inert_override_declarations(doc), [1])
+        # The real finding is untouched -- a wrong-rule declaration protects
+        # nothing, and the guard must still catch the actual stale text.
+        self.assertTrue(authority.scan(doc))
+
+    def test_inert_when_declared_text_is_a_paraphrase_not_the_real_sentence(self):
+        doc = (
+            '<!-- guard:owner-override routine-approval '
+            'text="Brain merges after the owner says yes." -->\n'
+            "Brain merges on the owner's approval.\n"
+        )
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(authority.inert_override_declarations(doc), [1])
+        self.assertTrue(authority.scan(doc))
+
+    def test_inert_when_the_sentence_is_already_a_correct_prohibition(self):
+        """Nothing to override when the sentence was never a violation."""
+        doc = self._declared("Brain never merges on the owner's approval.")
+        self.assertEqual(authority.scan(doc), [])
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(authority.inert_override_declarations(doc), [1])
+
+    def test_a_soft_wrapped_override_sentence_is_still_recognised(self):
+        sentence = (
+            "Brain merges reviewed work only on the owner's approval, "
+            "recorded here."
+        )
+        doc = (
+            f'<!-- guard:owner-override routine-approval text="{sentence}" -->\n'
+            "Brain merges reviewed work only on the owner's approval, recorded\n"
+            "here.\n"
+        )
+        self.assertEqual(authority.scan(doc), [])
+        self.assertTrue(authority.scan_overrides(doc))
+        self.assertEqual(authority.inert_override_declarations(doc), [])
+
+    def test_a_declaration_inside_a_fenced_code_example_is_not_live(self):
+        """Documentation SHOWING the declaration syntax with placeholder text
+        (as templates/AGENTS.md does) must not itself become a live, and
+        therefore inert, declaration -- matching general Markdown-example
+        practice: fenced code is not scanned for live declarations, the same
+        boundary `framework/adoption.md` documents for the unrelated
+        branch-namespace declaration.
+        """
+        doc = (
+            "# Docs\n\n"
+            "Here is the syntax:\n\n"
+            "```text\n"
+            + self._declared("<the exact overriding sentence>")
+            + "```\n"
+        )
+        self.assertEqual(authority.scan(doc), [])
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(
+            authority.inert_override_declarations(doc), [],
+            "a fenced-code example of the declaration syntax was treated as "
+            "a live, unfulfilled declaration",
+        )
+
+    def test_a_real_policy_sentence_inside_a_fence_is_still_flagged(self):
+        """Fencing is not a way to hide real stale-authority text: general
+        prose scanning does not exempt fenced code (a genuine policy
+        statement written inside a code fence would otherwise evade
+        detection entirely), only DECLARATION PARSING does. So real
+        stale-shaped text inside a fence still surfaces as a finding, and its
+        accompanying declaration -- also inside the fence -- earns no
+        override, because the declaration itself is not live there.
+        """
+        doc = (
+            "# Docs\n\n```text\n"
+            + self._declared("Brain merges on the owner's approval.")
+            + "```\n"
+        )
+        findings = authority.scan(doc)
+        self.assertTrue(
+            findings, "real stale-authority text inside a fence must still "
+            "be caught"
+        )
+        self.assertEqual(authority.scan_overrides(doc), [])
+        self.assertEqual(
+            authority.inert_override_declarations(doc), [],
+            "a declaration inside a fence must not be reported as an "
+            "inert LIVE declaration either -- it was simply never live",
+        )
+
+    def test_two_independent_overrides_in_one_document_both_validate(self):
+        doc = (
+            self._declared("Brain merges on the owner's approval.")
+            + "\n"
+            + self._declared(
+                "The scaffolder may self-merge hotfixes.",
+                rule="executor-self-merge",
+            )
+        )
+        self.assertEqual(authority.scan(doc), [])
+        overrides = authority.scan_overrides(doc)
+        self.assertEqual({f.rule for f in overrides},
+                          {"routine-approval", "executor-self-merge"})
+        self.assertEqual(authority.inert_override_declarations(doc), [])
+
+    def test_the_declaration_marker_itself_is_not_double_counted(self):
+        """The HTML comment repeats the sentence in its own text= attribute;
+        that must not produce a second, unsuppressible finding on the
+        marker's own line."""
+        doc = self._declared("Brain merges on the owner's approval.")
+        findings = authority.scan(doc)
+        self.assertEqual(findings, [])
+        overrides = authority.scan_overrides(doc)
+        self.assertTrue(all(f.line == 2 for f in overrides), overrides)
+
+    def test_cli_reports_the_declared_form_as_clean_and_distinct(self):
+        import subprocess
+        import sys
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "a.md"
+            path.write_text(
+                "# A\n\n" + self._declared("Brain merges on the owner's approval."),
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "authority.py"), str(path)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("recognised owner override", proc.stdout)
+
+    def test_cli_still_fails_on_the_undeclared_phrasing(self):
+        import subprocess
+        import sys
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "a.md"
+            path.write_text(
+                "# A\n\nBrain merges on the owner's approval.\n", encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "authority.py"), str(path)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
 
 
 class TestRoleContractsStateTheirBoundaries(unittest.TestCase):

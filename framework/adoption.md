@@ -18,6 +18,7 @@ project."*
 | `docs/agents/lifecycle.md` | Round lifecycle, copied verbatim. |
 | `docs/agents/reports.md` | Completion-report mechanism, copied verbatim. |
 | `docs/agents/topologies.md` | Topology choices, copied verbatim. |
+| `docs/agents/update.md` | Procedure for moving to a different pinned framework release, copied verbatim. |
 | `docs/agents/roles/README.md` | Role vocabulary guidance, copied verbatim. |
 | `docs/agents/roles/brain.md` | Brain contract, copied verbatim. |
 | `docs/agents/roles/worker.md` | Worker contract, copied verbatim. |
@@ -48,6 +49,32 @@ the conditional state, not an installation that did not happen.
 The framework's own `framework/state.md` is author guidance for this repository
 and is deliberately not copied. An adopting project has one durable state file:
 `docs/state.md`; this avoids confusing framework guidance with project state.
+
+## Python compatibility
+
+**Every Python file this framework installs supports Python 3.9 and newer.**
+An adopting project may run a newer interpreter, and may run its own lint
+check (`ruff` or similar) as part of what a change must pass to merge; an
+installed file that only works on, or only lints clean on, a newer Python
+than the project actually runs would fail silently in the first case and
+block the adoption round itself in the second.
+
+This repository's own CI runs `ruff check --select F,E9,B,UP` — real defects,
+a real syntax error, likely bugs, and needless pre-3.9 idioms; never style or
+formatting, which stays the adopting project's own choice — against every
+installed file, at Python 3.9 and at newer targets adopting projects
+commonly use. See `tests/test_lint.py` for the exact file list and target
+versions, and for the same check runnable locally whenever `ruff` is
+available.
+
+**One documented exception.** `tools/report.py` deliberately keeps
+`datetime.timezone.utc` rather than the `datetime.UTC` alias ruff's `UP017`
+suggests at Python 3.11 and newer: that alias does not exist before 3.11, so
+applying the suggestion would silently drop 3.9 support. The line carries an
+inline `# noqa: UP017` naming exactly this. No other rule in the selected set
+is suppressed anywhere in the installed files; a future suppression needs the
+same kind of stated, checkable reason — `tests/test_lint.py` proves this one
+is real by confirming the rule WOULD fire without it.
 
 ## Counterexample declarations
 
@@ -84,28 +111,27 @@ so review declarations as carefully as the text they exempt.
 
 ## Updating an adopted framework consistently
 
-The canonical documents and installed tools are one versioned surface. For a
-consistent framework update, move these together in one change:
+The canonical documents and installed tools are one versioned surface.
+Updating only the scanner or report tool leaves copied canonical documents
+stale; updating only the documents leaves the installed guard or report
+mechanism stale. Either mixed state can report findings caused by the
+framework's old copies rather than by project-authored text, or can make a
+new delivery or line-ending rule unavailable to the adopter.
 
-1. Every document in `tools/adopt.py`'s `VERBATIM_DOCS`, installed under
-   `docs/agents/` — the complete set is listed in the adoption table above.
-2. The baseline installed tools `tools/checkout.py`, `tools/report.py`,
-   `tools/line_endings.py`, and `tests/test_checkout.py` and
-   `tests/test_report.py`.
-3. When neutrality is enabled, `tools/neutrality.py`, `tools/textblocks.py`,
-   `tools/authority.py`, and `tests/test_role_neutrality.py`.
-4. The installed root `.gitattributes`, and `.githooks/pre-push` when the
-   project opted into that hook.
+**The adopted project's own copy of this procedure is
+[`update.md`](update.md)** — installed verbatim at `docs/agents/update.md`,
+and it is the authoritative, self-contained statement of what moves
+together and how, run as an ordinary reviewed round, never mid-round. This
+repository does not restate that list here a second time; if the two ever
+need to say something different, that is a defect, not a style choice.
 
-The framework repository's `tools/adopt.py` is the installer and is not copied
-into an adopted project; update it by using the same framework revision that
-supplies the files above. Updating only the scanner or report tool leaves
-copied canonical documents stale; updating only the documents leaves the
-installed guard or report mechanism stale. Either mixed state can report
-findings caused by the framework's old copies rather than by project-authored
-text, or can make a new delivery/line-ending rule unavailable to the adopter.
-This is a migration constraint for a consistent update, not a synchronisation
-mechanism.
+`tools/adopt.py` itself is the installer and is not copied into an adopted
+project; update it by using the same framework revision that supplies the
+files `update.md` names. `VERSION` at this repository's root is this
+framework's own current release, read by `adopt.py` and recorded, never
+hand-typed, in an adopting project's `AGENTS.md`. `CHANGELOG.md` records
+what changed in each numbered release and what an adopter must do — the
+record `update.md`'s procedure reads before moving a project to a new one.
 
 ### Existing working trees and line endings
 
@@ -184,6 +210,55 @@ raw HTML `pre`, `code`, `textarea`, `script`, or `style` blocks, are treated as
 examples and are inert. This is a deliberately common-construct boundary: a
 declaration embedded in arbitrary inline HTML or a non-standard renderer block
 can still look live and needs human review.
+
+## Running rounds before the tools exist in the target project
+
+Every role prompt's first action is `python3 tools/checkout.py --seat <seat>`,
+and every executor or Verifier writes its completion report with
+`python3 tools/report.py write ...` (and a Verifier checks delivery with
+`python3 tools/report.py delivery ...`) — see
+[`git-and-isolation.md`](git-and-isolation.md) and
+[`reports.md`](reports.md). A project undergoing its own adoption round has
+neither file yet: they do not exist in the target repository until the round
+that installs them lands.
+
+**The sanctioned route is the framework repository's own copies, invoked by
+their path in that clone, pointed at the target project's own worktree with
+`--cwd`** — never a copy placed ad hoc into the target, and never invoked
+without `--cwd`:
+
+```bash
+python3 <path-to-this-framework-clone>/tools/checkout.py --seat <seat> \
+    --cwd <target-project-seat-worktree>
+
+python3 <path-to-this-framework-clone>/tools/report.py write \
+    --task <brief-id> --cwd <target-project-seat-worktree>
+
+python3 <path-to-this-framework-clone>/tools/report.py delivery \
+    --branch <branch> --base <base> --role <role> --task <brief-id> \
+    --cwd <target-project-seat-worktree>
+```
+
+`checkout.py --seat` and every `report.py` subcommand accept `--cwd`
+precisely so a tool's own copy can be run from anywhere while still deriving
+identity, the inbox, and delivery state from the *target* checkout — never
+from wherever the framework clone happens to sit, and never from wherever the
+process's own working directory happens to be. Once the adoption round has
+landed, later rounds run the project's own installed `tools/checkout.py` and
+`tools/report.py` the ordinary way.
+
+**Every framework command — before adoption and after — must run pointed at
+the seat's own worktree, never a fixed folder a tool happens to start every
+command in.** Some tools always launch a command from one fixed root
+directory regardless of where the session conceptually "is", and both
+`tools/checkout.py` and `tools/report.py` derive a checkout's identity from
+the directory they are told to inspect. Relying on an assumed process working
+directory is therefore not reliable across every tool: pass `--cwd
+<seat's own worktree>` explicitly, or `cd` into that worktree and run the
+command in that same shell invocation (`cd <worktree> && python3
+tools/checkout.py --seat <seat>`, one command, not two — a `cd` run as its
+own separate step can be silently reset by a tool before the next command
+runs). Do not assume that a `cd` from an earlier turn is still in effect.
 
 ## Procedure
 

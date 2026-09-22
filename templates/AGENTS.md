@@ -8,6 +8,18 @@ The normative framework this project runs on lives in
 [`docs/agents/`](docs/agents/). This file is the project-specific part: the
 topology, the invariants, and the evidence each kind of change must produce.
 
+## Framework
+
+This project runs **agentic-framework release {{FRAMEWORK_VERSION}}**, from
+`{{FRAMEWORK_REPO}}`. Recorded here by adoption, derived from that
+repository's own `VERSION` file and Git remote — never hand-typed, so this
+line cannot be stale by a typo. A cold Brain, on any machine, reads this to
+know which framework release this project follows without asking anyone.
+
+To move to a different pinned release, see
+[`docs/agents/update.md`](docs/agents/update.md) — an ordinary reviewed
+round, never something applied mid-round or outside review.
+
 ## Authority
 
 The human project owner is the final authority over direction and scope, and
@@ -22,6 +34,32 @@ gate is stale.
 The full authority model, including the list of actions still reserved to the
 owner, is in [`docs/agents/CONSTITUTION.md`](docs/agents/CONSTITUTION.md). It is
 stated once there rather than restated — and drifted — here.
+
+### Owner overrides
+
+The owner may explicitly override the routine-merge gate above — an
+exceptional act they initiate, never a step Brain solicits. This project has
+none by default. Where the owner has made one, it is declared here, directly
+under this heading, in the recognised form the installed authority guard
+understands (when the optional neutrality guard is installed; see
+[`docs/agents/adapters.md`](docs/agents/adapters.md)):
+
+```text
+<!-- guard:owner-override routine-approval text="<the exact overriding sentence>" -->
+<the exact overriding sentence>
+```
+
+The declaration names the rule it overrides — `routine-approval` is the one
+that matters here — and the *exact* sentence that follows it, verbatim — not a
+paraphrase. `tools/authority.py` validates it against the real scanner
+before recognising it: a declaration naming text the scanner would not
+otherwise flag, or that does not literally match the following sentence,
+exempts nothing and fails the installed guard as an inert declaration. Only
+that one sentence is exempted; the guard still catches stale authority
+language everywhere else, including the rest of this file. Add, change or
+remove a declaration only when the owner has explicitly made or reversed that
+decision — see
+[`docs/agents/CONSTITUTION.md`](docs/agents/CONSTITUTION.md)'s "Authority".
 
 **The owner's interface is conversation, not the repository.** Their loop is:
 ask what's next → receive one ready-to-paste executor prompt and, where the

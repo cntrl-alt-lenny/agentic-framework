@@ -387,6 +387,23 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
             problems += [str(f) for f in self._scan(path).findings]
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_no_inert_counterexample_blocks_of_this_scanners_own(self):
+        """Symmetric to authority.py's own check: this scanner must not
+        claim a block belonging entirely to a DIFFERENT scanner (e.g.
+        authority.py's `routine-approval`) is its own inert exemption. No
+        real document currently triggers this direction -- see
+        TestCounterexampleBlockOwnership for the synthetic proof that closes
+        the general mechanism, not just the currently-observed direction.
+        """
+        problems: list[str] = []
+        for path in docset.normative_files():
+            problems += [
+                f"{path.relative_to(ROOT).as_posix()}:{c.line} counterexample "
+                f"block suppresses nothing"
+                for c in self._scan(path).inert_counterexamples()
+            ]
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_counterexample_blocks_do_not_hide_real_violations(self):
         """Suppression must be scoped to the marked block, nothing wider.
 
@@ -749,6 +766,58 @@ class TestNormativeSurfaceIsRoleBased(unittest.TestCase):
                 )
             ]
         self.assertEqual(problems, [], "\n".join(problems))
+
+
+class TestCounterexampleBlockOwnership(unittest.TestCase):
+    """Symmetric to authority.py's own proof: a block genuinely owned by
+    authority.py (`routine-approval` / `executor-self-merge`) must not be
+    judged "inert" here -- but a block this scanner genuinely does own, and
+    that genuinely exempts nothing, must still be caught.
+    """
+
+    def _scan(self, text: str) -> neutrality.ScanResult:
+        return neutrality.scan(text, ROLES, coordinator=COORDINATOR)
+
+    def test_a_block_declaring_only_an_authority_rule_is_not_inert_here(self):
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="Brain reviews carefully." -->\n'
+            "Brain reviews carefully.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            self._scan(body).inert_counterexamples(), [],
+            "a block this scanner does not own was reported as this "
+            "scanner's own inert exemption",
+        )
+
+    def test_a_block_this_scanner_genuinely_owns_and_exempts_nothing_is_still_caught(self):
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Acme Builder" -->\n'
+            "This sentence does not actually say that.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        result = self._scan(body)
+        self.assertEqual(
+            len(result.inert_counterexamples()), 1,
+            "a block genuinely declared for this scanner's own rule, that "
+            "exempts nothing real, must still be caught",
+        )
+
+    def test_a_block_this_scanner_genuinely_owns_and_does_exempt_something_is_clean(self):
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Acme Builder" -->\n'
+            "Hand this to the Acme Builder.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        result = self._scan(body)
+        self.assertEqual(result.inert_counterexamples(), [])
+        self.assertEqual(result.findings, [])
 
 
 class TestGrammarAllowanceCannotBecomeAVendorList(unittest.TestCase):
