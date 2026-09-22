@@ -78,9 +78,10 @@ is real by confirming the rule WOULD fire without it.
 
 ## Counterexample declarations
 
-When normative text must quote a provider-shaped form in order to prohibit it,
-put the quote inside a `guard:counterexample` block and declare the exact
-structural violation it demonstrates. The declaration syntax is:
+When normative text must quote a provider-shaped form, or a stale-authority
+idiom, in order to prohibit it, put the quote inside a `guard:counterexample`
+block and declare the exact violation it demonstrates. The declaration syntax
+is the same for both installed scanners:
 
 <!-- guard:counterexample -->
 <!-- guard:violation compound-lane roles=builder text="Acme Builder" -->
@@ -88,7 +89,9 @@ Hand this to the Acme Builder.
 <!-- /guard:counterexample -->
 
 The rule is the scanner rule name, `roles=` is the comma-separated role set
-against which the example is invalid, and `text=` is that rule's complete
+against which the example is invalid (`tools/authority.py`'s rules ignore it —
+its findings do not depend on a role set — but the attribute is still
+required, since the syntax is shared), and `text=` is that rule's complete
 canonical matched text. Matching collapses whitespace and removes balanced
 outer backticks, but otherwise requires exact equality: a partial role suffix
 cannot name a longer matched token, and a surrounding sentence cannot name the
@@ -98,16 +101,30 @@ shorter matched token. The canonical matched text is:
 - `prefixed-lane`: the complete prefixed role token;
 - `branch-namespace`: the complete `namespace`/`scope` branch name, whether it
   was written in a Git command or as a backticked branch in prose;
-- `queue-identity`: the complete matched queue path; and
-- `lane-count`: the complete phrase that quantifies the lanes.
+- `queue-identity`: the complete matched queue path;
+- `lane-count`: the complete phrase that quantifies the lanes;
+- `routine-approval`: the complete matched idiom making a routine merge
+  conditional on human assent, exactly as `tools/authority.py`'s `Finding`
+  captured it; and
+- the sibling authority rule for an executor accepting or merging work of its
+  own: the complete matched idiom, the same way.
 
-The probe runs the block through the real structural scanner with the declared
-roles, independently of the adopting project's role set. Only that declared
-rule and matched text are exempted; another finding in the same block remains
-visible. A missing, malformed, absent, or unflagged declaration is inert. A
-declaration is a visible, reviewable claim, not a magic exemption: a made-up
-role in a declaration can make harmless prose appear to be a real violation,
-so review declarations as carefully as the text they exempt.
+Each scanner validates only the declarations it can itself confirm: the probe
+runs the declared text through that real scanner, and only a genuine hit
+against the named rule earns the exemption. A block may declare rules for more
+than one scanner, but **keep every block's declarations owned by one scanner**
+— `tools/neutrality.py`'s own probe re-scans the whole block body against
+every declaration present and requires all of them to validate under its own
+rules before exempting any of them, so declaring one of `tools/authority.py`'s
+rules in a block that also declares a neutrality rule silently breaks the
+neutrality exemption too. Wrap each scanner's quoted forms in their own
+`guard:counterexample` block instead. Only the declared rule and matched text
+are exempted from a block's scanner; another finding in the same block,
+including one belonging to the other scanner, remains visible. A missing,
+malformed, absent, or unflagged declaration is inert. A declaration is a
+visible, reviewable claim, not a magic exemption: a made-up role, or a
+made-up matched text, in a declaration can make harmless prose appear to be a
+real violation, so review declarations as carefully as the text they exempt.
 
 ## Updating an adopted framework consistently
 
