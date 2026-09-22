@@ -17,6 +17,11 @@ ENV = {
     "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
     "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
     "GIT_CONFIG_NOSYSTEM": "1",
+    # No background maintenance: it can still be writing inside .git while a
+    # test removes its temporary directory (seen with git 2.55 on macOS).
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "maintenance.auto", "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "0",
 }
 
 
@@ -46,8 +51,11 @@ class TempDirTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         def unlock(func, path, _exc):  # Windows: git objects are read-only
-            os.chmod(path, 0o700)
-            func(path)
+            try:
+                os.chmod(path, 0o700)
+                func(path)
+            except FileNotFoundError:
+                pass  # already gone
         shutil.rmtree(self.tmp, onerror=unlock)
 
     def init_repo(self, path: Path) -> Path:

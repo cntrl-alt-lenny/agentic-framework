@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -12,11 +11,6 @@ from pathlib import Path
 from tests.helpers import PYTHON, ROOT, TempDirTest, adopt, fw, git, run
 
 FIXTURE = ROOT / "tests" / "fixtures" / "v2_adopter"
-
-
-def remove_read_only(func, path, _exc) -> None:  # Windows: git objects are read-only
-    os.chmod(path, 0o700)
-    func(path)
 
 
 def manifest(target: Path) -> dict:
@@ -250,10 +244,11 @@ class LegacyMigration(TempDirTest):
         self.assertTrue((self.target / "tools/textblocks.py").exists(), result.stdout)
 
     def test_a_project_that_is_not_a_git_repository_is_still_protected(self) -> None:
-        shutil.rmtree(self.target / ".git", onerror=remove_read_only)
-        result = adopt(self.target, "--update")
+        plain = self.tmp / "plain-copy"
+        shutil.copytree(FIXTURE, plain)
+        result = adopt(plain, "--update")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.target / "tools/line_endings.py").exists())
+        self.assertTrue((plain / "tools/line_endings.py").exists())
         self.assertIn(".githooks/pre-push still refers to it", result.stdout)
 
     def test_the_new_fw_works_in_the_migrated_project(self) -> None:
