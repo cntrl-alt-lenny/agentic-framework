@@ -242,6 +242,13 @@ class LegacyMigration(TempDirTest):
         self.assertTrue((self.target / "tools/textblocks.py").exists(), result.stdout)
         self.assertIn("tools/mine.py still refers to it", result.stdout)
 
+    def test_a_project_file_left_beside_its_framework_copy_still_counts_as_a_user(self) -> None:
+        (self.target / "tests/test_framework.py").write_text("from tools import textblocks\n", encoding="utf-8")
+        self.commit_all(self.target, "project's own test_framework.py")
+        result = adopt(self.target, "--update")
+        self.assertIn("beside  tests/test_framework.py.framework", result.stdout)
+        self.assertTrue((self.target / "tools/textblocks.py").exists(), result.stdout)
+
     def test_a_project_that_is_not_a_git_repository_is_still_protected(self) -> None:
         shutil.rmtree(self.target / ".git", onerror=remove_read_only)
         result = adopt(self.target, "--update")

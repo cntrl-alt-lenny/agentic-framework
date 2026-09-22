@@ -51,7 +51,8 @@ class ProjectChecks(TempDirTest):
         self.assertEqual(fw(self.project, "check").returncode, 0)
 
     def test_personal_pattern_edge_cases(self) -> None:
-        for text, what in (("C:/Users/x/Dev", "Windows user folder"), ('"C:\\\\Users\\\\x"', "Windows user folder")):
+        for text, what in (("C:/Users/x/Dev", "Windows user folder"), ('"C:\\\\Users\\\\x"', "Windows user folder"),
+                           ("E:/Projects/x", "drive path")):
             (self.project / "docs/state.md").write_text(f"# State\n\n{text}\n", encoding="utf-8")
             self.assertIn(what, self.errors(), text)
         (self.project / "docs/state.md").write_text(

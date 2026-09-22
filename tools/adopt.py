@@ -15,7 +15,9 @@ framework file. That record is what makes an update safe:
 - a framework file someone edited is left alone, and the new version is written
   beside it as `<name>.framework` for review;
 - a file the new release no longer ships is removed only when it provably was
-  never edited, and never while another kept file still refers to it;
+  never edited and no kept code or configuration file visibly names it (by
+  path, quoted file name, or Python import); removals are listed, and anything
+  missed is recoverable from git;
 - project-owned files (AGENTS.md, docs/state.md, rounds, CLAUDE.md, ...) are
   created when missing and otherwise never touched.
 
@@ -279,7 +281,10 @@ def broken_links(target: Path, removed: set[str], planned: dict[str, str]) -> li
             rel = path.relative_to(target).as_posix()
             if rel in removed:
                 continue
-            text = planned.get(rel) or path.read_text(encoding="utf-8", errors="replace")
+            try:
+                text = planned.get(rel) or path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
             for link in re.findall(r"\]\(([^)#\s]+)", text):
                 linked = os.path.normpath((Path(rel).parent / link).as_posix()).replace("\\", "/")
                 if linked in removed:
@@ -381,7 +386,8 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         planned = {
             item.rel: item.content for item, path, reason in plan.writes if reason in ("new", "replace")
         }
-        holders = Holders(target, planned, {item.rel for item in items if item.kind == "copy"})
+        rewritten = {item.rel for item, _path, reason in plan.writes if reason in ("new", "replace") and item.kind == "copy"}
+        holders = Holders(target, planned, rewritten)
         changed = True
         while changed:
             changed = False
@@ -406,8 +412,11 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
                         plan.retained.append((linked, f"{holder}, which is kept, links to it; delete both together"))
                         changed = True
         plan.removals = sorted(removing)
-        for hit in sorted(set(broken_links(target, removing, planned)))[:20]:
+        hits = sorted(set(broken_links(target, removing, planned)))
+        for hit in hits[:20]:
             plan.notes.append(f"fix this link after the update: {hit}")
+        if len(hits) > 20:
+            plan.notes.append(f"... and {len(hits) - 20} more links to fix")
 
     plan.manifest = {
         "about": "Written by the agentic framework's tools/adopt.py. Do not edit by hand, except 'settings'.",

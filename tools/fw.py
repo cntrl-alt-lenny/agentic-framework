@@ -450,7 +450,7 @@ def cmd_delivery(root: Path, round_id: str, branch: str | None, *, quiet_fetch: 
     warning = fetch(root)
     if warning and not quiet_fetch:
         print(f"note: {warning}")
-    candidates = [branch] if branch else find_round_branches(root, round_id)
+    candidates = [branch] if branch else newest_only(root, find_round_branches(root, round_id))
     if branch and not ok(["rev-parse", "--verify", "--quiet", branch], root):
         remote = f"origin/{branch}"
         if ok(["rev-parse", "--verify", "--quiet", remote], root):
@@ -513,7 +513,12 @@ def resume_point(root: Path, role: str, round_id: str) -> tuple[str, str]:
     for ref in branch_refs(root):
         files = round_files(root, ref, round_id)
         added = {p for p, blob in files.items() if base_files.get(p) != blob}
-        others = {p for p in added if p.endswith(".md") and p not in (mine, f"{ROUNDS}/{round_id}/brief.md", f"{ROUNDS}/{round_id}/README.md")}
+        prefix = f"{ROUNDS}/{round_id}/"
+        others = {
+            p for p in added
+            if p.endswith(".md") and "/" not in p[len(prefix):]
+            and p not in (mine, prefix + "brief.md", prefix + "README.md")
+        }
         named = ref in (f"{role}/{round_id}", f"origin/{role}/{round_id}")
         if (named or mine in added) and not others:
             own.append(ref)
@@ -529,6 +534,9 @@ def resume_point(root: Path, role: str, round_id: str) -> tuple[str, str]:
         source = (remote or own)[0]
         print(f"  continuing earlier work from {source}")
         return source, out(["rev-parse", source], root)
+    named = f"origin/{role}/{round_id}"
+    if ok(["rev-parse", "--verify", "--quiet", named], root):
+        print(f"  warning: {named} exists but another seat has built on it, so it was not continued")
     source = locate_brief(root, round_id)
     if source is None:
         raise FwError(
@@ -776,13 +784,13 @@ def machine_lines(root: Path) -> tuple[list[str], bool]:
     unpushed = []
     if has_origin(root):
         refs = out(["for-each-ref", "--format=%(refname)", "refs/"], root).splitlines()
-        refs = [r for r in refs if not r.startswith(("refs/remotes/", "refs/stash", "refs/tags/"))]
+        refs = [r for r in refs if not r.startswith(("refs/remotes/", "refs/stash"))]
         if current_branch(root) is None:
             refs.append("HEAD")
         for ref in refs:
             count = out(["rev-list", "--count", ref, "--not", "--remotes=origin"], root)
             if count and count != "0":
-                label = ref.replace("refs/heads/", "") if ref != "HEAD" else "the detached HEAD"
+                label = ref.replace("refs/heads/", "").replace("refs/tags/", "tag ") if ref != "HEAD" else "the detached HEAD"
                 unpushed.append(f"{label} ({count} commit(s))")
         for line in git(["submodule", "status", "--recursive"], root).stdout.splitlines():
             parts = line[1:].split()
@@ -849,7 +857,7 @@ PERSONAL = [
     (re.compile(r"(?<![A-Za-z0-9%])[A-Za-z]:(?:\\{1,2}|/)(?:Users|Documents and Settings)(?:\\{1,2}|/)", re.I), "a Windows user folder"),
     (re.compile(r"/Users/(?!<)[A-Za-z0-9._-]+/"), "a macOS home folder"),
     (re.compile(r"/home/(?!<|runner/|user/)[A-Za-z0-9._-]+/"), "a Linux home folder"),
-    (re.compile(r"(?<![A-Za-z0-9%])[D-Zd-z]:\\{1,2}[A-Za-z]"), "a Windows drive path"),
+    (re.compile(r"(?<![A-Za-z0-9%/])[D-Zd-z]:(?:\\{1,2}|/)[A-Za-z]"), "a Windows drive path"),
     (re.compile(r"/mnt/[a-z]/Users/", re.I), "a WSL Windows user folder"),
     (re.compile(r"~/Library/CloudStorage/"), "a synced-drive folder"),
     (re.compile(r"(?<![A-Za-z0-9._%+-])(?!git@|no-?reply@)[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.(?:com|org|net)\b)[A-Za-z0-9-]+\.[A-Za-z]{2,}", re.I), "an email address"),
