@@ -1,5 +1,5 @@
 {
- "_about": "sha256 (LF-normalised) of every file a 2.x release of this framework ever installed, by installed path. Generated once from this repository's history up to v2.1.0. tools/adopt.py --update uses it to prove a legacy file was never edited before replacing or removing it; a file not listed here is treated as edited and kept.",
+ "_about": "sha256 (LF-normalised) of every file a 2.x release of this framework ever installed, by installed path. Generated once from this repository's history up to v2.1.0. tools/adopt.py --update uses it to prove a legacy file was never edited before replacing or removing it; a file not listed here is treated as edited and kept. 'rendered' lists files generated per project from a template: they are compared with the lines matching 'mask' reduced to their first word, so only the project-specific values differ.",
  "files": {
   ".claude/README.md": [
    "03a1a4cfc3fde1dfb240d3ba2e0fed4f6897718994e4b4017869e1079633e194",
@@ -268,5 +268,19 @@
    "5c21f9e7fbeb59e6c66c0b78cef0dffa1456f2b768768b5c511c7be7a90a8a26",
    "b6e8a751456d1ae5baf3013ccef29bd85c2de0801eb1c7e08773db62fb9f6b3b"
   ]
+ },
+ "rendered": {
+  "tests/test_role_neutrality.py": {
+   "mask": "^(ROLES|COORDINATOR)\\b.*$",
+   "sha256": [
+    "53cf99f413cd90fc98b80a68013ef661ba56fe0c849a0d10e6a531a84861a359",
+    "5490df004fc4e9e9eb7d388248d5b98530c78582994ed78d5554efe4db5ad782",
+    "5ef3936ac0dcdce9c7c1b23e14bfa60d34e7ed97f0066f0b99f7413d03dff0f0",
+    "71e800f092938393f9823b7f3170fc34e3e559aa21143512134f8daab8d58128",
+    "ae4b2739878596292ea948c005c2fe6829b2d606903d36679fb1a52f2d006ecf",
+    "cfb643a91b78d1b8241836b03829cca8042ad21d9da05736084b276aa9025aa8",
+    "e0b91c5c3935a130ed0d96927c082de5ce0f7615fe4073a95417e8fe643e719b"
+   ]
+  }
  }
 }

@@ -54,11 +54,14 @@ RETIRED_PREFIXES = ("docs/agents/", ".claude/")
 RETIRED_EXACT = {
     "tools/checkout.py", "tools/report.py", "tools/line_endings.py",
     "tools/neutrality.py", "tools/authority.py", "tools/textblocks.py",
-    "tests/test_checkout.py", "tests/test_report.py",
+    "tests/test_checkout.py", "tests/test_report.py", "tests/test_role_neutrality.py",
 }
-#: Generated from a template per project, so it has no fixed fingerprint. It is
-#: recognised by content and removed together with the scanner it imports.
-RENDERED_LEGACY = {"tests/test_role_neutrality.py": ("import neutrality", "tools/neutrality.py")}
+#: Where the updater looks for files that still use a retired file. Documents
+#: are not holders: a document mentioning a file does not break without it.
+HOLDER_SUFFIXES = {".py", ".sh", ".json", ".toml", ".yml", ".yaml", ".cfg", ".ini", ".ps1", ".bat", ".cmd"}
+HOLDER_NAMES = {"Makefile", "justfile"}
+SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox", ".wine-lane", ".worktrees"}
+MAX_HOLDER_BYTES = 2_000_000
 
 
 def _load_fw():
@@ -95,9 +98,14 @@ def framework_repository() -> str:
     return CANONICAL_REPOSITORY
 
 
-def legacy_fingerprints() -> dict[str, list[str]]:
+def legacy_fingerprints() -> tuple[dict[str, list[str]], dict[str, dict]]:
     data = json.loads((ROOT / "tools" / "legacy_installs.json").read_text(encoding="utf-8"))
-    return data["files"]
+    return data["files"], data.get("rendered", {})
+
+
+def masked_digest(data: bytes, mask: str) -> str:
+    text = data.replace(b"\r\n", b"\n").decode("utf-8", errors="replace")
+    return hashlib.sha256(re.sub(mask, r"\1", text, flags=re.M).encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------
@@ -201,24 +209,82 @@ def sidecar_path(path: Path, data: bytes) -> Path:
     return candidate
 
 
-def referenced_by_kept(target: Path, rel: str, removing: set[str]) -> str | None:
-    """A kept configuration or code file that still refers to ``rel``, if any."""
-    if not (target / ".git").exists():
+class Holders:
+    """The project's code and configuration files, read once, for finding
+    files that still use something the update would remove. It reads the
+    working tree directly, so untracked files count and git is not needed.
+    If the tree cannot be read, every removal is refused."""
+
+    def __init__(self, target: Path, planned: dict[str, str], framework_files: set[str]):
+        self.target = target
+        self.files: dict[str, str] = {}
+        self.error: str | None = None
+        try:
+            for folder, dirs, names in os.walk(target, onerror=self._fail):
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".venv")]
+                rel_dir = Path(folder).relative_to(target).as_posix()
+                for name in names:
+                    path = Path(folder) / name
+                    in_hooks = rel_dir.split("/")[0] == ".githooks"
+                    if path.suffix not in HOLDER_SUFFIXES and name not in HOLDER_NAMES and not in_hooks:
+                        continue
+                    if path.stat().st_size > MAX_HOLDER_BYTES:
+                        continue
+                    rel = path.relative_to(target).as_posix()
+                    self.files[rel] = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            self._fail(exc)
+        # Files this update writes are judged by what they will contain, and the
+        # framework's own files never depend on the files it retires.
+        for rel, text in planned.items():
+            if Path(rel).suffix in HOLDER_SUFFIXES or Path(rel).name in HOLDER_NAMES:
+                self.files[rel] = text
+        for rel in framework_files:
+            self.files.pop(rel, None)
+
+    def _fail(self, exc: OSError) -> None:
+        self.error = f"could not read the project to check what uses it ({exc})"
+
+    def user_of(self, rel: str, removing: set[str]) -> str | None:
+        if self.error:
+            return self.error
+        name = Path(rel).name
+        patterns = [re.escape(rel), re.escape(rel.replace("/", "\\")), rf"[\"']{re.escape(name)}[\"']"]
+        if rel.startswith("tools/") and rel.endswith(".py"):
+            module = re.escape(Path(rel).stem)
+            patterns += [
+                rf"^\s*import\s+(tools\.)?{module}\b",
+                rf"^\s*from\s+(tools\.)?{module}\s+import\b",
+                rf"^\s*from\s+tools\s+import\s+[^\n]*\b{module}\b",
+            ]
+        found = re.compile("|".join(f"(?:{p})" for p in patterns), re.M)
+        for holder, text in sorted(self.files.items()):
+            if holder in (rel, MANIFEST) or holder in removing or holder.endswith(".framework"):
+                continue
+            if found.search(text):
+                return f"{holder} still refers to it"
         return None
-    patterns = [re.escape(rel)]
-    if rel.startswith("tools/") and rel.endswith(".py"):
-        module = Path(rel).stem
-        patterns.append(rf"^[[:space:]]*(from {module} import|import {module}([[:space:]]|,|$))")
-    for pattern in patterns:
-        result = subprocess.run(
-            ["git", "-C", str(target), "grep", "-l", "-E", pattern, "--",
-             "*.py", "*.sh", "*.json", "*.toml", "*.yml", "*.yaml", ".githooks/*"],
-            capture_output=True, text=True, check=False,
-        )
-        for hit in result.stdout.splitlines():
-            if hit != rel and hit != MANIFEST and hit not in removing and not hit.endswith(".framework"):
-                return hit
-    return None
+
+
+def broken_links(target: Path, removed: set[str], planned: dict[str, str]) -> list[str]:
+    """Documents that would be left linking to a removed file, judged by the
+    content they will have after the update."""
+    hits = []
+    for folder, dirs, names in os.walk(target):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for name in names:
+            if not name.endswith(".md"):
+                continue
+            path = Path(folder) / name
+            rel = path.relative_to(target).as_posix()
+            if rel in removed:
+                continue
+            text = planned.get(rel) or path.read_text(encoding="utf-8", errors="replace")
+            for link in re.findall(r"\]\(([^)#\s]+)", text):
+                linked = os.path.normpath((Path(rel).parent / link).as_posix()).replace("\\", "/")
+                if linked in removed:
+                    hits.append(f"{rel} links to {linked}")
+    return hits
 
 
 def build_plan(target: Path, *, update: bool, project: str | None, workers: list[str],
@@ -232,8 +298,9 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         raise SystemExit(f"adopt: {MANIFEST} exists; use --update")
 
     options = (old or {}).get("options", {})
-    if adapters is None:
-        adapters = list(options.get("adapters", []))
+    # On update, --adapter adds to the recorded set; it never drops one.
+    adapters = list(options.get("adapters", [])) + list(adapters or [])
+    if update:
         if legacy:
             if (target / ".claude").is_dir():
                 adapters.append("claude-code")
@@ -246,13 +313,15 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         tests_dir_exists=(target / "tests").is_dir(),
     )
     old_files = (old or {}).get("files", {})
-    known = legacy_fingerprints()
+    known, rendered = legacy_fingerprints()
 
     def unedited(rel: str, data: bytes) -> bool:
         h = digest(data)
         entry = old_files.get(rel)
         if entry and entry.get("kind") == "copy":
             return entry.get("sha256") == h
+        if rel in rendered:
+            return masked_digest(data, rendered[rel]["mask"]) in rendered[rel]["sha256"]
         return h in known.get(rel, ())
 
     files_record = {}
@@ -297,7 +366,7 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
             if rel not in shipped and entry.get("kind") == "copy":
                 candidates.add(rel)
         if legacy:
-            for rel in known:
+            for rel in [*known, *rendered]:
                 if rel not in shipped and (rel in RETIRED_EXACT or rel.startswith(RETIRED_PREFIXES)):
                     candidates.add(rel)
         removing = set()
@@ -309,21 +378,18 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
                 removing.add(rel)
             else:
                 plan.retained.append((rel, "edited in this project, so kept; delete it once nothing needs it"))
-        for rel, (marker, depends) in RENDERED_LEGACY.items():
-            path = target / rel
-            if path.is_file() and marker in path.read_text(encoding="utf-8", errors="replace"):
-                if depends in removing or not (target / depends).exists():
-                    removing.add(rel)
-                else:
-                    plan.retained.append((rel, f"kept because {depends} is kept"))
+        planned = {
+            item.rel: item.content for item, path, reason in plan.writes if reason in ("new", "replace")
+        }
+        holders = Holders(target, planned, {item.rel for item in items if item.kind == "copy"})
         changed = True
         while changed:
             changed = False
             for rel in sorted(removing):
-                holder = referenced_by_kept(target, rel, removing)
-                if holder:
+                user = holders.user_of(rel, removing)
+                if user:
                     removing.discard(rel)
-                    plan.retained.append((rel, f"unedited, but {holder} still refers to it; remove that reference, then delete it"))
+                    plan.retained.append((rel, f"unedited, but {user}; remove that use, then delete it"))
                     changed = True
         # A kept framework document must not be left linking to a removed one.
         changed = True
@@ -340,6 +406,8 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
                         plan.retained.append((linked, f"{holder}, which is kept, links to it; delete both together"))
                         changed = True
         plan.removals = sorted(removing)
+        for hit in sorted(set(broken_links(target, removing, planned)))[:20]:
+            plan.notes.append(f"fix this link after the update: {hit}")
 
     plan.manifest = {
         "about": "Written by the agentic framework's tools/adopt.py. Do not edit by hand, except 'settings'.",
@@ -397,6 +465,9 @@ def describe(plan: Plan, *, update: bool, old_release: str | None) -> str:
     for rel, why in plan.retained:
         lines.append(f"  keep    {rel}  ({why})")
     lines.append(f"  record  {MANIFEST}")
+    if plan.notes:
+        lines.append("")
+        lines.extend(plan.notes)
     if plan.sidecars:
         lines.append("")
         lines.append("Edited framework files were left alone. Review each difference, move any")
