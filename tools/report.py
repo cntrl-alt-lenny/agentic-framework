@@ -321,7 +321,11 @@ def write_report(
     inbox = git_common_dir(cwd) / "agent-inbox"
     role = role_tag(cwd)
     sha = head_sha(cwd) or "unknown"
-    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # `datetime.UTC` (ruff UP017) needs Python 3.11+; `timezone.utc` is the
+    # portable spelling and this framework's installed tools support 3.9 --
+    # see framework/adoption.md's "Python compatibility". Deliberately not
+    # applied.
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")  # noqa: UP017
 
     inbox.mkdir(parents=True, exist_ok=True)
     _seed_readme(inbox)

@@ -50,6 +50,32 @@ The framework's own `framework/state.md` is author guidance for this repository
 and is deliberately not copied. An adopting project has one durable state file:
 `docs/state.md`; this avoids confusing framework guidance with project state.
 
+## Python compatibility
+
+**Every Python file this framework installs supports Python 3.9 and newer.**
+An adopting project may run a newer interpreter, and may run its own lint
+check (`ruff` or similar) as part of what a change must pass to merge; an
+installed file that only works on, or only lints clean on, a newer Python
+than the project actually runs would fail silently in the first case and
+block the adoption round itself in the second.
+
+This repository's own CI runs `ruff check --select F,E9,B,UP` — real defects,
+a real syntax error, likely bugs, and needless pre-3.9 idioms; never style or
+formatting, which stays the adopting project's own choice — against every
+installed file, at Python 3.9 and at newer targets adopting projects
+commonly use. See `tests/test_lint.py` for the exact file list and target
+versions, and for the same check runnable locally whenever `ruff` is
+available.
+
+**One documented exception.** `tools/report.py` deliberately keeps
+`datetime.timezone.utc` rather than the `datetime.UTC` alias ruff's `UP017`
+suggests at Python 3.11 and newer: that alias does not exist before 3.11, so
+applying the suggestion would silently drop 3.9 support. The line carries an
+inline `# noqa: UP017` naming exactly this. No other rule in the selected set
+is suppressed anywhere in the installed files; a future suppression needs the
+same kind of stated, checkable reason — `tests/test_lint.py` proves this one
+is real by confirming the rule WOULD fire without it.
+
 ## Counterexample declarations
 
 When normative text must quote a provider-shaped form in order to prohibit it,
