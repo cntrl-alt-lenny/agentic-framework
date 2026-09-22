@@ -32,3 +32,16 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install ruff==0.15.12
       - run: ruff check --select F,E9,B,UP --target-version py39 tools templates tests
+
+  # The name branch protection requires. It passes only when every job above
+  # passed: a skipped or cancelled job fails it rather than slipping through.
+  invariants:
+    name: framework invariants
+    if: always()
+    needs: [tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every test and lint job passed
+        run: |
+          echo "tests: ${{ needs.tests.result }}, lint: ${{ needs.lint.result }}"
+          test "${{ needs.tests.result }}" = "success" && test "${{ needs.lint.result }}" = "success"
