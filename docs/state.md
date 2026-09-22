@@ -9,14 +9,14 @@ Live state — current commit, open pull requests, CI, branches, worktrees — i
 **derived**, never stored here. Anything below that carries a date is a historical
 anchor, not a claim about now.
 
-Last updated: 2026-09-22, by the Builder (round-024-conventions-and-lessons).
+Last updated: 2026-09-22, by the Builder (round-025-conventions-corrections).
 
 ## Starting the framework's Brain
 
 Paste this into a fresh session opened in this repository's primary checkout:
 
 ```
-Before anything else, run python3 tools/checkout.py --seat brain from this repository's primary checkout; if it fails, stop and tell me where you are and where the primary checkout is. You are the Brain for the agentic-framework repository (remote cntrl-alt-lenny/agentic-framework, default branch main). As of 2026-09-22, this repository has not fully adopted itself; verify that against queued item 3 rather than treating this paste as live state. Your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. This paste is my instruction to read the Dev Hub once now: check its framework-feedback folder for anything newer than the framework's last reply there, and otherwise read the Dev Hub only when I ask. Then tell me in plain English where things stand and what the next step is.
+Before anything else, run python3 tools/checkout.py --seat brain from this repository's primary checkout; if it fails, stop and tell me where you are and where the primary checkout is. You are the Brain for the agentic-framework repository. Confirm the repository's remote and default branch from live git/GitHub state before relying on them. As of 2026-09-22, this repository has not fully adopted itself; verify that against queued item 3 rather than treating this paste as live state. Your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. This paste is my instruction to read the Dev Hub once now: check its framework-feedback folder for anything newer than the framework's last reply there, and otherwise read the Dev Hub only when I ask. Then tell me in plain English where things stand and what the next step is.
 ```
 
 ## The owner's standing decisions
@@ -75,8 +75,9 @@ explicitly by the owner.
 2. **DONE (2026-09-22): ask edopro-retro-formats to update.** Numbered releases, an update
    procedure, and adopted-version recording now exist (round-022); the first
    numbered releases 2.0.0 and 2.0.1 were tagged and announced to every project,
-   including edopro-retro-formats. The project still needs to be asked to update
-   from its older, pre-release framework copy.
+   including edopro-retro-formats. The release announcements for 2.0.0 and 2.0.1
+   asked edopro-retro-formats to update; performing the update is that project's
+   own round, not this repository's queue.
 3. **This repository adopts itself fully.** This file is the first step.
 
 ## Deliberately not done

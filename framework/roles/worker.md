@@ -146,6 +146,8 @@ Report plainly, without narrating your process:
 
 - **Base SHA and branch; head SHA and branch.** Exact, not "latest main".
 - **What changed** — files, and one line each on why.
+- **Durable-state accounting.** Any change to a durable-state document must
+  report every sentence removed and every sentence added.
 - **Every command you ran to validate it**, with its real output and exit
   status.
 - **What you did not run**, and why.
