@@ -50,6 +50,20 @@ class ProjectChecks(TempDirTest):
             "# State\n\nClone git@github.com:o/r and see /Users/<name>/.\n", encoding="utf-8")
         self.assertEqual(fw(self.project, "check").returncode, 0)
 
+    def test_personal_pattern_edge_cases(self) -> None:
+        for text, what in (("C:/Users/x/Dev", "Windows user folder"), ('"C:\\\\Users\\\\x"', "Windows user folder")):
+            (self.project / "docs/state.md").write_text(f"# State\n\n{text}\n", encoding="utf-8")
+            self.assertIn(what, self.errors(), text)
+        (self.project / "docs/state.md").write_text(
+            "# State\n\nCo-Authored-By: Claude <noreply@anthropic.com>; printf('%s:\\n')\n", encoding="utf-8")
+        self.assertEqual(fw(self.project, "check").returncode, 0, fw(self.project, "check").stdout)
+
+    def test_only_the_historical_anchors_section_is_exempt(self) -> None:
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        (self.project / "docs/state.md").write_text(
+            f"# State\n\n## Historical anchors\n\n- {sha}\n\n## Now\n\nMain is {sha}.\n", encoding="utf-8")
+        self.assertIn("full commit id", self.errors())
+
     def test_merge_rule_must_be_known(self) -> None:
         agents = self.project / "AGENTS.md"
         agents.write_text(agents.read_text(encoding="utf-8").replace("owner-approves", "whenever"), encoding="utf-8")

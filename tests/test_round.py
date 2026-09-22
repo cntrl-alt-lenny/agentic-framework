@@ -126,6 +126,73 @@ class RoundAcrossMachines(TempDirTest):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("changed after the worker report (extra.txt)", result.stdout)
 
+    def test_a_fresh_clone_continues_the_seats_own_pushed_work(self) -> None:
+        self.write_brief("007-resume")
+        first, _ = self.deliver_worker("worker-mac", "007-resume")
+        second = self.clone(self.origin, "worker-cloud")
+        result = fw(second, "start", "--role", "worker", "--round", "007-resume")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("continuing earlier work", result.stdout)
+        self.assertEqual(git(second, "rev-parse", "HEAD"), git(first, "rev-parse", "HEAD"))
+        self.assertTrue((second / "feature.txt").is_file())
+
+    def test_a_tool_named_branch_starts_after_the_default_branch_moved(self) -> None:
+        self.write_brief("008-moved")
+        (self.brain / "housekeeping.txt").write_text("x\n", encoding="utf-8")
+        git(self.brain, "add", "housekeeping.txt")
+        git(self.brain, "commit", "-q", "-m", "Tier 0 housekeeping")
+        git(self.brain, "push", "-q", "origin", "main")
+        worker = self.clone(self.origin, "cloud")
+        git(worker, "switch", "-q", "-c", "codex/session")
+        result = fw(worker, "start", "--role", "worker", "--round", "008-moved")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((worker / "docs/rounds/008-moved/brief.md").is_file())
+
+    def test_a_stale_report_can_be_rewritten_in_the_same_clone(self) -> None:
+        self.write_brief("009-rewrite")
+        worker, _ = self.deliver_worker("worker", "009-rewrite")
+        (worker / "fix.txt").write_text("fix\n", encoding="utf-8")
+        git(worker, "add", "fix.txt")
+        git(worker, "commit", "-q", "-m", "Fix")
+        path = worker / "docs/rounds/009-rewrite/worker.md"
+        path.write_text(WORKER_REPORT.replace("- feature.txt", "- fix.txt: the fix.\n- feature.txt"), encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "009-rewrite", "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(fw(self.brain, "delivery", "--round", "009-rewrite").returncode, 0)
+
+    def test_a_changed_brief_makes_the_report_stale(self) -> None:
+        self.write_brief("010-brief")
+        worker, _ = self.deliver_worker("worker", "010-brief")
+        with open(worker / "docs/rounds/010-brief/brief.md", "a", encoding="utf-8") as stream:
+            stream.write("New acceptance criterion.\n")
+        git(worker, "commit", "-q", "-am", "Edit the brief")
+        git(worker, "push", "-q")
+        result = fw(self.brain, "delivery", "--round", "010-brief")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("brief.md", result.stdout)
+
+    def test_a_review_of_older_work_is_flagged_and_a_new_review_starts_beside_it(self) -> None:
+        self.write_brief("011-again")
+        worker, _ = self.deliver_worker("worker", "011-again")
+        verifier = self.clone(self.origin, "verifier")
+        fw(verifier, "start", "--role", "verifier", "--round", "011-again")
+        (verifier / "docs/rounds/011-again/verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(verifier, "report", "--role", "verifier", "--round", "011-again", "--push").returncode, 0)
+        # The Worker changes the work and reports again.
+        (worker / "fix.txt").write_text("fix\n", encoding="utf-8")
+        git(worker, "add", "fix.txt")
+        git(worker, "commit", "-q", "-m", "Fix")
+        path = worker / "docs/rounds/011-again/worker.md"
+        path.write_text(WORKER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "011-again", "--push").returncode, 0)
+        result = fw(self.brain, "delivery", "--round", "011-again")
+        self.assertIn("this review is of an older commit", result.stdout)
+        second = self.clone(self.origin, "verifier-2")
+        result = fw(second, "start", "--role", "verifier", "--round", "011-again")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(git(second, "branch", "--show-current"), "verifier/011-again-2")
+        self.assertEqual(git(second, "rev-parse", "HEAD"), git(worker, "rev-parse", "HEAD"))
+
     def test_report_rules(self) -> None:
         self.write_brief("005-rules")
         worker = self.clone(self.origin, "worker")
@@ -174,6 +241,15 @@ class RoundAcrossMachines(TempDirTest):
         git(self.brain, "push", "-q", "-u", "origin", "brain/notes")
         result = fw(self.brain, "status", "--offline", "--leaving")
         self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_commits_on_a_detached_head_are_not_safe_to_leave(self) -> None:
+        git(self.brain, "switch", "-q", "--detach")
+        (self.brain / "z.txt").write_text("z\n", encoding="utf-8")
+        git(self.brain, "add", "z.txt")
+        git(self.brain, "commit", "-q", "-m", "Detached work")
+        result = fw(self.brain, "status", "--offline", "--leaving")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("the detached HEAD", result.stdout)
 
     def test_bad_names_are_refused(self) -> None:
         for args in (("--role", "Worker", "--round", "001"), ("--role", "con", "--round", "001"),

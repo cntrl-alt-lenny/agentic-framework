@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -11,6 +12,11 @@ from pathlib import Path
 from tests.helpers import PYTHON, ROOT, TempDirTest, adopt, fw, git, run
 
 FIXTURE = ROOT / "tests" / "fixtures" / "v2_adopter"
+
+
+def remove_read_only(func, path, _exc) -> None:  # Windows: git objects are read-only
+    os.chmod(path, 0o700)
+    func(path)
 
 
 def manifest(target: Path) -> dict:
@@ -143,6 +149,15 @@ class Updates(TempDirTest):
         self.assertTrue((target / "docs/agents/old-e.md").exists(), result.stdout)
         self.assertIn("old-d.md, which is kept, links to it", result.stdout)
 
+    def test_adding_an_adapter_keeps_the_ones_already_installed(self) -> None:
+        target = self.adopted()
+        result = adopt(target, "--update", "--adapter", "gemini")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("remove", result.stdout)
+        self.assertTrue((target / ".claude/agents/brain.md").exists())
+        self.assertTrue((target / "GEMINI.md").exists())
+        self.assertEqual(manifest(target)["options"]["adapters"], ["claude-code", "gemini"])
+
     def test_dry_run_writes_nothing(self) -> None:
         target = self.adopted()
         (target / "docs/agents/roles/worker.md").unlink()
@@ -197,6 +212,10 @@ class LegacyMigration(TempDirTest):
         self.assertTrue((t / "tools/line_endings.py").exists())
         self.assertIn(".claude/settings.json still refers to it", result.stdout)
         self.assertIn(".githooks/pre-push still refers to it", result.stdout)
+        # a link from a project document to a removed file is pointed out, but not
+        # one from a file the update rewrites without that link
+        self.assertIn("fix this link after the update: docs/state.md links to docs/agents/kickoff.md", result.stdout)
+        self.assertNotIn("docs/agents/roles/brain.md links to", result.stdout)
         # the migration steps and the checks still to satisfy are printed
         self.assertIn("--- 3.0.0 ---", result.stdout)
         self.assertIn("CLAUDE.md does not point at AGENTS.md", result.stdout)
@@ -205,6 +224,30 @@ class LegacyMigration(TempDirTest):
         again = adopt(t, "--update")
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual(git(t, "status", "--porcelain"), "")
+
+    def test_an_edited_rendered_file_is_kept(self) -> None:
+        path = self.target / "tests/test_role_neutrality.py"
+        path.write_text(path.read_text(encoding="utf-8") + "\n\nclass ProjectOwn: pass\n", encoding="utf-8")
+        self.commit_all(self.target, "project test added to the rendered file")
+        result = adopt(self.target, "--update")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(path.exists())
+        self.assertIn("keep    tests/test_role_neutrality.py  (edited in this project", result.stdout)
+
+    def test_users_git_cannot_see_still_protect_a_file(self) -> None:
+        # untracked user, package-style import, path built in code
+        (self.target / "tools/mine.py").write_text("from tools.textblocks import x\n", encoding="utf-8")
+        (self.target / "build.py").write_text('p = Path("tools") / "line_endings.py"\n', encoding="utf-8")
+        result = adopt(self.target, "--update")
+        self.assertTrue((self.target / "tools/textblocks.py").exists(), result.stdout)
+        self.assertIn("tools/mine.py still refers to it", result.stdout)
+
+    def test_a_project_that_is_not_a_git_repository_is_still_protected(self) -> None:
+        shutil.rmtree(self.target / ".git", onerror=remove_read_only)
+        result = adopt(self.target, "--update")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.target / "tools/line_endings.py").exists())
+        self.assertIn(".githooks/pre-push still refers to it", result.stdout)
 
     def test_the_new_fw_works_in_the_migrated_project(self) -> None:
         adopt(self.target, "--update")

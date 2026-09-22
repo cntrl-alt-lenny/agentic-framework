@@ -15,7 +15,7 @@ release existed; updates were reconciled by hand; and agents read 10,000 to
 independent review, evidence over narrative, git as memory — and replaces the
 machinery.
 
-- **One core document and three role cards** (about 2,800 words in total)
+- **One core document and three role cards** (about 3,100 words in total)
   replace 14 copied documents (about 21,000 words). Word budgets are tested.
 - **Rounds live in `docs/rounds/<id>/`:** the brief and each seat's report,
   committed and pushed. A round can start on one machine or tool and finish
@@ -47,6 +47,11 @@ machinery.
   because reports are now committed by the seat itself. A `gemini` adapter adds
   a `GEMINI.md` pointer.
 
+Net change: framework documents copied into a project fall from about 21,000
+to about 3,100 words; installed Python falls from about 4,500 lines (with
+tests) to about 1,000; this repository loses about 15,000 lines and gains
+about 4,000, and its suite runs in about 20 seconds instead of 4 minutes.
+
 ### What an adopter must do
 
 Run this as one Tier 2 round, with no other round in flight.
@@ -55,7 +60,8 @@ Run this as one Tier 2 round, with no other round in flight.
    `python3 tools/adopt.py <project> --update --dry-run`, read the plan, then
    run it without `--dry-run`. It installs the new files, replaces and
    removes 2.x copies it can prove were never edited, and keeps everything
-   else, saying why.
+   else, saying why. It also lists documents that would be left linking to a
+   removed file; fix those links.
 2. **Merge edited copies.** For each `<file>.framework` it wrote, move any
    project-specific content into `AGENTS.md` (or `docs/agents/local/`), then
    replace the file with the `.framework` copy.
