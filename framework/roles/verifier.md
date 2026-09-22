@@ -21,6 +21,14 @@ SHA, and the ability to re-run the project's validation — reproducing evidence
 yourself is the job. Write access to source is not needed and should not be used
 if present.
 
+Anything a seat reports about itself — its tool, model, operating-system
+version, or other environment detail — is a claim to verify like any other.
+Take operating-system and version facts from a command or other authoritative
+source, not from the seat's own description. Treat captured text as evidence
+whose bytes matter: Windows PowerShell can change line endings, so inspect and
+verify line endings before using captured text; a capture that doubled every
+line is not independent evidence.
+
 **Prefer a different model family from the one that produced the work**, where
 that is convenient. The point of the seat is not sharing the author's blind
 spots. This is a **preference, not a correctness dependency**: the framework must
@@ -142,7 +150,11 @@ the executor says it did.
    actually have failed before this change? Reproduce the claimed commands
    yourself and compare your real output to what was claimed. A claim you could
    not reproduce is a finding, even if the work turns out to be right.
-8. **Check the honesty surface.** Does anything now describe as done something
+8. **Check durable-state removals sentence by sentence.** When a durable-state
+   document changed, compare every removed sentence with the brief and confirm
+   that the executor reported every removal and addition. A missing removal
+   report is a finding even when the remaining document looks coherent.
+9. **Check the honesty surface.** Does anything now describe as done something
    that is not done?
 
 ### Pass two — comparison

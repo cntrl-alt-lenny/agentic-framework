@@ -16,6 +16,13 @@ tool, including one that does not exist yet.
 - Model and reasoning-effort settings, clearly marked as that tool's mechanics.
 - A pointer to the canonical role contract.
 
+Adapter authors must verify claims about the running tool, model, operating
+system, and versions from commands or authoritative tool output rather than
+copying a seat's self-description. Captured text is evidence whose bytes matter:
+Windows PowerShell can change line endings, so inspect and verify line endings
+before an adapter consumes captured text; a capture that doubled every line is
+not independent evidence.
+
 ## Where an adapter's files go
 
 **An adapter's framework identifier is not its filesystem layout.** The name a
