@@ -1,0 +1,5 @@
+{
+  "tool": "Gemini CLI and Google Antigravity",
+  "description": "A GEMINI.md that points at AGENTS.md, for tools that load GEMINI.md instead of AGENTS.md.",
+  "seeds": ["GEMINI.md"]
+}

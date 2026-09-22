@@ -1,0 +1,5 @@
+{
+  "tool": "Claude Code",
+  "description": "Loads AGENTS.md through CLAUDE.md, and adds one agent file per seat and a /status command.",
+  "seeds": ["CLAUDE.md"]
+}
