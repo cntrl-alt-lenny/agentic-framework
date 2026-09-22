@@ -7,6 +7,47 @@ this file. Releases are tagged by Brain after the round that produces them
 merges; this file is the record an executor writes and a tag only points at,
 never the other way around.
 
+## 2.0.1 — scope authority counterexample exemptions exactly
+
+`tools/authority.py`'s `guard:counterexample` handling suppressed every
+finding inside a wrapped block unconditionally, regardless of what — if
+anything — the block declared. A block declaring only a `tools/neutrality.py`
+rule, or declaring nothing at all, silently hid any stale-authority idiom
+quoted alongside it from `scan()`, the command line, and CI. `README.md`'s own
+counterexample block, which quotes the actual v1 stale-authority phrases
+under a `compound-lane`-only declaration, was a live instance of this on
+`main`. `tools/neutrality.py` already exempted only a validated finding whose
+rule and matched text equal a declaration's; `tools/authority.py` now does the
+same — see `_counterexample_exemptions()` and the module docstring's
+"COUNTEREXAMPLE BLOCKS" section.
+
+### What an adopter must do
+
+Update the installed `tools/authority.py` (and `tools/textblocks.py`,
+`tools/neutrality.py` if not already current) to this release, then run both
+scanners over the project's normative documents. A block that used to declare
+only one scanner's rule while quoting another scanner's banned form will now
+report the previously-hidden finding; add the missing `guard:violation`
+declaration for the finding actually present, in its own `guard:counterexample`
+block — see `framework/adoption.md`'s "Counterexample declarations": mixing
+declarations for different scanners in one block defeats
+`tools/neutrality.py`'s own all-or-nothing validation for that block, so keep
+each block's declarations owned by one scanner.
+
+### Fixed
+
+- **`tools/authority.py` no longer blanket-suppresses a counterexample
+  block's contents.** A block now exempts only a finding whose rule and
+  matched text — under the same whitespace/backtick normalisation
+  `tools/neutrality.py` already documents — equal a validated
+  `guard:violation` declaration inside it; every other finding in the block,
+  including one sharing a block with a declaration naming a different
+  scanner's rule, is reported normally.
+- **`README.md`'s counterexample block**, which quoted v1's real
+  stale-authority phrases under a declaration naming only a neutrality
+  violation, now carries the matching `routine-approval` and
+  `executor-self-merge` declarations, split into per-scanner blocks.
+
 ## 2.0.0 — first numbered release
 
 The first framework release with a number a project can pin to. Everything

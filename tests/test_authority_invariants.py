@@ -116,10 +116,12 @@ class TestCounterexampleBlockOwnership(unittest.TestCase):
         )
 
     def test_a_block_declaring_only_a_neutrality_rule_produces_no_top_level_finding(self):
-        # The wrapper still suppresses the whole block from top-level
-        # findings, same as any counterexample block -- ownership filtering
-        # only changes what inert_counterexamples() reports, never scan()'s
-        # ordinary suppression of wrapped content.
+        # Empty here because "Hand this to the Acme Builder." contains no
+        # stale-authority idiom of its own, not because the wrapper blanket-
+        # suppresses the block -- since round 023 it no longer does; see
+        # TestCounterexampleExemptionIsPreciselyScoped for the case where the
+        # same kind of block DOES contain real, undeclared authority content
+        # and scan() reports it.
         self.assertEqual(authority.scan(self.NEUTRALITY_OWNED), [])
 
     def test_a_block_with_a_foreign_declaration_but_real_authority_content_is_not_inert(self):
@@ -172,6 +174,130 @@ class TestCounterexampleBlockOwnership(unittest.TestCase):
         )
         self.assertEqual(authority.inert_counterexamples(body), [])
         self.assertEqual(authority.scan(body), [])
+
+
+class TestCounterexampleExemptionIsPreciselyScoped(unittest.TestCase):
+    """Round 023. `scan()` used to suppress every finding inside a wrapped
+    block unconditionally -- `_scan_raw()`'s `skip |= suppressed` -- whatever
+    the block declared. A block declaring only a neutrality rule (or nothing
+    at all) hid any undeclared stale-authority idiom quoted alongside it.
+    These prove the PRIMARY property `TestCounterexampleBlockOwnership`
+    above never did: that undeclared content inside a block is actually
+    reported by ``scan()`` itself, not merely that ``inert_counterexamples()``
+    judges the block correctly. Revert `_scan_raw`'s counterexample handling
+    to blanket suppression (`skip |= counterexample_blocks(text)[1]`) and
+    every test below except the near-miss/partial-text ones fails.
+    """
+
+    def test_the_reported_defects_own_repro_is_no_longer_hidden(self):
+        """The bug report's exact command, unmodified."""
+        text = (
+            '# Doc\n\n'
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Acme Builder" -->\n'
+            "Hand this to the Acme Builder, who will offer to merge it.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertEqual(findings[0].rule, "routine-approval")
+        self.assertEqual(findings[0].matched, "offer to merge")
+
+    def test_executor_self_merge_undeclared_in_a_block_with_no_declaration_is_reported(self):
+        """Covers the other authority rule, not just routine-approval, and a
+        block with no declaration at all rather than a foreign one."""
+        text = (
+            '<!-- guard:counterexample -->\n'
+            "The Executor self-merges the change once tests are green.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(
+            [(f.rule, f.matched) for f in findings],
+            [("executor-self-merge", "self-merges")],
+        )
+
+    def test_person_named_as_merge_actor_undeclared_in_a_block_is_reported(self):
+        """The two-part PERSON_SUBJECT + MERGE_DUTY rule, not just the
+        single-regex ROUTINE_APPROVAL / EXECUTOR_SELF_MERGE idioms. Uses
+        "meatspace" -- PERSON_SUBJECT recognises it but ROUTINE_APPROVAL's own
+        narrower human/owner/user/you pattern does not -- so exactly this
+        rule fires, not the separate one two lines away in ROUTINE_APPROVAL."""
+        text = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation branch-namespace roles=builder '
+            'text="acme/scope" -->\n'
+            "The meatspace merges the PRs after a quick look.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertEqual(findings[0].rule, "routine-approval")
+        self.assertEqual(findings[0].message, "a person named as the routine merge actor")
+
+    def test_several_declarations_in_one_block_each_exempt_only_their_own_match(self):
+        """Two valid declarations, for both of this guard's own rules, plus a
+        THIRD, undeclared idiom of the first rule in the same block: the
+        declared two are suppressed, the undeclared one is not."""
+        text = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="offer to merge" -->\n'
+            '<!-- guard:violation executor-self-merge roles=builder '
+            'text="self-merge" -->\n'
+            "Brain will offer to merge once reviewed.\n"
+            "The executor performs a self-merge under pressure.\n"
+            "It is always ok to merge on a green run, too.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(
+            [(f.rule, f.matched) for f in findings],
+            [("routine-approval", "ok to merge")],
+            "a declared-and-matched finding leaked through, or the "
+            "undeclared third idiom sharing the block was hidden",
+        )
+
+    def test_partial_declared_text_does_not_exempt_the_real_longer_match(self):
+        """A declaration naming a fragment of the real matched text must not
+        validate at all -- the fragment alone never fires the rule in
+        isolation -- so the real, longer match stays reported."""
+        text = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="merge" -->\n'
+            "Brain will offer to merge once reviewed.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(
+            [(f.rule, f.matched) for f in findings],
+            [("routine-approval", "offer to merge")],
+            "a partial declared text ('merge') exempted the real, longer "
+            "match ('offer to merge') instead of protecting nothing",
+        )
+
+    def test_near_miss_declared_text_does_not_exempt_a_different_real_idiom_of_the_same_rule(self):
+        """The declared text is itself a real, independently-firing idiom of
+        the SAME rule -- so the declaration validates -- but it is not the
+        idiom actually present in the body. The real one must stay reported;
+        a same-rule declaration is not a blanket licence for the whole rule.
+        """
+        text = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="ok to merge" -->\n'
+            "Brain will offer to merge once reviewed.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        findings = authority.scan(text)
+        self.assertEqual(
+            [(f.rule, f.matched) for f in findings],
+            [("routine-approval", "offer to merge")],
+            "a validated but near-miss declaration exempted an idiom it "
+            "never actually named",
+        )
 
 
 class TestGuardCatchesTheRealV1Text(unittest.TestCase):
