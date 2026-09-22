@@ -1,5 +1,7 @@
 # Failure catalogue
 
+> **Historical record.** Written under releases 1 and 2. It describes failures and mechanisms as they were then; several of those mechanisms were removed in release 3.0.0. It is evidence for why the framework is shaped as it is, not a set of rules.
+
 Failure patterns observed in real use of this framework across three projects.
 Each entry states the general design lesson, not just the anecdote.
 

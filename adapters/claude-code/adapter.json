@@ -1,5 +1,0 @@
-{
-  "tool": "Claude Code",
-  "install_root": ".claude",
-  "seats_dir": "agents"
-}
