@@ -45,10 +45,9 @@ FIXTURES: tuple[str, ...] = (
 
 # Reference material belongs in the repository for authors to read, but is not
 # normative policy or historical evidence. It is classified explicitly so an
-# untracked or ignored copy cannot change the guard's surface.
-REFERENCES: tuple[str, ...] = (
-    "standards/readme.md",
-)
+# untracked or ignored copy cannot change the guard's surface. The active
+# README standard is normative and therefore belongs in ``normative_files()``.
+REFERENCES: tuple[str, ...] = ()
 
 HISTORICAL_MARKER = "historical document"
 
@@ -118,6 +117,7 @@ def normative_files() -> list[Path]:
     }
     roots = (
         ROOT / "framework",
+        ROOT / "standards",
         ROOT / "templates",
         ROOT / "adapters",
     )
