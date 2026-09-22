@@ -24,6 +24,29 @@ A match preceded by a negation on the same line is a *prohibition*, which is the
 thing we want to see, so it is not reported. Both directions are unit-tested —
 a permission must fire and a prohibition must not.
 
+COUNTEREXAMPLE BLOCKS. A normative document sometimes needs to quote a banned
+form in order to prohibit it, the same as `tools/neutrality.py`. Wrap it and
+declare the exact violation it demonstrates:
+
+    <!-- guard:counterexample -->
+    <!-- guard:violation routine-approval roles=builder text="offer to merge" -->
+    ... text that SHOULD be rejected ...
+    <!-- /guard:counterexample -->
+
+The declaration names this scanner's rule and the finding's complete matched
+text; matching collapses whitespace and removes balanced outer backticks, but
+otherwise requires exact equality. Only a finding whose rule and matched text
+are covered by a validated declaration is exempted here — an undeclared
+finding anywhere else in the same block, including one sharing the block with
+a declaration naming a different scanner's rule (`tools/neutrality.py`'s
+`compound-lane` and friends), is reported like any other. A declaration
+validates only when the declared text, scanned in isolation, genuinely fires
+the named rule; see `_counterexample_exemptions()`. `inert_counterexamples()`
+still reports a block that exempts nothing this guard could plausibly own, so
+a widened block cannot pass silently. See `framework/adoption.md`'s
+"Counterexample declarations" for the full, provider-neutral statement of
+this mechanism, shared by every scanner that uses it.
+
 OWNER OVERRIDES. The constitution lets the owner explicitly override Brain's
 routine-merge authority — that is a real, sanctioned act, not stale language to
 reject. Judging it by wording alone put the same meaning on both sides of the
@@ -75,10 +98,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from textblocks import (NEGATORS, counterexample_blocks, logical_lines,
+from textblocks import (COUNTEREXAMPLE_CLOSE, COUNTEREXAMPLE_OPEN, NEGATORS,
+                        counterexample_blocks, logical_lines,
                         logical_lines_with_positions, negated as _negated)
 
-__all__ = ["Finding", "scan", "scan_overrides", "inert_counterexamples",
+__all__ = ["Finding", "scan", "scan_overrides", "scan_counterexample",
+           "inert_counterexamples",
            "inert_override_declarations", "has_merge_prohibition",
            "ROUTINE_APPROVAL", "EXECUTOR_SELF_MERGE", "NEGATORS"]
 
@@ -150,22 +175,36 @@ _COMPILED_SELF_MERGE = tuple(
 )
 
 
-def _scan_raw(text: str, *, source: str = "<text>",
-              skip_lines: Sequence[int] = ()) -> list[Finding]:
-    """Report every stale-authority idiom in ``text``, before override suppression.
+def _counterexample_scan_text(text: str) -> str:
+    """Remove only counterexample metadata, keeping every body line.
+
+    Markers and `guard:violation` declaration lines describe an exemption;
+    they are not normative prose, and a declaration's own ``text="..."``
+    attribute would otherwise fire as an unrelated, unsuppressible finding on
+    the marker's own line. The body itself is left in place -- mirrors
+    `tools/neutrality.py`'s `_counterexample_scan_text` exactly, so an
+    undeclared finding inside a block cannot hide behind a neighbouring
+    declaration. Blank replacements preserve physical line numbers.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped in {COUNTEREXAMPLE_OPEN, COUNTEREXAMPLE_CLOSE}:
+            lines[index] = ""
+        elif _COUNTEREXAMPLE_DECLARATION.match(line):
+            lines[index] = ""
+    return "\n".join(lines)
+
+
+def _raw_findings(text: str, *, source: str = "<text>",
+                   skip_lines: Sequence[int] = ()) -> list[Finding]:
+    """Report every stale-authority idiom in ``text``, before counterexample
+    or override suppression -- the plain regex pass both are layered on.
 
     ``skip_lines`` is for callers that suppress explicitly-marked historical
-    quotations; the framework's own catalogue uses it. This is the shared
-    core both ``scan()`` (findings minus validated overrides) and
-    ``scan_overrides()`` (the validated overrides themselves) are built from,
-    so the two can never disagree about what the scanner actually found.
+    quotations; the framework's own catalogue uses it.
     """
     skip = set(skip_lines)
-    # A document may need to QUOTE a stale form in order to name it. Wrapping it
-    # in a counterexample block suppresses the finding here; the block is still
-    # required to contain one -- see inert_counterexamples().
-    _, suppressed = counterexample_blocks(text)
-    skip |= suppressed
     # An owner-override declaration line is machine metadata, not prose: its
     # own `text="..."` attribute necessarily repeats the overriding sentence,
     # which would otherwise also fire as an unrelated, unsuppressible finding
@@ -174,10 +213,11 @@ def _scan_raw(text: str, *, source: str = "<text>",
         n for n, raw_line in enumerate(text.splitlines(), 1)
         if _OWNER_OVERRIDE_DECLARATION.match(raw_line)
     }
+    scan_text = _counterexample_scan_text(text)
     findings: list[Finding] = []
     # Logical lines, not physical ones: prose is hard-wrapped here, and a
     # negation on the previous physical line must still negate.
-    for _, line, positions in logical_lines_with_positions(text):
+    for _, line, positions in logical_lines_with_positions(scan_text):
         if positions and positions[0] in skip:
             continue
         for pattern, message in _COMPILED_APPROVAL:
@@ -209,6 +249,129 @@ def _scan_raw(text: str, *, source: str = "<text>",
                         Finding(source, line_number, "executor-self-merge", m.group(0), message)
                     )
     return findings
+
+
+#: `<!-- guard:violation <rule> roles=<roles> text="<matched text>" -->` --
+#: the same declaration syntax `tools/neutrality.py` defines, shared by every
+#: scanner that uses the `guard:counterexample` wrapper. `roles=` is parsed
+#: but unused here: this scanner's rules do not depend on a role set, only on
+#: matching rule name and matched text -- see `_counterexample_exemptions()`.
+_COUNTEREXAMPLE_DECLARATION = re.compile(
+    r'^\s*<!--\s*guard:violation\s+'
+    r'(?P<rule>[a-z][a-z0-9-]*)\s+'
+    r'roles=(?P<roles>[a-z0-9][a-z0-9_-]*(?:\s*,\s*[a-z0-9][a-z0-9_-]*)*)\s+'
+    r'text="(?P<text>[^"]+)"\s*-->\s*$'
+)
+
+
+def _counterexample_declarations(body: str) -> list[tuple[str, str]]:
+    """Parse ``(rule, declared text)`` pairs from a counterexample block's
+    body -- every declaration, regardless of which scanner's rule it names.
+    Ownership is decided by whether the declared rule ever validates below,
+    not by filtering here.
+    """
+    declarations: list[tuple[str, str]] = []
+    for line in body.splitlines():
+        match = _COUNTEREXAMPLE_DECLARATION.match(line)
+        if match:
+            declarations.append((match.group("rule"), match.group("text")))
+    return declarations
+
+
+def _normalise_counterexample_match(value: str) -> str:
+    """Insignificant whitespace and balanced outer backticks only -- mirrors
+    `tools/neutrality.py`'s `_normalise_counterexample_match` exactly, so the
+    two scanners' declaration authors rely on one stated normalisation.
+    """
+    value = " ".join(value.split())
+    while len(value) >= 2 and value[0] == value[-1] == "`":
+        value = " ".join(value[1:-1].strip().split())
+    return value
+
+
+def _same_counterexample_match(found: str, declared: str) -> bool:
+    """Whether a declaration names precisely the scanner's matched token."""
+    return (
+        _normalise_counterexample_match(found)
+        == _normalise_counterexample_match(declared)
+    )
+
+
+def scan_counterexample(text: str) -> list[Finding]:
+    """Validate a counterexample block's own declarations against the real
+    scanner, independently of any wrapping markers.
+
+    ``text`` is a block's body -- declaration line(s) plus quoted prose, the
+    same shape `tools/textblocks.py`'s `counterexample_blocks()` returns and
+    `tools/neutrality.py`'s function of the same name accepts. A declaration
+    validates only when the declared text, scanned by this guard in
+    isolation, genuinely fires the rule it names; the real ``Finding`` each
+    validated declaration covers is returned. A declaration naming a rule
+    this scanner does not own -- `tools/neutrality.py`'s `compound-lane` and
+    friends -- never validates here, since this scanner never emits any rule
+    but its own; the result is then empty for that declaration, not an error.
+    """
+    findings: list[Finding] = []
+    for rule, declared_text in _counterexample_declarations(text):
+        probe = _raw_findings(declared_text, source="<counterexample-probe>")
+        findings.extend(
+            f for f in probe
+            if f.rule == rule and _same_counterexample_match(f.matched, declared_text)
+        )
+    return findings
+
+
+def _counterexample_exemptions(
+    text: str,
+) -> list[tuple[int, int, tuple[tuple[str, str], ...]]]:
+    """Return validated ``(start, end, (rule, matched text) pairs)`` per block."""
+    exemptions: list[tuple[int, int, tuple[tuple[str, str], ...]]] = []
+    for start, body in counterexample_blocks(text)[0]:
+        validated = scan_counterexample(body)
+        if not validated:
+            continue
+        body_lines = body.splitlines()
+        if not body_lines:
+            continue
+        exemptions.append(
+            (start + 1, start + len(body_lines),
+             tuple((f.rule, f.matched) for f in validated))
+        )
+    return exemptions
+
+
+def _scan_raw(text: str, *, source: str = "<text>",
+              skip_lines: Sequence[int] = ()) -> list[Finding]:
+    """Report every stale-authority idiom in ``text``, before override
+    suppression -- after exempting only a finding whose rule and matched text
+    are covered by a validated counterexample declaration covering its line.
+
+    This is the shared core both ``scan()`` (findings minus validated
+    overrides) and ``scan_overrides()`` (the validated overrides themselves)
+    are built from, so the two can never disagree about what the scanner
+    actually found.
+    """
+    raw = _raw_findings(text, source=source, skip_lines=skip_lines)
+    exemptions = _counterexample_exemptions(text)
+    if not exemptions:
+        return raw
+    return [f for f in raw if not _exempted(f, exemptions)]
+
+
+def _exempted(
+    finding: Finding,
+    exemptions: list[tuple[int, int, tuple[tuple[str, str], ...]]],
+) -> bool:
+    for start, end, declarations in exemptions:
+        if not (start <= finding.line <= end):
+            continue
+        if any(
+            finding.rule == rule
+            and _same_counterexample_match(finding.matched, declared_text)
+            for rule, declared_text in declarations
+        ):
+            return True
+    return False
 
 
 #: `<!-- guard:owner-override <rule> text="<the whole overriding sentence>" -->`
