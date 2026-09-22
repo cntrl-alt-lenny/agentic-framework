@@ -9,7 +9,7 @@ Live state — current commit, open pull requests, CI, branches, worktrees — i
 **derived**, never stored here. Anything below that carries a date is a historical
 anchor, not a claim about now.
 
-Last updated: 2026-09-22, by the Builder (round-022-adopter-lifecycle).
+Last updated: 2026-09-22, by the Builder (round-023-authority-block-scope).
 
 ## Starting the framework's Brain
 
@@ -87,12 +87,20 @@ explicitly by the owner.
    its line endings. (The fixed-folder lesson from the same report is
    resolved: round-022 documents `--cwd` and single-command `cd &&` as the
    fix, in `framework/adoption.md`.)
-5. **The authority tool, run on its own, reports every neutrality example block
-   as "suppresses nothing"** — including framework/git-and-isolation.md — while
-   the test suite accepts those blocks. The two should agree.
-6. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
+5. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
    part of closing a round. Removing files is a reviewed round like any other
    change, and nothing that is the only record of something is deleted.
+6. **A seat that rewrites a durable-state document must report what it removed
+   as well as what it added,** and the Verifier must check removals against the
+   brief (reported by edopro-next, whose Builder silently dropped settled
+   records).
+7. **`standards/readme.md` is now an active standard but is classified as
+   reference material and not scanned by the guard,** and its license section
+   says an unrecognised license badge shows "not specified" where the live
+   badge actually reads "not identifiable by github".
+8. **The startup paste above states "has not fully adopted itself yet"
+   undated.** Date it, or state when the claim stops being true, so a stale
+   assertion cannot silently persist.
 
 ## Deliberately not done
 
