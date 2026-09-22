@@ -63,6 +63,116 @@ class TestNormativeSurfaceIsClean(unittest.TestCase):
             ]
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_no_inert_counterexample_blocks(self):
+        """`python3 tools/authority.py framework` reported "counterexample
+        block suppresses nothing" at framework/evidence.md,
+        framework/failure-catalogue.md, framework/git-and-isolation.md,
+        framework/topologies.md and framework/adoption.md -- every one of
+        them a block declaring a NEUTRALITY violation
+        (`guard:violation compound-lane ...`), which this guard's own rules
+        never fire on. Never checked against the real documents before; see
+        TestCounterexampleBlockOwnership for the synthetic, narrower proofs.
+        """
+        problems = []
+        for path in docset.normative_files():
+            text = path.read_text(encoding="utf-8")
+            rel = path.relative_to(ROOT).as_posix()
+            problems += [
+                f"{rel}:{line} counterexample block suppresses nothing"
+                for line in authority.inert_counterexamples(text, source=rel)
+            ]
+        self.assertEqual(problems, [], "\n".join(problems))
+
+
+class TestCounterexampleBlockOwnership(unittest.TestCase):
+    """A block genuinely owned by a DIFFERENT scanner must not be judged
+    "inert" here -- but a block this guard genuinely does own, and that
+    genuinely exempts nothing, must still be caught. Fixes the class: not
+    just the four reported documents, but the general mechanism, proven with
+    synthetic cases beyond them.
+
+    Ownership is only ever a TIE-BREAKER for an already-empty scan, never a
+    reason to stop looking: a block whose scan finds SOMETHING is not inert
+    regardless of which rule its declaration names, because the wrapper is
+    genuinely suppressing real content -- exactly the property this check
+    exists to prove. Skipping that block just because its declaration names
+    a foreign rule would silently lose coverage of real stale-authority text
+    that happens to share a block with an unrelated neutrality declaration.
+    """
+
+    NEUTRALITY_OWNED = (
+        '<!-- guard:counterexample -->\n'
+        '<!-- guard:violation compound-lane roles=builder text="Acme Builder" -->\n'
+        "Hand this to the Acme Builder.\n"
+        "<!-- /guard:counterexample -->\n"
+    )
+
+    def test_a_block_declaring_only_a_neutrality_rule_is_not_inert_here(self):
+        self.assertEqual(
+            authority.inert_counterexamples(self.NEUTRALITY_OWNED), [],
+            "a block this guard does not own, and that contains nothing "
+            "this guard would ever find, was reported as this guard's own "
+            "inert exemption",
+        )
+
+    def test_a_block_declaring_only_a_neutrality_rule_produces_no_top_level_finding(self):
+        # The wrapper still suppresses the whole block from top-level
+        # findings, same as any counterexample block -- ownership filtering
+        # only changes what inert_counterexamples() reports, never scan()'s
+        # ordinary suppression of wrapped content.
+        self.assertEqual(authority.scan(self.NEUTRALITY_OWNED), [])
+
+    def test_a_block_with_a_foreign_declaration_but_real_authority_content_is_not_inert(self):
+        """Real stale-authority text sharing a block with an unrelated
+        neutrality declaration must still be recognised as "not inert" --
+        the wrapper IS suppressing something real, even though it is not
+        specifically declared under an authority-shaped rule. Ownership
+        filtering must never turn into a way to stop looking at a block's
+        actual content.
+        """
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation compound-lane roles=builder '
+            'text="Acme Builder" -->\n'
+            "Hand this to the Acme Builder, who will offer to merge it.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            authority.inert_counterexamples(body), [],
+            "a block containing real stale-authority text was reported as "
+            "inert merely because its declaration named a different rule",
+        )
+
+    def test_a_block_this_guard_genuinely_owns_and_exempts_nothing_is_still_caught(self):
+        """The other half of the fix: ownership-filtering must not become a
+        way to silence a real defect in this guard's own declarations. Uses
+        harmless declared text (not itself stale-shaped) so the assertion
+        tests the real prose, not the declaration comment's own wording.
+        """
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="Brain reviews carefully." -->\n'
+            "Brain reviews carefully.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(
+            authority.inert_counterexamples(body), [1],
+            "a block genuinely declared for this guard's own rule, that "
+            "exempts nothing real, must still be caught",
+        )
+
+    def test_a_block_this_guard_genuinely_owns_and_does_exempt_something_is_clean(self):
+        body = (
+            '<!-- guard:counterexample -->\n'
+            '<!-- guard:violation routine-approval roles=builder '
+            'text="offer to merge" -->\n'
+            "Brain will offer to merge once reviewed.\n"
+            "<!-- /guard:counterexample -->\n"
+        )
+        self.assertEqual(authority.inert_counterexamples(body), [])
+        self.assertEqual(authority.scan(body), [])
+
 
 class TestGuardCatchesTheRealV1Text(unittest.TestCase):
     """Red-before-green, against the actual broken state."""

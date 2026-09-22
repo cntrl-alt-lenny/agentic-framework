@@ -71,8 +71,9 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
+from pathlib import Path
 
 from textblocks import (NEGATORS, counterexample_blocks, logical_lines,
                         logical_lines_with_positions, negated as _negated)
@@ -423,15 +424,59 @@ def has_merge_prohibition(text: str) -> bool:
     return False
 
 
-def inert_counterexamples(text: str, *, source: str = "<text>") -> list[int]:
-    """Counterexample blocks that this guard finds nothing in.
+#: This scanner's own rule vocabulary. Used only to recognise when a
+#: counterexample block declares EXCLUSIVELY a rule some OTHER scanner owns
+#: (`tools/neutrality.py`'s `compound-lane` / `prefixed-lane` /
+#: `branch-namespace` / `queue-identity` / `lane-count` share the same
+#: `guard:counterexample` wrapper and `guard:violation` syntax) -- so this
+#: scanner never claims such a block is "inert". It was never this
+#: scanner's block to judge in the first place; see inert_counterexamples().
+_OWN_RULES = frozenset({"routine-approval", "executor-self-merge"})
 
-    An exemption protecting nothing is a silent widening: either the quoted text
-    is not actually a violation, or the rule that used to catch it has
-    regressed. Callers should treat a non-empty result as a failure.
+#: The bare rule-name token from any `guard:violation <rule> ...` line,
+#: regardless of which scanner's full declaration syntax follows it --
+#: deliberately looser than `_OWNER_OVERRIDE_DECLARATION` above, which
+#: validates a complete declaration this scanner can act on. This is used
+#: only to determine ownership, never to validate one.
+_DECLARED_RULE = re.compile(
+    r'^\s*<!--\s*guard:violation\s+(?P<rule>[a-z][a-z0-9-]*)\b'
+)
+
+
+def _declared_rule_names(body: str) -> set[str]:
+    return {
+        m.group("rule") for line in body.splitlines()
+        if (m := _DECLARED_RULE.match(line))
+    }
+
+
+def inert_counterexamples(text: str, *, source: str = "<text>") -> list[int]:
+    """Counterexample blocks that exempt nothing real -- restricted to
+    blocks this guard could plausibly own.
+
+    A block whose scan finds SOMETHING is never inert, regardless of which
+    rule its declaration names: the wrapper is genuinely suppressing real
+    content, which is the property this check exists to prove. Only when the
+    scan finds NOTHING does ownership matter, as a tie-breaker: a block whose
+    every `guard:violation` declares a rule outside `_OWN_RULES` belongs
+    entirely to a different scanner (e.g. neutrality.py's `compound-lane`)
+    and an empty scan there is expected, not a defect -- it was never this
+    guard's block to protect anything in. An exemption protecting nothing
+    IS a silent widening for the guard that actually owns the block, or for
+    a block naming no owner at all; either the quoted text is not actually a
+    violation, or the rule that used to catch it has regressed. Callers
+    should treat a non-empty result as a failure.
     """
     blocks, _ = counterexample_blocks(text)
-    return [start for start, body in blocks if not scan(body, source=source)]
+    inert: list[int] = []
+    for start, body in blocks:
+        if scan(body, source=source):
+            continue
+        declared = _declared_rule_names(body)
+        if declared and declared.isdisjoint(_OWN_RULES):
+            continue
+        inert.append(start)
+    return inert
 
 
 # --- Command line -----------------------------------------------------------
@@ -447,8 +492,7 @@ def inert_counterexamples(text: str, *, source: str = "<text>") -> list[int]:
 # first time someone copies only the file they were told they needed.
 
 
-def _iter_files(paths: Sequence[str]) -> list["Path"]:
-    from pathlib import Path
+def _iter_files(paths: Sequence[str]) -> list[Path]:
     out: list[Path] = []
     for raw in paths:
         p = Path(raw)
