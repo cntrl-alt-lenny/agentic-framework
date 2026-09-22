@@ -1,36 +1,22 @@
-# State of play
+# State
 
-Durable project context. Read this cold to catch up in about a minute, then get
-out of it.
+The owner's standing decisions, what is deliberately parked, and pointers.
+Read it in a minute. It holds **no live state**: what is in flight, merged or
+failing comes from `python3 tools/fw.py status` and git, every session. Its
+word budget is checked by `tools/fw.py check`.
 
-**This document stores no live state.** Current branch, current SHA, open work,
-CI status and whether a worktree exists are all derived from git and the host,
-every session. A stored value that can change is worse than an absent one,
-because it is confidently wrong.
+## Where we are going
 
-If a value must be recorded because it was true at a moment, label it explicitly
-as a historical anchor.
+<!-- One paragraph: the current goal and why. -->
 
-## Where we are
+## Owner decisions
 
-<!-- One paragraph. What the project is working toward right now, and why. -->
-
-## Settled decisions
-
-<!-- Decisions that would otherwise be re-litigated every few sessions, with a
-     one-line reason each. Not a changelog. -->
+<!-- Decisions that would otherwise be re-argued, one line of reason each. -->
 
 ## Parked, and why
 
-<!-- The highest-value section: things deliberately not being done, and the
-     reason. A fresh session cannot derive this from the repository. -->
-
-## Standing constraints and owner preferences
-
-<!-- Things the owner has decided that are not visible in the code. -->
+<!-- Things deliberately not being done. A fresh session cannot derive this. -->
 
 ## Pointers
 
-<!-- Where the detail lives. Keep this document a pointer document: when a
-     section starts accumulating per-round detail, trim it back into an archived
-     brief or a dedicated document rather than letting it grow. -->
+<!-- Where detail lives. -->
