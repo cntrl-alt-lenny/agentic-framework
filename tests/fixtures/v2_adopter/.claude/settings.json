@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "sh .claude/hooks/run_python.sh .claude/hooks/save_agent_reply.py"}]}],
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "sh .claude/hooks/run_python.sh .claude/hooks/pre_bash.py"}]}]
+  }
+}
