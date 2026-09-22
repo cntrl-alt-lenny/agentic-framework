@@ -6,56 +6,42 @@ on:
   pull_request:
 
 jobs:
-  invariants:
-    name: framework invariants
-    runs-on: ubuntu-latest
+  tests:
+    name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      # Run from a clean checkout: local working state must never be able to
-      # manufacture a green that CI would reject. tests/test_repo_integrity.py
-      # asserts this is the same discovery the suite runs locally.
-      - name: Run the invariant suite
-        run: python -m unittest discover -s tests -t . -v
-
-  windows:
-    name: framework invariants (Windows)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run the invariant suite
-        run: python -m unittest discover -s tests -t . -v
-
-  macos:
-    name: framework invariants (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run the invariant suite
+          python-version: ${{ matrix.python }}
+      - name: Run the suite
         run: python -m unittest discover -s tests -t . -v
 
   lint:
-    name: lint (ruff)
+    name: lint (ruff, Python 3.9 target)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install ruff
-        run: python -m pip install ruff==0.15.12
-      # tests/test_lint.py is the single source of truth for which files, at
-      # which target versions -- see that file's docstring and
-      # framework/adoption.md's "Python compatibility". This is not required
-      # (see framework/CONSTITUTION.md's "Owner-reserved actions" on changing
-      # which checks are required).
-      - name: Lint every installed Python file
-        run: python -m unittest tests.test_lint -v
+      - run: python -m pip install ruff==0.15.12
+      - run: ruff check --select F,E9,B,UP --target-version py39 tools templates tests
+
+  # The name branch protection requires. It passes only when every job above
+  # passed: a skipped or cancelled job fails it rather than slipping through.
+  invariants:
+    name: framework invariants
+    if: always()
+    needs: [tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every test and lint job passed
+        run: |
+          echo "tests: ${{ needs.tests.result }}, lint: ${{ needs.lint.result }}"
+          test "${{ needs.tests.result }}" = "success" && test "${{ needs.lint.result }}" = "success"

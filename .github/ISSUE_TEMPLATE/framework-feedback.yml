@@ -1,0 +1,46 @@
+name: Framework feedback
+description: Report a problem the framework caused in a project. Evidence, not opinions.
+title: "[feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One problem per issue. Include commands someone else can rerun. No personal paths, email addresses, secrets or work data.
+  - type: input
+    id: project
+    attributes:
+      label: Project and commit
+      description: Repository name and the full commit id where you saw it.
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Framework release
+      description: From docs/agents/framework.json, or "2.x (no record)".
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Commands that reproduce it
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Evidence and scope
+      description: What you checked, what you did not, and whether other projects are likely affected.

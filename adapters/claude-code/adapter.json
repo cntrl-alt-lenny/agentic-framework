@@ -1,5 +1,5 @@
 {
   "tool": "Claude Code",
-  "install_root": ".claude",
-  "seats_dir": "agents"
+  "description": "Loads AGENTS.md through CLAUDE.md, and adds one agent file per seat and a /status command.",
+  "seeds": ["CLAUDE.md"]
 }

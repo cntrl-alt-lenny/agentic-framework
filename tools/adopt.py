@@ -1,600 +1,560 @@
 #!/usr/bin/env python3
-"""Copy this framework into a target repository.
+"""Install this framework into a project, or update a project to this release.
 
-This does the **mechanical** half of adoption. The judgement half — choosing a
-topology, writing the project's invariants and its evidence table — is described
-in `framework/adoption.md` and is not automatable.
+    python3 tools/adopt.py <project> --project "Name" [--workers worker]
+                           [--verifier] [--adapter NAME]... [--hooks] [--dry-run]
+    python3 tools/adopt.py <project> --update [--adapter NAME]... [--dry-run]
 
-    python tools/adopt.py <target> --project "Name" [options]
+Run it from a clone of the framework checked out at the release you want.
 
-Options:
-    --project NAME     Human-readable project name. Required.
-    --workers a,b      Executor role names (default: worker). Brain is always
-                       present; a specialist is the Worker contract plus a scope
-                       statement, not a new contract.
-    --verifier         Include the independent reviewer seat.
-    --coordinator NAME Name of the coordinating role (default: brain).
-    --hooks            Install the sample git pre-push hook.
-    --no-neutrality    Do not install the optional provider-neutrality guard.
-    --adapter NAME     Install a bundled provider adapter (repeatable). Its
-                       destination comes from that adapter's own `adapter.json`
-                       manifest — never from its name. See `tools/adapters.py`.
-    --dry-run          Print the plan; write nothing.
+What it installs is recorded in the project's docs/agents/framework.json: the
+release, the repository, the options chosen, and a SHA-256 fingerprint of every
+framework file. That record is what makes an update safe:
 
-Safety: an existing file is never overwritten. A file is reported as already
-current only when its bytes and any required executable mode already make it
-usable; anything else gets the framework version alongside it as
-`<name>.framework` and is reported as a collision to merge by hand. Re-running
-is therefore safe and idempotent.
+- a framework file whose fingerprint still matches is replaced by the new one;
+- a framework file someone edited is left alone, and the new version is written
+  beside it as `<name>.framework` for review;
+- a file the new release no longer ships is removed only when it provably was
+  never edited and no kept code or configuration file visibly names it (by
+  path, quoted file name, or Python import); removals are listed, and anything
+  missed is recoverable from git;
+- project-owned files (AGENTS.md, docs/state.md, rounds, CLAUDE.md, ...) are
+  created when missing and otherwise never touched.
+
+A project adopted before release 3.0.0 has no record; for it, the fingerprints
+of every file a 2.x release ever installed (tools/legacy_installs.json) prove
+which files are unedited copies.
+
+It then prints every release's "what an adopter must do" steps between the old
+and new release, and the project checks that still fail. Nothing is committed:
+the result is reviewed and merged like any other round.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib.util
+import json
 import os
+import re
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import adapters as adapter_manifests  # noqa: E402
-import line_endings  # noqa: E402
-
 ROOT = Path(__file__).resolve().parent.parent
 FRAMEWORK = ROOT / "framework"
 TEMPLATES = ROOT / "templates"
 ADAPTERS = ROOT / "adapters"
+MANIFEST = "docs/agents/framework.json"
+CANONICAL_REPOSITORY = "https://github.com/cntrl-alt-lenny/agentic-framework"
+
+#: Legacy (2.x) files this release no longer ships. Removed when unedited.
+RETIRED_PREFIXES = ("docs/agents/", ".claude/")
+RETIRED_EXACT = {
+    "tools/checkout.py", "tools/report.py", "tools/line_endings.py",
+    "tools/neutrality.py", "tools/authority.py", "tools/textblocks.py",
+    "tests/test_checkout.py", "tests/test_report.py", "tests/test_role_neutrality.py",
+}
+#: Where the updater looks for files that still use a retired file. Documents
+#: are not holders: a document mentioning a file does not break without it.
+HOLDER_SUFFIXES = {".py", ".sh", ".json", ".toml", ".yml", ".yaml", ".cfg", ".ini", ".ps1", ".bat", ".cmd"}
+HOLDER_NAMES = {"Makefile", "justfile"}
+SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox", ".wine-lane", ".worktrees"}
+MAX_HOLDER_BYTES = 2_000_000
+
+
+def _load_fw():
+    spec = importlib.util.spec_from_file_location("fw", ROOT / "tools" / "fw.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fw = _load_fw()
+
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def framework_version() -> str:
-    """This framework's own release, read from its `VERSION` file.
-
-    Never typed by whoever runs adoption: an adopting project must be able to
-    tell which release it is on without asking anyone, and a hand-typed
-    value can be wrong or stale the moment it is written. `VERSION` is this
-    repository's own record of what it currently is.
-    """
-    path = ROOT / "VERSION"
-    try:
-        text = path.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        raise SystemExit(f"adopt: cannot read {path}: {exc}") from exc
-    if not text:
-        raise SystemExit(f"adopt: {path} is empty")
+    text = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    if not fw.version_tuple(text):
+        raise SystemExit(f"adopt: VERSION {text!r} is not X.Y.Z")
     return text
 
 
 def framework_repository() -> str:
-    """This framework's own remote repository address, derived from Git.
+    """The framework's public address. A clone's origin is used only when it is
+    a plain GitHub URL, so a proxy or local path never ends up in a project."""
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "remote", "get-url", "origin"],
+        capture_output=True, text=True, check=False,
+    )
+    url = result.stdout.strip()
+    if result.returncode == 0 and re.match(r"^(https://github\.com/|git@github\.com:)", url):
+        return url[:-4] if url.endswith(".git") else url
+    return CANONICAL_REPOSITORY
 
-    Never typed: a hand-typed URL can name the wrong fork or go stale the
-    moment the remote changes. Falls back to a plain, honest placeholder
-    when this clone has no `origin` remote configured (a local-only copy,
-    or one cloned without a name for its remote) rather than inventing one.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(ROOT), "remote", "get-url", "origin"],
-            capture_output=True, text=True, check=False,
+
+def legacy_fingerprints() -> tuple[dict[str, list[str]], dict[str, dict]]:
+    data = json.loads((ROOT / "tools" / "legacy_installs.json").read_text(encoding="utf-8"))
+    return data["files"], data.get("rendered", {})
+
+
+def masked_digest(data: bytes, mask: str) -> str:
+    text = data.replace(b"\r\n", b"\n").decode("utf-8", errors="replace")
+    return hashlib.sha256(re.sub(mask, r"\1", text, flags=re.M).encode("utf-8")).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# what this release ships
+
+
+@dataclass
+class Item:
+    rel: str
+    content: str
+    kind: str  # "copy" (framework-owned) or "seed" (project-owned once created)
+    executable: bool = False
+
+    @property
+    def data(self) -> bytes:
+        return self.content.replace("\r\n", "\n").encode("utf-8")
+
+
+def role_table(workers: list[str], verifier: bool) -> str:
+    rows = ["| Seat | Card | Scope |", "|---|---|---|",
+            "| Brain | `docs/agents/roles/brain.md` | Plans, briefs, judges, merges under the merge rule. |"]
+    for name in workers:
+        rows.append(
+            f"| {name.capitalize()} | `docs/agents/roles/worker.md` | "
+            "<!-- what this executor may change --> |"
         )
-    except (FileNotFoundError, OSError):
-        result = None
-    if result is not None and result.returncode == 0 and result.stdout.strip():
-        return result.stdout.strip()
-    return "<no origin remote configured on this framework clone>"
+    if verifier:
+        rows.append("| Verifier | `docs/agents/roles/verifier.md` | Reviews Tier 2 rounds at one exact commit. |")
+    return "\n".join(rows)
 
-#: Framework documents copied verbatim into the target. Generic by design: a
-#: project does not edit them, so they cannot drift from this repository.
-#:
-#: THEY MUST ALSO MEAN THE SAME THING IN THE COPY. A markdown relative link is a
-#: claim that the file it names is in the repository the reader is holding, so a
-#: document in this tuple may link only to another document in it. Anything else
-#: — this repository's implementation, its tests, its history — is a reference
-#: rather than a link: a plain path, in a sentence that says which repository it
-#: is in. Enforced by `tests/test_adopted_doc_references.py`, which adopts into a
-#: real tree and resolves the links there.
-VERBATIM_DOCS = (
-    "CONSTITUTION.md",
-    "adapters.md",
-    "briefs.md",
-    "evidence.md",
-    "git-and-isolation.md",
-    "kickoff.md",
-    "lifecycle.md",
-    "reports.md",
-    "topologies.md",
-    "update.md",
-    "roles/README.md",
-    "roles/brain.md",
-    "roles/worker.md",
-    "roles/verifier.md",
-)
 
-#: Historical to this repository, never copied: they are its evidence, not the
-#: adopting project's.
-NOT_COPIED = ("failure-catalogue.md", "case-studies.md", "adoption.md", "state.md")
+def adapter_dirs() -> list[str]:
+    return sorted(p.name for p in ADAPTERS.iterdir() if (p / "adapter.json").is_file())
 
-DOCS_DEST = "docs/agents"
+
+def release_items(*, project: str, workers: list[str], verifier: bool,
+                  adapters: list[str], hooks: bool, tests_dir_exists: bool) -> list[Item]:
+    items = [Item("docs/agents/FRAMEWORK.md", (FRAMEWORK / "FRAMEWORK.md").read_text(encoding="utf-8"), "copy")]
+    for role in ("brain", "worker", "verifier"):
+        items.append(Item(f"docs/agents/roles/{role}.md",
+                          (FRAMEWORK / "roles" / f"{role}.md").read_text(encoding="utf-8"), "copy"))
+    items.append(Item("tools/fw.py", (ROOT / "tools" / "fw.py").read_text(encoding="utf-8"), "copy", True))
+    items.append(Item("tests/test_framework.py",
+                      (TEMPLATES / "tests" / "test_framework.py").read_text(encoding="utf-8"), "copy"))
+    agents = (TEMPLATES / "AGENTS.md").read_text(encoding="utf-8")
+    agents = agents.replace("{{PROJECT}}", project).replace("{{ROLE_TABLE}}", role_table(workers, verifier))
+    items.append(Item("AGENTS.md", agents, "seed"))
+    items.append(Item("docs/state.md", (TEMPLATES / "docs" / "state.md").read_text(encoding="utf-8"), "seed"))
+    items.append(Item("docs/rounds/README.md",
+                      (TEMPLATES / "docs" / "rounds" / "README.md").read_text(encoding="utf-8"), "seed"))
+    items.append(Item(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"), "seed"))
+    if not tests_dir_exists:
+        items.append(Item("tests/__init__.py", "", "seed"))
+    if hooks:
+        items.append(Item(".githooks/pre-push", (TEMPLATES / "githooks" / "pre-push").read_text(encoding="utf-8"), "seed", True))
+    for name in adapters:
+        src = ADAPTERS / name
+        if not (src / "adapter.json").is_file():
+            raise SystemExit(f"adopt: unknown adapter {name!r}; available: {', '.join(adapter_dirs())}")
+        meta = json.loads((src / "adapter.json").read_text(encoding="utf-8"))
+        seeds = set(meta.get("seeds", []))
+        for path in sorted((src / "files").rglob("*")):
+            if path.is_file():
+                rel = path.relative_to(src / "files").as_posix()
+                items.append(Item(rel, path.read_text(encoding="utf-8"), "seed" if rel in seeds else "copy"))
+    return items
+
+
+# --------------------------------------------------------------------------
+# planning
 
 
 @dataclass
 class Plan:
-    writes: list[tuple[Path, str, bool]] = field(default_factory=list)
-    current: list[Path] = field(default_factory=list)
-    collisions: list[tuple[Path, Path]] = field(default_factory=list)
+    target: Path
+    writes: list[tuple[Item, Path, str]] = field(default_factory=list)  # item, path, reason
+    current: list[str] = field(default_factory=list)
+    kept: list[str] = field(default_factory=list)
+    sidecars: list[tuple[str, str]] = field(default_factory=list)
+    removals: list[str] = field(default_factory=list)
+    retained: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    ensure_worktrees_ignore: bool = False
-    target: Path = Path(".")
+    manifest: dict = field(default_factory=dict)
 
 
-def _file_matches(path: Path, content: bytes, executable: bool) -> bool:
-    """Whether an existing file is complete for the installed framework use.
-
-    A byte-identical executable script with mode 0644 is not current: adoption
-    would still need to make it runnable. Read failures deliberately mean
-    "collision", never "current" and never an exception that aborts the plan.
-    """
-    try:
-        if not path.is_file() or path.read_bytes() != content:
-            return False
-        # Windows cannot represent POSIX execute bits. Its existing-file
-        # equivalence is therefore byte-based, while newly written executable
-        # files still go through apply_plan's explicit postcondition warning.
-        return not executable or os.name == "nt" or executable_bit_took(path)
-    except (OSError, ValueError):
-        return False
+def load_manifest(target: Path) -> dict | None:
+    path = target / MANIFEST
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def tracked_hook_line_endings(target: Path) -> list[str]:
-    """Return unsafe tracked executable text paths in this clone's worktrees.
+def is_legacy(target: Path) -> bool:
+    return (target / "docs/agents/CONSTITUTION.md").is_file() or (target / "tools/checkout.py").is_file()
 
-    The paths are discovered from Git's executable mode and the files'
-    shebangs, not from a directory or adapter-name allowlist. ``.githooks``
-    remains a fixed Git hook root even when a pre-existing file has not yet
-    recorded its executable mode.
-    """
-    unsafe: list[str] = []
-    target = target.resolve()
-    worktrees = [target]
-    try:
-        listed = subprocess.run(
-            ["git", "-C", str(target), "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, check=False,
-        )
-    except (FileNotFoundError, OSError):
-        listed = None
-    if listed is not None and listed.returncode == 0:
-        for line in listed.stdout.splitlines():
-            if line.startswith("worktree "):
-                checkout = Path(line.removeprefix("worktree ")).resolve()
-                if checkout not in worktrees:
-                    worktrees.append(checkout)
 
-    for checkout in worktrees:
+def sidecar_path(path: Path, data: bytes) -> Path:
+    candidate = path.with_name(path.name + ".framework")
+    while candidate.exists() and candidate.read_bytes().replace(b"\r\n", b"\n") != data:
+        candidate = candidate.with_name(candidate.name + ".framework")
+    return candidate
+
+
+class Holders:
+    """The project's code and configuration files, read once, for finding
+    files that still use something the update would remove. It reads the
+    working tree directly, so untracked files count and git is not needed.
+    If the tree cannot be read, every removal is refused."""
+
+    def __init__(self, target: Path, planned: dict[str, str], framework_files: set[str]):
+        self.target = target
+        self.files: dict[str, str] = {}
+        self.error: str | None = None
         try:
-            paths = line_endings.tracked_unsafe_paths(checkout)
-        except (FileNotFoundError, OSError):
-            continue
-        for path in paths:
-            label = path
-            if checkout != target:
-                label = f"{checkout}: {path}"
-            unsafe.append(label)
-    return unsafe
+            for folder, dirs, names in os.walk(target, onerror=self._fail):
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".venv")]
+                rel_dir = Path(folder).relative_to(target).as_posix()
+                for name in names:
+                    path = Path(folder) / name
+                    in_hooks = rel_dir.split("/")[0] == ".githooks"
+                    if path.suffix not in HOLDER_SUFFIXES and name not in HOLDER_NAMES and not in_hooks:
+                        continue
+                    if path.stat().st_size > MAX_HOLDER_BYTES:
+                        continue
+                    rel = path.relative_to(target).as_posix()
+                    self.files[rel] = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            self._fail(exc)
+        # Files this update writes are judged by what they will contain, and the
+        # framework's own files never depend on the files it retires.
+        for rel, text in planned.items():
+            if Path(rel).suffix in HOLDER_SUFFIXES or Path(rel).name in HOLDER_NAMES:
+                self.files[rel] = text
+        for rel in framework_files:
+            self.files.pop(rel, None)
+
+    def _fail(self, exc: OSError) -> None:
+        self.error = f"could not read the project to check what uses it ({exc})"
+
+    def user_of(self, rel: str, removing: set[str]) -> str | None:
+        if self.error:
+            return self.error
+        name = Path(rel).name
+        patterns = [re.escape(rel), re.escape(rel.replace("/", "\\")), rf"[\"']{re.escape(name)}[\"']"]
+        if rel.startswith("tools/") and rel.endswith(".py"):
+            module = re.escape(Path(rel).stem)
+            patterns += [
+                rf"^\s*import\s+(tools\.)?{module}\b",
+                rf"^\s*from\s+(tools\.)?{module}\s+import\b",
+                rf"^\s*from\s+tools\s+import\s+[^\n]*\b{module}\b",
+            ]
+        found = re.compile("|".join(f"(?:{p})" for p in patterns), re.M)
+        for holder, text in sorted(self.files.items()):
+            if holder in (rel, MANIFEST) or holder in removing or holder.endswith(".framework"):
+                continue
+            if found.search(text):
+                return f"{holder} still refers to it"
+        return None
 
 
-def topology_diagram(coordinator: str, workers: list[str], verifier: bool) -> str:
-    seats = list(workers) + (["verifier"] if verifier else [])
-    lines = ["```", "Owner", f"└── {coordinator.capitalize()}"]
-    for i, seat in enumerate(seats):
-        connector = "└──" if i == len(seats) - 1 else "├──"
-        lines.append(f"    {connector} {seat.capitalize()}")
-    lines.append("```")
-    return "\n".join(lines)
+def broken_links(target: Path, removed: set[str], planned: dict[str, str]) -> list[str]:
+    """Documents that would be left linking to a removed file, judged by the
+    content they will have after the update."""
+    hits = []
+    for folder, dirs, names in os.walk(target):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for name in names:
+            if not name.endswith(".md"):
+                continue
+            path = Path(folder) / name
+            rel = path.relative_to(target).as_posix()
+            if rel in removed:
+                continue
+            try:
+                text = planned.get(rel) or path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for link in re.findall(r"\]\(([^)#\s]+)", text):
+                linked = os.path.normpath((Path(rel).parent / link).as_posix()).replace("\\", "/")
+                if linked in removed:
+                    hits.append(f"{rel} links to {linked}")
+    return hits
 
 
-def role_table(coordinator: str, workers: list[str], verifier: bool) -> str:
-    rows = [
-        "| Role | Holds | Scope |",
-        "|---|---|---|",
-        "| **Owner** | Direction, priorities, scope. Veto and reversal. | — |",
-        f"| **{coordinator.capitalize()}** | Project context, sequencing, briefs, "
-        f"adjudication, and the routine merge. "
-        f"([contract](docs/agents/roles/brain.md)) | <!-- what it owns --> |",
-    ]
-    for w in workers:
-        rows.append(
-            f"| **{w.capitalize()}** | One bounded brief at a time. Never "
-            f"self-accepts, never merges. "
-            f"([contract](docs/agents/roles/worker.md)) | <!-- disjoint scope --> |"
-        )
-    if verifier:
-        rows.append(
-            "| **Verifier** | Independent review of an exact SHA. Writes "
-            "findings, never merges. "
-            "([contract](docs/agents/roles/verifier.md)) | Read-only. |"
-        )
-    if len(workers) > 1:
-        rows.append("")
-        rows.append(
-            "Executor scopes must not overlap. Each concurrently-active role "
-            "gets its own checkout."
-        )
-    return "\n".join(rows)
-
-
-def render(text: str, values: dict[str, str]) -> str:
-    for key, val in values.items():
-        text = text.replace("{{" + key + "}}", val)
-    return text
-
-
-def adapter_notes(
-    adapter, *, workers: list[str], verifier: bool
-) -> list[str]:
-    """State what this adapter actually installed, and what it did not.
-
-    Derived from the files on disk, not from a claim in a document. An adapter
-    ships one seat per *role contract*; a project-declared specialist executor
-    is the Worker contract plus a scope statement, so it gets no seat of its
-    own. Saying so here stops the adopted layout being read as offering a file
-    per declared role that it does not contain.
-    """
-    seats = adapter.seat_roles()
-    notes = [
-        f"adapter '{adapter.name}' ({adapter.tool}) installs at "
-        f"{adapter.install_root}/"
-        + (f", seats: {', '.join(seats)}." if seats else ".")
-    ]
-    declared = list(workers) + (["verifier"] if verifier else [])
-    unseated = [r for r in declared if r not in seats]
-    if unseated and "worker" in seats:
-        notes.append(
-            f"no seat file is generated for {', '.join(unseated)}: each is the "
-            f"executor contract plus a scope statement, so they share the "
-            f"'worker' seat. The specialism is the scope in AGENTS.md."
-        )
-    elif unseated:
-        notes.append(
-            f"this adapter ships no seat for {', '.join(unseated)}; launch "
-            f"those with the universal procedure in docs/agents/adapters.md."
-        )
-    return notes
-
-
-def build_plan(
-    target: Path,
-    *,
-    project: str,
-    coordinator: str,
-    workers: list[str],
-    verifier: bool,
-    hooks: bool,
-    adapters: list[str],
-    neutrality: bool = True,
-) -> Plan:
+def build_plan(target: Path, *, update: bool, project: str | None, workers: list[str],
+               verifier: bool, adapters: list[str] | None, hooks: bool) -> Plan:
     plan = Plan(target=target)
+    old = load_manifest(target)
+    legacy = old is None and is_legacy(target)
+    if update and old is None and not legacy:
+        raise SystemExit("adopt: this project has no framework record to update; adopt it first (without --update)")
+    if not update and old is not None:
+        raise SystemExit(f"adopt: {MANIFEST} exists; use --update")
 
-    def add(rel: str, content: str, executable: bool = False) -> None:
-        dst = target / rel
-        installed = content.replace("\r\n", "\n").replace("\r", "\n")
-        installed_bytes = installed.encode("utf-8")
-        if dst.exists():
-            if _file_matches(dst, installed_bytes, executable):
-                plan.current.append(dst)
-                return
-            sibling = dst.with_name(dst.name + ".framework")
-            while sibling.exists():
-                if _file_matches(sibling, installed_bytes, executable):
-                    plan.collisions.append((dst, sibling))
-                    plan.current.append(sibling)
-                    return
-                sibling = sibling.with_name(sibling.name + ".framework")
-            plan.collisions.append((dst, sibling))
-            plan.writes.append((sibling, content, executable))
+    options = (old or {}).get("options", {})
+    # On update, --adapter adds to the recorded set; it never drops one.
+    adapters = list(options.get("adapters", [])) + list(adapters or [])
+    if update:
+        if legacy:
+            if (target / ".claude").is_dir():
+                adapters.append("claude-code")
+            if (target / "GEMINI.md").is_file():
+                adapters.append("gemini")
+    hooks = hooks or bool(options.get("hooks")) or (legacy and (target / ".githooks/pre-push").is_file())
+    items = release_items(
+        project=project or target.name, workers=workers, verifier=verifier,
+        adapters=sorted(set(adapters)), hooks=hooks,
+        tests_dir_exists=(target / "tests").is_dir(),
+    )
+    old_files = (old or {}).get("files", {})
+    known, rendered = legacy_fingerprints()
+
+    def unedited(rel: str, data: bytes) -> bool:
+        h = digest(data)
+        entry = old_files.get(rel)
+        if entry and entry.get("kind") == "copy":
+            return entry.get("sha256") == h
+        if rel in rendered:
+            return masked_digest(data, rendered[rel]["mask"]) in rendered[rel]["sha256"]
+        return h in known.get(rel, ())
+
+    files_record = {}
+    for item in items:
+        path = target / item.rel
+        new = item.data
+        if item.kind == "copy":
+            files_record[item.rel] = {"kind": "copy", "sha256": digest(new)}
         else:
-            plan.writes.append((dst, content, executable))
+            files_record[item.rel] = {"kind": "seed"}
+        if not path.exists():
+            plan.writes.append((item, path, "new"))
+            continue
+        existing = path.read_bytes()
+        if existing.replace(b"\r\n", b"\n") == new:
+            plan.current.append(item.rel)
+            continue
+        if item.kind == "seed":
+            if update:
+                plan.kept.append(item.rel)
+            else:
+                side = sidecar_path(path, new)
+                plan.writes.append((item, side, "sidecar"))
+                plan.sidecars.append((item.rel, side.relative_to(target).as_posix()))
+            continue
+        if update and unedited(item.rel, existing):
+            plan.writes.append((item, path, "replace"))
+        else:
+            side = sidecar_path(path, new)
+            plan.writes.append((item, side, "sidecar"))
+            plan.sidecars.append((item.rel, side.relative_to(target).as_posix()))
 
-    for rel in VERBATIM_DOCS:
-        src = FRAMEWORK / rel
-        if not src.is_file():
-            raise SystemExit(f"framework file missing: {src}")
-        add(f"{DOCS_DEST}/{rel}", src.read_text(encoding="utf-8"))
+    # Project-owned files installed by an earlier run stay recorded as such.
+    for rel, entry in old_files.items():
+        if entry.get("kind") == "seed" and rel not in files_record:
+            files_record[rel] = {"kind": "seed"}
 
-    values = {
-        "PROJECT": project,
-        "TOPOLOGY_DIAGRAM": topology_diagram(coordinator, workers, verifier),
-        "ROLE_TABLE": role_table(coordinator, workers, verifier),
-        "ROLES": repr(tuple(workers + (["verifier"] if verifier else []))),
-        "COORDINATOR": coordinator,
-        "FRAMEWORK_VERSION": framework_version(),
-        "FRAMEWORK_REPO": framework_repository(),
+    if update:
+        shipped = {item.rel for item in items}
+        candidates = set()
+        for rel, entry in old_files.items():
+            if rel not in shipped and entry.get("kind") == "copy":
+                candidates.add(rel)
+        if legacy:
+            for rel in [*known, *rendered]:
+                if rel not in shipped and (rel in RETIRED_EXACT or rel.startswith(RETIRED_PREFIXES)):
+                    candidates.add(rel)
+        removing = set()
+        for rel in sorted(candidates):
+            path = target / rel
+            if not path.is_file():
+                continue
+            if unedited(rel, path.read_bytes()):
+                removing.add(rel)
+            else:
+                plan.retained.append((rel, "edited in this project, so kept; delete it once nothing needs it"))
+        planned = {
+            item.rel: item.content for item, path, reason in plan.writes if reason in ("new", "replace")
+        }
+        rewritten = {item.rel for item, _path, reason in plan.writes if reason in ("new", "replace") and item.kind == "copy"}
+        holders = Holders(target, planned, rewritten)
+        changed = True
+        while changed:
+            changed = False
+            for rel in sorted(removing):
+                user = holders.user_of(rel, removing)
+                if user:
+                    removing.discard(rel)
+                    plan.retained.append((rel, f"unedited, but {user}; remove that use, then delete it"))
+                    changed = True
+        # A kept framework document must not be left linking to a removed one.
+        changed = True
+        while changed:
+            changed = False
+            kept_docs = [r for r, _why in plan.retained if r.endswith(".md")]
+            for holder in kept_docs:
+                text = (target / holder).read_text(encoding="utf-8", errors="replace")
+                for link in re.findall(r"\]\(([^)#\s]+)", text):
+                    linked = (Path(holder).parent / link).as_posix()
+                    linked = os.path.normpath(linked).replace("\\", "/")
+                    if linked in removing:
+                        removing.discard(linked)
+                        plan.retained.append((linked, f"{holder}, which is kept, links to it; delete both together"))
+                        changed = True
+        plan.removals = sorted(removing)
+        hits = sorted(set(broken_links(target, removing, planned)))
+        for hit in hits[:20]:
+            plan.notes.append(f"fix this link after the update: {hit}")
+        if len(hits) > 20:
+            plan.notes.append(f"... and {len(hits) - 20} more links to fix")
+
+    plan.manifest = {
+        "about": "Written by the agentic framework's tools/adopt.py. Do not edit by hand, except 'settings'.",
+        "framework": {"repository": framework_repository(), "release": framework_version()},
+        "options": {"adapters": sorted(set(adapters)), "hooks": hooks},
+        "settings": (old or {}).get("settings", {}),
+        "files": files_record,
     }
-
-    add("AGENTS.md", render((TEMPLATES / "AGENTS.md").read_text(encoding="utf-8"), values))
-    add("docs/state.md", (TEMPLATES / "docs/state.md").read_text(encoding="utf-8"))
-    add("docs/briefs/README.md",
-        (TEMPLATES / "docs/briefs/README.md").read_text(encoding="utf-8"))
-    add("docs/briefs/active.md",
-        (TEMPLATES / "docs/briefs/active.md").read_text(encoding="utf-8"))
-    for sub in ("delivered", "archive"):
-        add(f"docs/briefs/{sub}/.gitkeep",
-            (TEMPLATES / f"docs/briefs/{sub}/.gitkeep").read_text(encoding="utf-8"))
-
-    if neutrality:
-        # Every module the installed test imports, or it fails on import in the
-        # target rather than guarding anything there. These are executable
-        # tools: the shebang is a promise that an adopting project can run them
-        # directly, just like the adapter hooks below.
-        for module in ("neutrality.py", "authority.py", "textblocks.py"):
-            src = ROOT / "tools" / module
-            with src.open("rb") as stream:
-                executable = stream.readline().startswith(b"#!")
-            add(
-                f"tools/{module}", src.read_text(encoding="utf-8"),
-                executable=executable,
-            )
-    # Without this, `unittest discover -s tests` refuses the directory and the
-    # installed guard never runs at all. Caught by tests/test_adopt.py, which
-    # runs the guard in the adopted tree rather than checking it exists.
-    add("tests/__init__.py", "")
-    if neutrality:
-        add("tests/test_role_neutrality.py",
-            render((TEMPLATES / "tests/test_role_neutrality.py").read_text(encoding="utf-8"),
-                   values))
-    add("tests/test_checkout.py",
-        (TEMPLATES / "tests/test_checkout.py").read_text(encoding="utf-8"))
-    add("tests/test_report.py",
-        (ROOT / "tests" / "test_report.py").read_text(encoding="utf-8"))
-
-    checkout_src = ROOT / "tools" / "checkout.py"
-    with checkout_src.open("rb") as stream:
-        checkout_executable = stream.readline().startswith(b"#!")
-    add(
-        "tools/checkout.py", checkout_src.read_text(encoding="utf-8"),
-        executable=checkout_executable,
-    )
-
-    # Preserve every existing project rule and append the required isolation
-    # entry only when neither common spelling is already present.
-    ignore = target / ".gitignore"
-    existing_ignore = ignore.read_text(encoding="utf-8") if ignore.is_file() else ""
-    ignored_lines = {line.strip() for line in existing_ignore.splitlines()}
-    if ".worktrees/" not in ignored_lines and "/.worktrees/" not in ignored_lines:
-        plan.ensure_worktrees_ignore = True
-
-    # The cross-provider completion-report writer -- see framework/reports.md.
-    # Installed unconditionally, with no `--adapter` required: it is the
-    # baseline every filesystem-capable role uses regardless of which tool runs
-    # it, and it must exist even when no adapter is installed at all, since
-    # that is the case for a provider this project has never seen.
-    report_src = ROOT / "tools" / "report.py"
-    with report_src.open("rb") as stream:
-        report_executable = stream.readline().startswith(b"#!")
-    add(
-        "tools/report.py", report_src.read_text(encoding="utf-8"),
-        executable=report_executable,
-    )
-
-    plan.notes.append(
-        "Neutrality guard installed (tools/neutrality.py, tools/textblocks.py, "
-        "tools/authority.py and tests/test_role_neutrality.py). Update these "
-        "together with every docs/agents document copied from VERBATIM_DOCS."
-        if neutrality else
-        "Neutrality guard deferred by --no-neutrality; no neutrality scanner, "
-        "shared parser, authority scanner or installed neutrality test was "
-        "written."
-    )
-
-    # Installed unconditionally: a project receives executable framework text
-    # content from this framework whenever it takes the hooks or an adapter,
-    # and a CRLF checkout makes those inert. Cheap, and wrong to make
-    # conditional on remembering a flag.
-    line_endings_src = ROOT / "tools" / "line_endings.py"
-    with line_endings_src.open("rb") as stream:
-        line_endings_executable = stream.readline().startswith(b"#!")
-    add(
-        "tools/line_endings.py", line_endings_src.read_text(encoding="utf-8"),
-        executable=line_endings_executable,
-    )
-
-    # Installed unconditionally: a project receives `#!/bin/sh` content from
-    # this framework whenever it takes the hooks or an adapter, and a CRLF
-    # checkout makes those inert. Cheap, and wrong to make conditional on
-    # remembering a flag.
-    add(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"))
-
-    stale_hooks = tracked_hook_line_endings(target)
-    if stale_hooks:
-        plan.notes.append(
-            "WARNING: tracked executable framework text file(s) still have "
-            "CRLF or mixed working-tree line endings: " + ", ".join(stale_hooks)
-            + ". Run `python3 tools/line_endings.py check`, then follow "
-            "docs/agents/git-and-isolation.md's stash-free refresh steps before "
-            "relying on the script. The effect depends on the platform and shell."
-        )
-
-    if hooks:
-        add(".githooks/pre-push",
-            (TEMPLATES / "githooks/pre-push").read_text(encoding="utf-8"),
-            executable=True)
-        plan.notes.append(
-            "The pre-push hook is opt-in per clone and fails silently until "
-            "`git config core.hooksPath .githooks` is run. It is early "
-            "feedback, never a control."
-        )
-
-    for name in adapters:
-        src_dir = ADAPTERS / name
-        if not src_dir.is_dir():
-            raise SystemExit(
-                f"unknown adapter '{name}'; available: "
-                f"{', '.join(adapter_manifests.available(ADAPTERS))}"
-            )
-        # The destination comes from the adapter's own manifest, never from its
-        # name. See tools/adapters.py for why that distinction is load-bearing.
-        try:
-            adapter = adapter_manifests.load(src_dir)
-        except adapter_manifests.AdapterError as exc:
-            raise SystemExit(f"adopt: {exc}") from exc
-        for src in adapter.source_files():
-            rel = src.relative_to(src_dir).as_posix()
-            with src.open("rb") as stream:
-                executable = stream.readline().startswith(b"#!")
-            add(
-                adapter.destination(rel),
-                src.read_text(encoding="utf-8"),
-                executable=executable,
-            )
-        plan.notes += adapter_notes(adapter, workers=workers, verifier=verifier)
-
-    plan.notes.append(
-        "Now do the judgement half: write AGENTS.md's invariants, evidence "
-        "table and enforcement section. See framework/adoption.md."
-    )
+    if not plan.manifest["settings"]:
+        plan.manifest["settings"] = {"state_words": fw.DEFAULT_STATE_WORDS}
     return plan
 
 
-def render_plan(plan: Plan, target: Path) -> str:
-    out = []
-    for dst, _, executable in plan.writes:
-        rel = dst.relative_to(target)
-        out.append(f"  write  {rel}{' (exec)' if executable else ''}")
-    for dst in plan.current:
-        out.append(f"  current {dst.relative_to(target)} (already current)")
-    for existing, sibling in plan.collisions:
-        out.append(
-            f"  KEEP   {existing.relative_to(target)} (exists) — framework "
-            f"version written to {sibling.name}, merge by hand"
-        )
-    for note in plan.notes:
-        out.append(f"  note   {note}")
-    if plan.ensure_worktrees_ignore:
-        out.append("  append .gitignore (ignore .worktrees/; existing content stays in order)")
-    return "\n".join(out) or "  (nothing to do)"
+# --------------------------------------------------------------------------
+# changelog
 
 
-def executable_bit_took(path: Path) -> bool:
-    """Return whether this platform can represent an executable file mode.
+def changelog_steps(since: str | None) -> list[tuple[str, str]]:
+    """(version, steps) for every release newer than ``since``, oldest first."""
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    current = fw.version_tuple(framework_version())
+    low = fw.version_tuple(since) if since else None
+    entries = []
+    for block in re.split(r"^## ", text, flags=re.M)[1:]:
+        version = block.split()[0]
+        parsed = fw.version_tuple(version)
+        if not parsed or parsed > current:
+            continue
+        if (low is not None and parsed <= low) or (low is None and parsed < (3, 0, 0)):
+            continue
+        match = re.search(r"^### What an adopter must do\s*\n(.*?)(?=^##|\Z)", block, flags=re.M | re.S)
+        entries.append((parsed, version, match.group(1).strip() if match else "Nothing beyond the update itself."))
+    return [(v, s) for _, v, s in sorted(entries)]
 
-    Windows Python deliberately ignores ``X_OK`` and Windows ``chmod`` cannot
-    preserve POSIX execute bits. Treat that capability as absent explicitly;
-    otherwise a successful-looking adoption leaves a hook that Git will skip
-    after a later POSIX clone.
-    """
-    if os.name == "nt":
-        return False
-    try:
-        return bool(path.stat().st_mode & 0o111)
-    except OSError:
-        return False
+
+# --------------------------------------------------------------------------
+# output and apply
 
 
-def apply_plan(plan: Plan) -> list[Path]:
-    """Write the plan. Returns the files whose executable bit did not take.
+def describe(plan: Plan, *, update: bool, old_release: str | None) -> str:
+    lines = []
+    verb = "update" if update else "adopt"
+    lines.append(f"{verb}: {plan.target} -> agentic-framework {plan.manifest['framework']['release']}"
+                 + (f" (from {old_release})" if update else ""))
+    for _item, path, reason in plan.writes:
+        rel = path.relative_to(plan.target).as_posix()
+        label = {"new": "create ", "replace": "replace", "sidecar": "beside "}[reason]
+        lines.append(f"  {label} {rel}")
+    for rel in plan.removals:
+        lines.append(f"  remove  {rel}  (unedited copy from an earlier release)")
+    for rel in plan.current:
+        lines.append(f"  same    {rel}")
+    for rel in plan.kept:
+        lines.append(f"  keep    {rel}  (project-owned)")
+    for rel, why in plan.retained:
+        lines.append(f"  keep    {rel}  ({why})")
+    lines.append(f"  record  {MANIFEST}")
+    if plan.notes:
+        lines.append("")
+        lines.extend(plan.notes)
+    if plan.sidecars:
+        lines.append("")
+        lines.append("Edited framework files were left alone. Review each difference, move any")
+        lines.append("project-specific content into AGENTS.md or docs/agents/local/, then replace the")
+        lines.append("file with its .framework copy:")
+        for rel, side in plan.sidecars:
+            lines.append(f"  {rel}  <-  {side}")
+    return "\n".join(lines)
 
-    `chmod` is asked for, never assumed. On Windows it honours only the
-    read-only flag and silently discards execute bits, so the platform is
-    reported as unable to complete adoption instead of claiming success.
-    """
-    unset: list[Path] = []
-    for dst, content, executable in plan.writes:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        # Disable platform newline translation explicitly. `Path.write_text`
-        # does not provide that guarantee on Python versions still supported by
-        # adopting projects, so normalize the source and write LF bytes here.
-        with dst.open("w", encoding="utf-8", newline="") as stream:
-            stream.write(content.replace("\r\n", "\n").replace("\r", "\n"))
-        if executable:
-            try:
-                dst.chmod(dst.stat().st_mode | 0o111)
-            except OSError:
-                pass
-            if not executable_bit_took(dst):
-                unset.append(dst)
-    if plan.ensure_worktrees_ignore:
-        ignore = plan.target / ".gitignore"
-        prior = ignore.read_text(encoding="utf-8") if ignore.is_file() else ""
-        lines = {line.strip() for line in prior.splitlines()}
-        if ".worktrees/" not in lines and "/.worktrees/" not in lines:
-            separator = "" if not prior or prior.endswith(("\n", "\r")) else "\n"
-            with ignore.open("a", encoding="utf-8", newline="") as stream:
-                stream.write(separator + ".worktrees/\n")
-    return unset
+
+def apply(plan: Plan) -> None:
+    for item, path, _reason in plan.writes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(item.data)
+        if item.executable and os.name != "nt":
+            path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    for rel in plan.removals:
+        (plan.target / rel).unlink()
+        parent = (plan.target / rel).parent
+        while parent != plan.target and parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+    manifest = plan.target / MANIFEST
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps(plan.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    hook = plan.target / ".githooks/pre-push"
+    if any(item.rel == ".githooks/pre-push" for item, _p, r in plan.writes if r == "new") and (plan.target / ".git").exists():
+        # Windows cannot record the executable bit on disk; record it in git.
+        subprocess.run(["git", "-C", str(plan.target), "add", "--chmod=+x", "--", str(hook)],
+                       capture_output=True, check=False)
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("target")
-    ap.add_argument("--project", required=True)
-    ap.add_argument("--workers", default="worker")
-    ap.add_argument("--verifier", action="store_true")
-    ap.add_argument("--coordinator", default="brain")
-    ap.add_argument("--hooks", action="store_true")
-    ap.add_argument(
-        "--no-neutrality", action="store_false", dest="neutrality",
-        help="defer installation of the optional provider-neutrality guard",
-    )
-    ap.add_argument("--adapter", action="append", default=[])
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("target")
+    parser.add_argument("--project", help="project name (adoption only)")
+    parser.add_argument("--workers", default="worker", help="executor role names, comma-separated (adoption only)")
+    parser.add_argument("--verifier", action="store_true", help="list the Verifier seat in AGENTS.md (adoption only)")
+    parser.add_argument("--adapter", action="append", default=None, help=f"tool adapter to install: {', '.join(adapter_dirs())}")
+    parser.add_argument("--hooks", action="store_true", help="install a sample pre-push hook")
+    parser.add_argument("--update", action="store_true", help="update an adopted project to this release")
+    parser.add_argument("--dry-run", action="store_true", help="print the plan and write nothing")
+    args = parser.parse_args(argv)
 
-    target = Path(args.target).expanduser().resolve()
+    target = Path(args.target).resolve()
     if not target.is_dir():
-        print(f"adopt: target is not a directory: {target}", file=sys.stderr)
-        return 2
-
+        raise SystemExit(f"adopt: {target} is not a directory")
+    if not args.update and not args.project:
+        raise SystemExit("adopt: --project is required when adopting")
     workers = [w.strip() for w in args.workers.split(",") if w.strip()]
-    if not workers:
-        print("adopt: --workers needs at least one role", file=sys.stderr)
-        return 2
-    reserved = {args.coordinator, "verifier", "owner"}
-    clash = sorted(set(workers) & reserved)
-    if clash:
-        print(f"adopt: executor role name(s) clash with a reserved role: {clash}",
-              file=sys.stderr)
-        return 2
+    for name in workers:
+        fw.check_role(name)
+    old = load_manifest(target)
+    old_release = (old or {}).get("framework", {}).get("release") if old else ("2.x (no record)" if is_legacy(target) else None)
 
-    plan = build_plan(
-        target,
-        project=args.project,
-        coordinator=args.coordinator,
-        workers=workers,
-        verifier=args.verifier,
-        hooks=args.hooks,
-        neutrality=args.neutrality,
-        adapters=args.adapter,
-    )
-
-    print(f"adopt: plan for {target}")
-    print(render_plan(plan, target))
+    plan = build_plan(target, update=args.update, project=args.project, workers=workers,
+                      verifier=args.verifier, adapters=args.adapter, hooks=args.hooks)
+    print(describe(plan, update=args.update, old_release=old_release))
     if args.dry_run:
-        print("\nadopt: --dry-run; nothing written.")
+        print("\ndry run: nothing written")
         return 0
-    unset = apply_plan(plan)
-    if unset:
-        print(
-            "\nadopt: WARNING -- the executable bit did not take on these "
-            "files. This host cannot set it (Windows discards it silently). "
-            "Windows can use the installed files, but a POSIX clone would "
-            "receive them inert. Fix before committing:",
-            file=sys.stderr,
-        )
-        for dst in unset:
-            print(f"  git update-index --chmod=+x {dst.relative_to(target)}",
-                  file=sys.stderr)
-        if os.name == "nt":
-            print(
-                "adopt: Windows completed the local copy with this warning; "
-                "set the Git executable mode before a POSIX clone consumes it.",
-                file=sys.stderr,
-            )
-            print("\nadopt: done.")
-            return 0
-        return 1
-    print("\nadopt: done.")
+    apply(plan)
+
+    if args.update:
+        since = old_release if old and fw.version_tuple(old_release or "") else None
+        steps = changelog_steps(since)
+        if steps:
+            print("\nWhat each release asks of this project:")
+            for version, text in steps:
+                print(f"\n--- {version} ---\n{text}")
+    findings = fw.check_project(target)
+    if findings:
+        print("\nProject checks still to satisfy (python3 tools/fw.py check):")
+        for level, message in findings:
+            print(f"  {level}: {message}")
+    if not args.update:
+        print("\nNext: fill in AGENTS.md (what the project is, roles, invariants, evidence,")
+        print("what is enforced), then commit this as the project's first round.")
     return 0
 
 
