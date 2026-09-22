@@ -325,6 +325,20 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
                     removing.discard(rel)
                     plan.retained.append((rel, f"unedited, but {holder} still refers to it; remove that reference, then delete it"))
                     changed = True
+        # A kept framework document must not be left linking to a removed one.
+        changed = True
+        while changed:
+            changed = False
+            kept_docs = [r for r, _why in plan.retained if r.endswith(".md")]
+            for holder in kept_docs:
+                text = (target / holder).read_text(encoding="utf-8", errors="replace")
+                for link in re.findall(r"\]\(([^)#\s]+)", text):
+                    linked = (Path(holder).parent / link).as_posix()
+                    linked = os.path.normpath(linked).replace("\\", "/")
+                    if linked in removing:
+                        removing.discard(linked)
+                        plan.retained.append((linked, f"{holder}, which is kept, links to it; delete both together"))
+                        changed = True
         plan.removals = sorted(removing)
 
     plan.manifest = {

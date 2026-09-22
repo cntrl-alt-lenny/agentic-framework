@@ -128,6 +128,21 @@ class Updates(TempDirTest):
         self.assertTrue((target / "docs/agents/old-c.md").exists())
         self.assertIn("build.json still refers to it", result.stdout)
 
+    def test_a_kept_document_keeps_the_documents_it_links_to(self) -> None:
+        target = self.adopted()
+        record = manifest(target)
+        docs = {"docs/agents/old-d.md": "See [e](old-e.md).\n", "docs/agents/old-e.md": "e\n"}
+        for rel, text in docs.items():
+            (target / rel).write_text(text, encoding="utf-8")
+            record["files"][rel] = {"kind": "copy", "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        (target / "tool.py").write_text('DOC = "docs/agents/old-d.md"\n', encoding="utf-8")
+        (target / "docs/agents/framework.json").write_text(json.dumps(record), encoding="utf-8")
+        self.commit_all(target, "state before update")
+        result = adopt(target, "--update")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((target / "docs/agents/old-e.md").exists(), result.stdout)
+        self.assertIn("old-d.md, which is kept, links to it", result.stdout)
+
     def test_dry_run_writes_nothing(self) -> None:
         target = self.adopted()
         (target / "docs/agents/roles/worker.md").unlink()
