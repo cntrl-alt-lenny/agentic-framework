@@ -132,12 +132,22 @@ State plainly what you did **not** run, and why. An honest gap is a normal
 result. A gap presented as coverage is the failure this framework exists to
 catch.
 
+Anything a seat reports about itself — its tool, model, operating-system
+version, or other environment detail — is a claim to verify like any other.
+Take operating-system and version facts from a command or other authoritative
+source, not from the seat's own description. Treat captured text as evidence
+whose bytes matter: Windows PowerShell can change line endings, so inspect and
+verify line endings before using captured text; a capture that doubled every
+line is not independent evidence.
+
 ## Completion report
 
 Report plainly, without narrating your process:
 
 - **Base SHA and branch; head SHA and branch.** Exact, not "latest main".
 - **What changed** — files, and one line each on why.
+- **Durable-state accounting.** Any change to a durable-state document must
+  report every sentence removed and every sentence added.
 - **Every command you ran to validate it**, with its real output and exit
   status.
 - **What you did not run**, and why.

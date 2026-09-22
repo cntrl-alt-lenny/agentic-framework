@@ -94,7 +94,7 @@ as current repository state; re-measure before acting on them.
 
 ## License recognition
 
-GitHub shows "no license", and the live license badge shows "not specified", unless LICENSE contains text GitHub recognises. Do not edit a LICENSE to satisfy this standard: licensing is the owner's decision. When a project must keep an upstream LICENSE legally fixed and verbatim, use this generic template for the static badge (the placeholder is not a license):
+GitHub shows "no license", and the live license badge shows "not identifiable by github", unless LICENSE contains text GitHub recognises. Do not edit a LICENSE to satisfy this standard: licensing is the owner's decision. When a project must keep an upstream LICENSE legally fixed and verbatim, use this generic template for the static badge (the placeholder is not a license):
 
 ```markdown
 [![license](https://img.shields.io/badge/license-EXACT_GRANT_FROM_LICENSE-blue?style=flat)](LICENSE)

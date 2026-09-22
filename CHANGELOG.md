@@ -7,6 +7,33 @@ this file. Releases are tagged by Brain after the round that produces them
 merges; this file is the record an executor writes and a tag only points at,
 never the other way around.
 
+## 2.1.0 — conventions, lessons and the active README standard
+
+This release documents an optional, provider-neutral convention for project
+Brains to exchange standalone, append-only evidence and report suspected
+framework defects upstream. It also makes self-reported tool, model and
+operating-system details claims to verify, warns that Windows PowerShell can
+change captured line endings, records Brain's routine housekeeping boundary,
+and requires sentence-level accounting for durable-state edits and review of
+every removal. The active README standard is now part of the framework's
+normative scan, and its license guidance matches the live Shields.io wording
+and supplies a generic static-badge template for legally fixed upstream
+licenses.
+
+### What an adopter must do
+
+Update the installed canonical contracts and documents through
+[`framework/update.md`](framework/update.md)'s ordinary reviewed procedure,
+then run the project's full validation and both guards. Executors and
+Verifiers must verify self-reported environment facts from commands, inspect
+line endings in captured text, and list every sentence added and removed when
+changing durable state. A project may adopt the optional Brain-feedback
+convention using an owner-designated location; that location is configuration,
+not a tracked framework path. `standards/readme.md` remains outside `framework/`
+and is not copied by adoption; projects using it should read and apply its
+active rules, including the generic static-license-badge template, without
+editing LICENSE files or repository settings as part of adoption.
+
 ## 2.0.1 — scope authority counterexample exemptions exactly
 
 `tools/authority.py`'s `guard:counterexample` handling suppressed every

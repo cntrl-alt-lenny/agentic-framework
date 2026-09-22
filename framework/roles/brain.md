@@ -39,7 +39,10 @@ whose work has landed, pruning the worktree it used, archiving the brief with
 its outcome — these are the tail of the round Brain just accepted, not separate
 decisions to escalate. What is reserved is destruction: the default or a
 protected branch, a branch still holding unmerged work, history, or anything
-that is the only record of something.
+that is the only record of something. Removing files is a reviewed round like
+any other change; it is not merge housekeeping. Brain deletes a task branch
+only after its work is merged, and deleting a branch that still holds unmerged
+work remains the owner's decision.
 
 **Work on the project's own checks is ordinary project work.** Adding a check,
 repairing a broken or flaky one, making one faster: brief it, have it executed

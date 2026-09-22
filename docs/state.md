@@ -9,14 +9,14 @@ Live state — current commit, open pull requests, CI, branches, worktrees — i
 **derived**, never stored here. Anything below that carries a date is a historical
 anchor, not a claim about now.
 
-Last updated: 2026-09-22, by the Builder (round-023-authority-block-scope).
+Last updated: 2026-09-22, by the Builder (round-025-conventions-corrections).
 
 ## Starting the framework's Brain
 
 Paste this into a fresh session opened in this repository's primary checkout:
 
 ```
-Before anything else, run python3 tools/checkout.py --seat brain from this repository's primary checkout; if it fails, stop and tell me where you are and where the primary checkout is. You are the Brain for the agentic-framework repository (remote cntrl-alt-lenny/agentic-framework, default branch main). This repository is the framework itself and has not fully adopted itself yet: your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. This paste is my instruction to read the Dev Hub once now: check its framework-feedback folder for anything newer than the framework's last reply there, and otherwise read the Dev Hub only when I ask. Then tell me in plain English where things stand and what the next step is.
+Before anything else, run python3 tools/checkout.py --seat brain from this repository's primary checkout; if it fails, stop and tell me where you are and where the primary checkout is. You are the Brain for the agentic-framework repository. Confirm the repository's remote and default branch from live git/GitHub state before relying on them. As of 2026-09-22, this repository has not fully adopted itself; verify that against queued item 3 rather than treating this paste as live state. Your contract is framework/roles/brain.md, and this repository's durable state is docs/state.md. Read both in full, then framework/CONSTITUTION.md, framework/kickoff.md, framework/git-and-isolation.md and framework/reports.md. Pull first. Derive the live state yourself: open pull requests, branches, CI, and the shared completion-report inbox. This paste is my instruction to read the Dev Hub once now: check its framework-feedback folder for anything newer than the framework's last reply there, and otherwise read the Dev Hub only when I ask. Then tell me in plain English where things stand and what the next step is.
 ```
 
 ## The owner's standing decisions
@@ -72,35 +72,13 @@ explicitly by the owner.
 
 ## Queued, in order
 
-1. **The Brains' mailbox and upstream feedback,** written into the framework as an
-   optional convention that names no particular storage.
-2. **Ask edopro-retro-formats to update.** Numbered releases, an update
+2. **DONE (2026-09-22): ask edopro-retro-formats to update.** Numbered releases, an update
    procedure, and adopted-version recording now exist (round-022); the first
-   numbered release still needs tagging after this lands (Brain's step, not an
-   executor's), and edopro-retro-formats — on an older, pre-release framework
-   copy — still needs to actually be asked to update to it.
+   numbered releases 2.0.0 and 2.0.1 were tagged and announced to every project,
+   including edopro-retro-formats. The release announcements for 2.0.0 and 2.0.1
+   asked edopro-retro-formats to update; performing the update is that project's
+   own round, not this repository's queue.
 3. **This repository adopts itself fully.** This file is the first step.
-4. **Lessons from the first run in a second tool** (edopro-next, 2026-09-21).
-   Say that anything a seat reports about itself (tool, model, operating
-   system) is a claim to verify, with the operating system taken from a
-   command; and warn that text captured through Windows PowerShell can change
-   its line endings. (The fixed-folder lesson from the same report is
-   resolved: round-022 documents `--cwd` and single-command `cd &&` as the
-   fix, in `framework/adoption.md`.)
-5. **Housekeeping as a routine.** Brain deletes branches whose work is merged, as
-   part of closing a round. Removing files is a reviewed round like any other
-   change, and nothing that is the only record of something is deleted.
-6. **A seat that rewrites a durable-state document must report what it removed
-   as well as what it added,** and the Verifier must check removals against the
-   brief (reported by edopro-next, whose Builder silently dropped settled
-   records).
-7. **`standards/readme.md` is now an active standard but is classified as
-   reference material and not scanned by the guard,** and its license section
-   says an unrecognised license badge shows "not specified" where the live
-   badge actually reads "not identifiable by github".
-8. **The startup paste above states "has not fully adopted itself yet"
-   undated.** Date it, or state when the claim stops being true, so a stale
-   assertion cannot silently persist.
 
 ## Deliberately not done
 

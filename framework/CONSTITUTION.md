@@ -219,6 +219,9 @@ be able to inspect the repository and reconstruct what is going on.
   whether a worktree exists — is **derived**, never stored.
 - A stored value that can go stale is a defect unless it is explicitly labelled
   as a historical anchor.
+- Any change to a durable-state document must report every sentence removed and
+  every sentence added. The Verifier checks every removal against the brief,
+  not merely the diff summary, so settled records cannot disappear silently.
 
 Continuity of a Brain conversation is a convenience, never a requirement. Fresh
 context per assignment is preferred: it prevents stale assumptions, prevents an

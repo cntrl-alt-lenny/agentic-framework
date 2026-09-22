@@ -40,6 +40,21 @@ class TestScopeSplitIsHonest(unittest.TestCase):
             "fail closed: a guard that scanned nothing must not pass",
         )
 
+    def test_readme_standard_is_scanned_as_normative(self):
+        readme_standard = (ROOT / "standards" / "readme.md").resolve()
+        normative = {path.resolve() for path in docset.normative_files()}
+        references = {path.resolve() for path in docset.reference_files()}
+        self.assertIn(
+            readme_standard,
+            normative,
+            "the active README standard must be scanned by both guards",
+        )
+        self.assertNotIn(
+            readme_standard,
+            references,
+            "an active standard must not be classified as reference material",
+        )
+
     def test_normative_and_historical_are_disjoint(self):
         normative = {p.resolve() for p in docset.normative_files()}
         historical = {p.resolve() for p in docset.historical_files()}
