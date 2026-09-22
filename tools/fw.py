@@ -146,16 +146,24 @@ def is_ancestor(root: Path, older: str, newer: str) -> bool:
 
 
 def dirty_paths(root: Path) -> list[str]:
-    lines = out(["status", "--porcelain", "--untracked-files=all"], root).splitlines()
+    # Not out(): stripping the output would eat the first line's status column.
+    lines = git(["status", "--porcelain", "--untracked-files=all"], root, check=True).stdout.splitlines()
     return [line[3:] for line in lines if line.strip()]
 
 
+MAX_REFS = 2000
+
+
 def branch_refs(root: Path) -> list[str]:
-    """Local branches and origin's branches, for searching rounds."""
+    """Local branches and origin's branches, for searching rounds (newest first)."""
     refs = out(
-        ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin"], root
+        ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)",
+         "refs/heads", "refs/remotes/origin"], root
     ).splitlines()
-    return [r for r in refs if r and r not in ("origin", "origin/HEAD")][:300]
+    refs = [r for r in refs if r and r not in ("origin", "origin/HEAD")]
+    if len(refs) > MAX_REFS:
+        print(f"note: {len(refs)} branches; only the newest {MAX_REFS} were searched -- delete merged branches")
+    return refs[:MAX_REFS]
 
 
 def tree_files(root: Path, ref: str, path: str) -> dict[str, str]:
@@ -367,9 +375,11 @@ def evaluate_branch(root: Path, ref: str, round_id: str) -> dict:
         if not head or not ok(["cat-file", "-e", f"{head}^{{commit}}"], root) or not is_ancestor(root, head, tip):
             result["problems"].append(f"{path} describes {head[:12] or '?'}, which is not part of {ref}")
             continue
+        # Only other seats' reports may change after a report; a changed brief
+        # changes what the report was judged against.
         changed = [
             p for p in out(["diff", "--name-only", head, tip], root).splitlines()
-            if p and not p.startswith(prefix)
+            if p and not (p.startswith(prefix) and p not in (prefix + "brief.md", prefix + "README.md"))
         ]
         if changed:
             result["problems"].append(
@@ -405,6 +415,36 @@ def find_round_branches(root: Path, round_id: str) -> list[str]:
     return sorted(unique)
 
 
+def newest_only(root: Path, refs: list[str]) -> list[str]:
+    """Drop refs whose tip is already contained in another ref's tip."""
+    tips = {ref: out(["rev-parse", ref], root) for ref in refs}
+    keep = []
+    for ref in refs:
+        if not any(
+            other != ref and tips[other] != tips[ref] and is_ancestor(root, tips[ref], tips[other])
+            for other in refs
+        ):
+            keep.append(ref)
+    return keep
+
+
+def flag_outdated_reviews(root: Path, evaluated: list[dict]) -> None:
+    """A review is outdated when newer executor work for the round exists elsewhere."""
+    for entry in evaluated:
+        review = entry["reports"].get("verifier")
+        if not review:
+            continue
+        for other in evaluated:
+            for role, header in other["reports"].items():
+                if role == "verifier" or other is entry:
+                    continue
+                if not is_ancestor(root, header.get("head", ""), review.get("head", "")):
+                    entry["problems"].append(
+                        f"newer {role} work is on {other['ref']} ({header.get('head', '')[:12]}); "
+                        "this review is of an older commit"
+                    )
+
+
 def cmd_delivery(root: Path, round_id: str, branch: str | None, *, quiet_fetch: bool = False) -> int:
     check_round(round_id)
     warning = fetch(root)
@@ -426,6 +466,7 @@ def cmd_delivery(root: Path, round_id: str, branch: str | None, *, quiet_fetch: 
         print(f"not delivered yet: no branch carries a report for round {round_id}")
         return 1
     evaluated = [evaluate_branch(root, ref, round_id) for ref in candidates]
+    flag_outdated_reviews(root, evaluated)
     evaluated.sort(key=lambda e: (len(e["reports"]), -len(e["problems"])), reverse=True)
     for entry in evaluated:
         state = "delivered" if entry["reports"] and not entry["problems"] else "NOT delivered"
@@ -458,6 +499,56 @@ def locate_brief(root: Path, round_id: str) -> str | None:
         if ok(["rev-parse", "--verify", "--quiet", ref], root) and show(root, ref, path) is not None:
             return ref
     return None
+
+
+def resume_point(root: Path, role: str, round_id: str) -> tuple[str, str]:
+    """Where an executor starts: its own earlier pushed work, or else the brief.
+
+    Earlier work is a branch named <role>/<round>, or any branch carrying this
+    role's report for the round, but not a branch another seat has built on.
+    """
+    base_files = round_files(root, base_ref(root), round_id)
+    mine = report_path(round_id, role)
+    own = []
+    for ref in branch_refs(root):
+        files = round_files(root, ref, round_id)
+        added = {p for p, blob in files.items() if base_files.get(p) != blob}
+        others = {p for p in added if p.endswith(".md") and p not in (mine, f"{ROUNDS}/{round_id}/brief.md", f"{ROUNDS}/{round_id}/README.md")}
+        named = ref in (f"{role}/{round_id}", f"origin/{role}/{round_id}")
+        if (named or mine in added) and not others:
+            own.append(ref)
+    own = newest_only(root, own)
+    tips = {out(["rev-parse", r], root) for r in own}
+    if len(tips) > 1:
+        raise FwError(
+            "more than one branch holds earlier work for this seat and round: "
+            + ", ".join(own) + ". Ask Brain which to continue."
+        )
+    if own:
+        remote = [r for r in own if r.startswith("origin/")]
+        source = (remote or own)[0]
+        print(f"  continuing earlier work from {source}")
+        return source, out(["rev-parse", source], root)
+    source = locate_brief(root, round_id)
+    if source is None:
+        raise FwError(
+            f"no brief for round {round_id}: expected {ROUNDS}/{round_id}/brief.md "
+            f"on brain/{round_id} or the default branch. Ask Brain to push it."
+        )
+    return source, out(["rev-parse", source], root)
+
+
+def free_review_branch(root: Path, round_id: str, target: str) -> str:
+    """verifier/<round>, or verifier/<round>-2, -3 ... when an earlier review of
+    older work already uses the name. A branch that already contains the
+    reviewed commit is this review, resumed."""
+    name, number = f"verifier/{round_id}", 1
+    while True:
+        existing = [r for r in (f"origin/{name}", name) if ok(["rev-parse", "--verify", "--quiet", r], root)]
+        if not existing or all(is_ancestor(root, target, r) for r in existing):
+            return name
+        number += 1
+        name = f"verifier/{round_id}-{number}"
 
 
 def cmd_start(root: Path, role: str, round_id: str, review: str | None) -> int:
@@ -504,31 +595,32 @@ def cmd_start(root: Path, role: str, round_id: str, review: str | None) -> int:
         target = entry["tip"]
         source = refs[0]
     else:
-        source = locate_brief(root, round_id)
-        if source is None:
-            raise FwError(
-                f"no brief for round {round_id}: expected {ROUNDS}/{round_id}/brief.md "
-                f"on brain/{round_id} or the default branch. Ask Brain to push it."
-            )
-        target = out(["rev-parse", source], root)
+        source, target = resume_point(root, role, round_id)
 
     branch = current_branch(root)
     wanted = f"{role}/{round_id}"
+    if role == "verifier":
+        wanted = free_review_branch(root, round_id, target)
     if branch is None or branch == default_branch(root):
         if ok(["rev-parse", "--verify", "--quiet", f"refs/heads/{wanted}"], root):
             git(["switch", "--quiet", wanted], root, check=True)
-            branch = wanted
         else:
             git(["switch", "--quiet", "-c", wanted, target], root, check=True)
-            branch = wanted
+        branch = wanted
     head = out(["rev-parse", "HEAD"], root)
     if head != target:
         if is_ancestor(root, head, target):
             git(["merge", "--quiet", "--ff-only", target], root, check=True)
-        elif not is_ancestor(root, target, head):
+        elif is_ancestor(root, target, head):
+            pass  # this branch already holds the starting point and more
+        elif not out(["rev-list", "HEAD", "--not", base_ref(root), target], root):
+            # A branch with no work of its own (typically named by the tool,
+            # cut from a newer default branch): move it to the starting point.
+            git(["reset", "--quiet", "--keep", target], root, check=True)
+        else:
             raise FwError(
-                f"branch {branch} has diverged from the round's starting point {target[:12]} "
-                f"({source}). Start from a fresh branch, or ask Brain."
+                f"branch {branch} has commits of its own and has diverged from the round's "
+                f"starting point {target[:12]} ({source}). Start from a fresh branch, or ask Brain."
             )
     head = out(["rev-parse", "HEAD"], root)
     print(f"seat ok: {role}, round {round_id}, branch {branch} at {head[:12]}")
@@ -683,10 +775,22 @@ def machine_lines(root: Path) -> tuple[list[str], bool]:
         lines.append(f"{len(stashes)} stash(es) exist only on this machine")
     unpushed = []
     if has_origin(root):
-        for name in out(["for-each-ref", "--format=%(refname:short)", "refs/heads"], root).splitlines():
-            count = out(["rev-list", "--count", name, "--not", "--remotes=origin"], root)
+        refs = out(["for-each-ref", "--format=%(refname)", "refs/"], root).splitlines()
+        refs = [r for r in refs if not r.startswith(("refs/remotes/", "refs/stash", "refs/tags/"))]
+        if current_branch(root) is None:
+            refs.append("HEAD")
+        for ref in refs:
+            count = out(["rev-list", "--count", ref, "--not", "--remotes=origin"], root)
             if count and count != "0":
-                unpushed.append(f"{name} ({count} commit(s))")
+                label = ref.replace("refs/heads/", "") if ref != "HEAD" else "the detached HEAD"
+                unpushed.append(f"{label} ({count} commit(s))")
+        for line in git(["submodule", "status", "--recursive"], root).stdout.splitlines():
+            parts = line[1:].split()
+            if line[:1] not in ("-", "") and len(parts) > 1 and (root / parts[1]).is_dir():
+                sub = root / parts[1]
+                count = git(["rev-list", "--count", "HEAD", "--not", "--remotes"], sub).stdout.strip()
+                if count and count != "0":
+                    unpushed.append(f"submodule {parts[1]} ({count} commit(s))")
     else:
         lines.append("no 'origin' remote: nothing here is backed up anywhere else")
         safe = False
@@ -742,13 +846,13 @@ def cmd_status(root: Path, *, offline: bool, leaving: bool) -> int:
 # check
 
 PERSONAL = [
+    (re.compile(r"(?<![A-Za-z0-9%])[A-Za-z]:(?:\\{1,2}|/)(?:Users|Documents and Settings)(?:\\{1,2}|/)", re.I), "a Windows user folder"),
     (re.compile(r"/Users/(?!<)[A-Za-z0-9._-]+/"), "a macOS home folder"),
     (re.compile(r"/home/(?!<|runner/|user/)[A-Za-z0-9._-]+/"), "a Linux home folder"),
-    (re.compile(r"\b[A-Za-z]:\\(?:Users|Documents and Settings)\\", re.I), "a Windows user folder"),
-    (re.compile(r"\b[D-Zd-z]:\\[A-Za-z]"), "a Windows drive path"),
+    (re.compile(r"(?<![A-Za-z0-9%])[D-Zd-z]:\\{1,2}[A-Za-z]"), "a Windows drive path"),
     (re.compile(r"/mnt/[a-z]/Users/", re.I), "a WSL Windows user folder"),
     (re.compile(r"~/Library/CloudStorage/"), "a synced-drive folder"),
-    (re.compile(r"(?<![A-Za-z0-9._%+-])(?!git@)[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.(?:com|org|net)\b)[A-Za-z0-9-]+\.[A-Za-z]{2,}"), "an email address"),
+    (re.compile(r"(?<![A-Za-z0-9._%+-])(?!git@|no-?reply@)[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.(?:com|org|net)\b)[A-Za-z0-9-]+\.[A-Za-z]{2,}", re.I), "an email address"),
 ]
 SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 
@@ -760,7 +864,7 @@ def words(text: str) -> int:
 def _live_docs(root: Path) -> list[Path]:
     docs = [root / name for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", STATE_DOC)]
     docs += sorted((root / "docs/agents").rglob("*.md")) if (root / "docs/agents").is_dir() else []
-    docs += sorted((root / ROUNDS).glob("*/brief.md")) if (root / ROUNDS).is_dir() else []
+    docs += sorted((root / ROUNDS).glob("*/*.md")) if (root / ROUNDS).is_dir() else []
     return [p for p in docs if p.is_file()]
 
 
@@ -789,8 +893,8 @@ def check_project(root: Path) -> list[tuple[str, str]]:
                 f"{STATE_DOC} is {words(text)} words; its budget is {budget}. Keep decisions, "
                 "move history into docs/rounds/ or a dedicated document",
             ))
-        anchors = text.split("## Historical anchors", 1)[0]
-        if SHA40.search(anchors):
+        outside = re.sub(r"(?ms)^## Historical anchors\s*$.*?(?=^## |\Z)", "", text)
+        if SHA40.search(outside):
             findings.append((
                 "error",
                 f"{STATE_DOC} stores a full commit id outside '## Historical anchors'. "
