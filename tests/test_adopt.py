@@ -206,6 +206,71 @@ class TestDefaultAdoption(AdoptionCase):
             agents.write_text(original, encoding="utf-8")
 
 
+class TestFrameworkVersionIsRecordedNotTyped(AdoptionCase):
+    """A cold Brain must know which framework release and repository a
+    project follows without asking anyone -- adoption records both in
+    AGENTS.md, derived by the tool, never hand-typed.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(run_adopt(self.target), 0)
+        self.agents = (self.target / "AGENTS.md").read_text(encoding="utf-8")
+
+    def test_the_real_version_file_and_git_remote_are_recorded(self):
+        real_version = adopt.framework_version()
+        real_repo = adopt.framework_repository()
+        self.assertIn(f"release {real_version}", self.agents)
+        self.assertIn(real_repo, self.agents)
+
+    def test_a_different_version_string_propagates_without_code_changes(self):
+        """Proves this is DERIVED from VERSION, not a value baked into
+        adopt.py or the template -- change the source of truth and the
+        adopted output changes with it."""
+        with mock.patch.object(adopt, "framework_version", return_value="9.9.9-test"):
+            target2 = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(target2, ignore_errors=True))
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target2, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=target2, check=True)
+            subprocess.run(["git", "config", "user.name", "T"], cwd=target2, check=True)
+            (target2 / ".seed").write_text("s\n", encoding="utf-8")
+            subprocess.run(["git", "add", ".seed"], cwd=target2, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=target2, check=True)
+            self.assertEqual(run_adopt(target2), 0)
+            agents2 = (target2 / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("release 9.9.9-test", agents2)
+
+    def test_missing_origin_remote_is_an_honest_placeholder_not_a_lie(self):
+        with mock.patch.object(
+            adopt, "framework_repository",
+            return_value="<no origin remote configured on this framework clone>",
+        ):
+            target2 = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(target2, ignore_errors=True))
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target2, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=target2, check=True)
+            subprocess.run(["git", "config", "user.name", "T"], cwd=target2, check=True)
+            (target2 / ".seed").write_text("s\n", encoding="utf-8")
+            subprocess.run(["git", "add", ".seed"], cwd=target2, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=target2, check=True)
+            self.assertEqual(run_adopt(target2), 0)
+            agents2 = (target2 / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("no origin remote configured", agents2)
+        self.assertNotIn("github.com", agents2)
+
+    def test_framework_repository_helper_actually_asks_git(self):
+        """Not hardcoded: mocking `git remote get-url` changes the result."""
+        fake = mock.Mock(returncode=0, stdout="git@example.invalid:fake/repo.git\n")
+        with mock.patch.object(adopt.subprocess, "run", return_value=fake):
+            self.assertEqual(
+                adopt.framework_repository(), "git@example.invalid:fake/repo.git"
+            )
+
+    def test_update_doc_is_installed_and_agents_md_points_at_it(self):
+        self.assertTrue((self.target / "docs" / "agents" / "update.md").is_file())
+        self.assertIn("docs/agents/update.md", self.agents)
+
+
 class TestTopologyOptions(AdoptionCase):
     def test_neutrality_plan_names_the_canonical_document_coupling(self):
         plan = adopt.build_plan(
@@ -851,6 +916,116 @@ class TestInstalledCheckoutSuiteRunsFromAnyRoleWorktree(unittest.TestCase):
             "worktree; this does not reproduce the incident",
         )
         self.assertIn("seat=brain", proc.stdout + proc.stderr)
+
+
+class TestPreAdoptionBootstrapRoute(unittest.TestCase):
+    """A project undergoing its own adoption round has neither
+    `tools/checkout.py` nor `tools/report.py` yet -- two real projects
+    improvised the same answer independently: run the framework repository's
+    own copies by absolute path, pointed at the target project's own
+    worktree with `--cwd`. `framework/adoption.md` now documents this as the
+    sanctioned route; this proves it actually works, against the real
+    framework tools in this repository, not a description of them.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.target = Path(self._tmp.name) / "not-yet-adopted"
+        self.target.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=self.target, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.target, check=True)
+        (self.target / "README.md").write_text("pre-adoption\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md"], cwd=self.target, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=self.target, check=True)
+        self.worktree = self.target / ".worktrees" / "builder"
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(self.worktree), "HEAD"],
+            cwd=self.target, check=True, capture_output=True,
+        )
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_neither_tool_exists_yet_in_the_target(self):
+        self.assertFalse((self.target / "tools" / "checkout.py").exists())
+        self.assertFalse((self.target / "tools" / "report.py").exists())
+
+    def test_the_frameworks_own_checkout_py_passes_for_the_target_worktree(self):
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "checkout.py"),
+             "--seat", "builder", "--cwd", str(self.worktree)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn(str(self.worktree.resolve()), proc.stdout)
+
+    def test_the_frameworks_own_report_py_writes_into_the_targets_own_inbox(self):
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "report.py"), "write",
+             "--task", "000-bootstrap-adoption", "--cwd", str(self.worktree)],
+            input="Adoption round complete.\n", capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        target_common = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=self.worktree, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        target_inbox = (self.worktree / target_common).resolve() / "agent-inbox"
+        latest = target_inbox / "builder-latest.md"
+        self.assertTrue(
+            latest.is_file(),
+            "the report did not land in the TARGET project's own inbox",
+        )
+        self.assertIn("Adoption round complete.", latest.read_text(encoding="utf-8"))
+
+        framework_inbox = Path(
+            subprocess.run(
+                ["git", "rev-parse", "--git-common-dir"],
+                cwd=ROOT, capture_output=True, text=True, check=True,
+            ).stdout.strip()
+        )
+        if not framework_inbox.is_absolute():
+            framework_inbox = (ROOT / framework_inbox).resolve()
+        framework_inbox = framework_inbox / "agent-inbox"
+        self.assertFalse(
+            (framework_inbox / "builder-latest.md").is_file()
+            and (framework_inbox / "builder-latest.md").read_text(encoding="utf-8")
+            == latest.read_text(encoding="utf-8"),
+            "the report leaked into the FRAMEWORK repository's own inbox "
+            "instead of the target project's",
+        )
+
+    def test_the_delivery_check_also_works_pre_adoption_via_cwd(self):
+        subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "report.py"), "write",
+             "--task", "000-bootstrap-adoption", "--cwd", str(self.worktree)],
+            input="Adoption round complete.\n", capture_output=True, text=True,
+            check=True,
+        )
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.worktree,
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "report.py"), "delivery",
+             "--branch", head, "--base", "main", "--role", "builder",
+             "--task", "000-bootstrap-adoption", "--cwd", str(self.worktree)],
+            capture_output=True, text=True,
+        )
+        # `head` IS the base (nothing was committed after the worktree was
+        # created), so this correctly reports "still at the base" -- the
+        # point of this test is that --cwd resolved the TARGET's own branch
+        # and inbox at all, not that delivery is established here.
+        self.assertIn("still at the base", proc.stdout + proc.stderr)
+
+    def test_without_cwd_the_frameworks_own_tools_would_resolve_this_repo_instead(self):
+        """Why `--cwd` is not optional: omitting it lets the framework
+        clone's own working directory silently win."""
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "checkout.py"), "--seat", "builder"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        self.assertNotIn(str(self.worktree.resolve()), proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

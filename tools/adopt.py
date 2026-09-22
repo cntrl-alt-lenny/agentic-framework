@@ -47,6 +47,44 @@ FRAMEWORK = ROOT / "framework"
 TEMPLATES = ROOT / "templates"
 ADAPTERS = ROOT / "adapters"
 
+
+def framework_version() -> str:
+    """This framework's own release, read from its `VERSION` file.
+
+    Never typed by whoever runs adoption: an adopting project must be able to
+    tell which release it is on without asking anyone, and a hand-typed
+    value can be wrong or stale the moment it is written. `VERSION` is this
+    repository's own record of what it currently is.
+    """
+    path = ROOT / "VERSION"
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise SystemExit(f"adopt: cannot read {path}: {exc}") from exc
+    if not text:
+        raise SystemExit(f"adopt: {path} is empty")
+    return text
+
+
+def framework_repository() -> str:
+    """This framework's own remote repository address, derived from Git.
+
+    Never typed: a hand-typed URL can name the wrong fork or go stale the
+    moment the remote changes. Falls back to a plain, honest placeholder
+    when this clone has no `origin` remote configured (a local-only copy,
+    or one cloned without a name for its remote) rather than inventing one.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "remote", "get-url", "origin"],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, OSError):
+        result = None
+    if result is not None and result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return "<no origin remote configured on this framework clone>"
+
 #: Framework documents copied verbatim into the target. Generic by design: a
 #: project does not edit them, so they cannot drift from this repository.
 #:
@@ -67,6 +105,7 @@ VERBATIM_DOCS = (
     "lifecycle.md",
     "reports.md",
     "topologies.md",
+    "update.md",
     "roles/README.md",
     "roles/brain.md",
     "roles/worker.md",
@@ -270,6 +309,8 @@ def build_plan(
         "ROLE_TABLE": role_table(coordinator, workers, verifier),
         "ROLES": repr(tuple(workers + (["verifier"] if verifier else []))),
         "COORDINATOR": coordinator,
+        "FRAMEWORK_VERSION": framework_version(),
+        "FRAMEWORK_REPO": framework_repository(),
     }
 
     add("AGENTS.md", render((TEMPLATES / "AGENTS.md").read_text(encoding="utf-8"), values))
