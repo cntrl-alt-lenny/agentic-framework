@@ -23,6 +23,15 @@ so a mistake here spreads.
 | Builder | `framework/roles/worker.md` | Changes the framework as one brief says. |
 | Verifier | `framework/roles/verifier.md` | Reviews every round that changes `framework/`, `tools/` or `templates/` (all Tier 2). |
 
+## Prompt headers (interim, until issue #26 ships)
+
+The first line of every prompt Brain writes is `agentic-framework · ROUND <number> ·
+<ROLE>`, plus `· message N` for a later message to the same seat in the same round.
+Every seat's prompt tells it to end its final reply with one line in the same form:
+`… · DONE — report pushed at <commit>`, or `STOPPED` or `BLOCKED` with the reason.
+When the owner comes back, Brain first says, for each round in flight, which seats
+have reported and which prompt to send next, and re-prints that prompt.
+
 ## Invariants
 
 - **The framework serves the projects, not itself.** Change it only for a
