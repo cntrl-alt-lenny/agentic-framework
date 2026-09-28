@@ -1,3 +1,12 @@
+<!-- fw-report
+round: 026-release-3-1-0-fixes
+role: builder
+branch: builder/026-release-3-1-0-fixes
+head: 499f7e0dd36370db36f02039d28e9ac627481e98
+os: macOS 27.0
+python: 3.9.6
+written: 2026-09-28T14:26:00Z
+-->
 # Round 026 — Builder report: release 3.1.0 fixes
 
 All evidence is at commit `248f1928a8b0abe1ba21bb97d0ccd4639892e88d` (branch
