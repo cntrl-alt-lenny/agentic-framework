@@ -47,8 +47,10 @@ In scope, one class per item (the issue says more):
      superseded and never tells a seat to rewrite a rejected report (#27).
    - Replace the unexplained `(+N more)` counts with something a non-programmer
      can read, or drop them.
-   - `fw.py prompt --round <id> --role <role>` prints the exact prompt for a seat,
-     from the same template the Brain card uses, header included.
+   - A new `prompt` command in `tools/fw.py`, taking `--round <id> --role <role>`,
+     prints the exact prompt for a seat from the same template the Brain card
+     uses, header included. Add it to the command list in
+     `tests/test_docs.py` (`test_every_documented_command_exists`).
    - The prompt header convention becomes framework text: first line
      `<project> · ROUND <number> · <ROLE>` (`· message N` for a repeat), and every
      seat ends its final reply with `<project> · ROUND <number> · <ROLE> · DONE —
