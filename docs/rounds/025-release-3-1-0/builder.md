@@ -2,10 +2,10 @@
 round: 025-release-3-1-0
 role: builder
 branch: builder/025-release-3-1-0
-head: 495962bab2eddb39905d3560261435b4ad579a94
+head: a77de44a296f2db55d34d96fa5b93d384ec9a9e5
 os: macOS 27.0
 python: 3.9.6
-written: 2026-09-28T13:10:40Z
+written: 2026-09-28T13:10:49Z
 -->
 # Round 025 — Builder report: release 3.1.0
 
@@ -20,7 +20,7 @@ All evidence below is at commit `495962bab2eddb39905d3560261435b4ad579a94`
 - Lint: `ruff check --select F,E9,B,UP --target-version py39 tools templates tests` (ruff 0.15.12) → exit 0, `All checks passed!`
 - CI at `495962b`, run 36426128171 → `success`: lint, tests on ubuntu/macos/windows × Python 3.9/3.12, and "framework invariants" all `success`.
 - Word budgets hold (`tests.test_docs` passes). Documents copied into a project, `v3.0.0` → head:
-  FRAMEWORK.md 1695 → 1709, brain.md 705 → 657, worker.md 363 → 381, verifier.md 410 → 428;
+  FRAMEWORK.md 1695 → 1707, brain.md 705 → 656, worker.md 363 → 381, verifier.md 410 → 428;
   total 3173 → 3172 (net −1, so no budget was raised). Counted with `wc -w` against `git show v3.0.0:<file>`.
 - Every issue has a test that fails at `v3.0.0` and passes at head. Method: a scratch
   worktree at tag `v3.0.0` (`7f5bbc3`) with this branch's `tests/` copied over it, so the
