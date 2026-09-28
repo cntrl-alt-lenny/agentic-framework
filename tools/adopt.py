@@ -19,7 +19,11 @@ framework file. That record is what makes an update safe:
   path, quoted file name, or Python import); removals are listed, and anything
   missed is recoverable from git;
 - project-owned files (AGENTS.md, docs/state.md, rounds, CLAUDE.md, ...) are
-  created when missing and otherwise never touched.
+  created when missing and otherwise never touched;
+- a project-owned or tool-adapter file an earlier run installed and the project
+  then deleted stays deleted (--hooks or --adapter NAME brings it back);
+- a file the framework did not install, in a folder an adapter installs into,
+  is named, so a project's own seat file is never silently doubled.
 
 A project adopted before release 3.0.0 has no record; for it, the fingerprints
 of every file a 2.x release ever installed (tools/legacy_installs.json) prove
@@ -120,6 +124,7 @@ class Item:
     content: str
     kind: str  # "copy" (framework-owned) or "seed" (project-owned once created)
     executable: bool = False
+    source: str = "core"  # "core", "adapter:<name>" or "hooks": optional conveniences
 
     @property
     def data(self) -> bytes:
@@ -143,8 +148,25 @@ def adapter_dirs() -> list[str]:
     return sorted(p.name for p in ADAPTERS.iterdir() if (p / "adapter.json").is_file())
 
 
-def release_items(*, project: str, workers: list[str], verifier: bool,
-                  adapters: list[str], hooks: bool, tests_dir_exists: bool) -> list[Item]:
+WORKTREES_IGNORE = """# Seats' linked checkouts (git worktree add .worktrees/<role>-<round>) live
+# here, inside the project, and are never part of it. Installed by the
+# agentic framework; delete this file if .gitignore already covers .worktrees/.
+*
+!.gitignore
+"""
+
+
+def worktrees_ignored(target: Path) -> bool:
+    """Whether the project already ignores .worktrees/ by its own rules."""
+    if (target / ".worktrees/.gitignore").is_file():
+        return False  # our own file: keep it listed, so it stays recorded
+    result = subprocess.run(["git", "-C", str(target), "check-ignore", "-q", ".worktrees/seat"],
+                            capture_output=True, check=False)
+    return result.returncode == 0
+
+
+def release_items(*, project: str, workers: list[str], verifier: bool, adapters: list[str],
+                  hooks: bool, tests_dir_exists: bool, worktrees_covered: bool = False) -> list[Item]:
     items = [Item("docs/agents/FRAMEWORK.md", (FRAMEWORK / "FRAMEWORK.md").read_text(encoding="utf-8"), "copy")]
     for role in ("brain", "worker", "verifier"):
         items.append(Item(f"docs/agents/roles/{role}.md",
@@ -159,10 +181,13 @@ def release_items(*, project: str, workers: list[str], verifier: bool,
     items.append(Item("docs/rounds/README.md",
                       (TEMPLATES / "docs" / "rounds" / "README.md").read_text(encoding="utf-8"), "seed"))
     items.append(Item(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"), "seed"))
+    if not worktrees_covered:
+        items.append(Item(".worktrees/.gitignore", WORKTREES_IGNORE, "seed"))
     if not tests_dir_exists:
         items.append(Item("tests/__init__.py", "", "seed"))
     if hooks:
-        items.append(Item(".githooks/pre-push", (TEMPLATES / "githooks" / "pre-push").read_text(encoding="utf-8"), "seed", True))
+        items.append(Item(".githooks/pre-push", (TEMPLATES / "githooks" / "pre-push").read_text(encoding="utf-8"),
+                          "seed", True, "hooks"))
     for name in adapters:
         src = ADAPTERS / name
         if not (src / "adapter.json").is_file():
@@ -172,7 +197,8 @@ def release_items(*, project: str, workers: list[str], verifier: bool,
         for path in sorted((src / "files").rglob("*")):
             if path.is_file():
                 rel = path.relative_to(src / "files").as_posix()
-                items.append(Item(rel, path.read_text(encoding="utf-8"), "seed" if rel in seeds else "copy"))
+                items.append(Item(rel, path.read_text(encoding="utf-8"), "seed" if rel in seeds else "copy",
+                                  source=f"adapter:{name}"))
     return items
 
 
@@ -189,8 +215,19 @@ class Plan:
     sidecars: list[tuple[str, str]] = field(default_factory=list)
     removals: list[str] = field(default_factory=list)
     retained: list[tuple[str, str]] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
+    others: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     manifest: dict = field(default_factory=dict)
+    old_manifest: dict | None = None
+
+    @property
+    def manifest_changes(self) -> bool:
+        return self.manifest != self.old_manifest
+
+    @property
+    def nothing_to_do(self) -> bool:
+        return not (self.writes or self.removals or self.manifest_changes)
 
 
 def load_manifest(target: Path) -> dict | None:
@@ -303,6 +340,8 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         raise SystemExit(f"adopt: {MANIFEST} exists; use --update")
 
     options = (old or {}).get("options", {})
+    # Files this run was explicitly asked for come back even if the project deleted them.
+    requested = {f"adapter:{name}" for name in adapters or []} | ({"hooks"} if hooks else set())
     # On update, --adapter adds to the recorded set; it never drops one.
     adapters = list(options.get("adapters", [])) + list(adapters or [])
     if update:
@@ -316,6 +355,7 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         project=project or target.name, workers=workers, verifier=verifier,
         adapters=sorted(set(adapters)), hooks=hooks,
         tests_dir_exists=(target / "tests").is_dir(),
+        worktrees_covered=worktrees_ignored(target),
     )
     old_files = (old or {}).get("files", {})
     known, rendered = legacy_fingerprints()
@@ -338,6 +378,13 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
         else:
             files_record[item.rel] = {"kind": "seed"}
         if not path.exists():
+            if (update and item.rel in old_files and (item.kind == "seed" or item.source != "core")
+                    and item.source not in requested):
+                # Installed earlier, then deleted by the project: its decision stands.
+                plan.deleted.append(item.rel)
+                if item.kind == "copy":
+                    files_record[item.rel]["deleted"] = True
+                continue
             plan.writes.append((item, path, "new"))
             continue
         existing = path.read_bytes()
@@ -348,16 +395,12 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
             if update:
                 plan.kept.append(item.rel)
             else:
-                side = sidecar_path(path, new)
-                plan.writes.append((item, side, "sidecar"))
-                plan.sidecars.append((item.rel, side.relative_to(target).as_posix()))
+                add_sidecar(plan, item, path, new)
             continue
         if update and unedited(item.rel, existing):
             plan.writes.append((item, path, "replace"))
         else:
-            side = sidecar_path(path, new)
-            plan.writes.append((item, side, "sidecar"))
-            plan.sidecars.append((item.rel, side.relative_to(target).as_posix()))
+            add_sidecar(plan, item, path, new)
 
     # Project-owned files installed by an earlier run stay recorded as such.
     for rel, entry in old_files.items():
@@ -412,6 +455,8 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
                         plan.retained.append((linked, f"{holder}, which is kept, links to it; delete both together"))
                         changed = True
         plan.removals = sorted(removing)
+        mentioned = set(plan.removals) | {rel for rel, _why in plan.retained}
+        plan.others = [rel for rel in unknown_in_adapter_folders(target, items) if rel not in mentioned]
         hits = sorted(set(broken_links(target, removing, planned)))
         for hit in hits[:20]:
             plan.notes.append(f"fix this link after the update: {hit}")
@@ -427,7 +472,32 @@ def build_plan(target: Path, *, update: bool, project: str | None, workers: list
     }
     if not plan.manifest["settings"]:
         plan.manifest["settings"] = {"state_words": fw.DEFAULT_STATE_WORDS}
+    plan.old_manifest = old
     return plan
+
+
+def add_sidecar(plan: Plan, item: Item, path: Path, new: bytes) -> None:
+    """Write the release's version beside an edited file, unless an identical
+    copy is already there from an earlier run (then it only still needs review)."""
+    side = sidecar_path(path, new)
+    if not side.exists():
+        plan.writes.append((item, side, "sidecar"))
+    plan.sidecars.append((item.rel, side.relative_to(plan.target).as_posix()))
+
+
+def unknown_in_adapter_folders(target: Path, items: list[Item]) -> list[str]:
+    """Files the framework does not ship in a folder an adapter installs into,
+    such as a project's own .claude/agents/builder.md beside worker.md."""
+    shipped = {item.rel for item in items}
+    folders = {Path(item.rel).parent.as_posix() for item in items if item.source.startswith("adapter:")} - {"."}
+    found = []
+    for folder in sorted(folders):
+        if (target / folder).is_dir():
+            for path in sorted((target / folder).iterdir()):
+                rel = f"{folder}/{path.name}"
+                if path.is_file() and rel not in shipped and ".framework" not in path.name:
+                    found.append(rel)
+    return found
 
 
 # --------------------------------------------------------------------------
@@ -473,10 +543,21 @@ def describe(plan: Plan, *, update: bool, old_release: str | None) -> str:
         lines.append(f"  keep    {rel}  (project-owned)")
     for rel, why in plan.retained:
         lines.append(f"  keep    {rel}  ({why})")
-    lines.append(f"  record  {MANIFEST}")
+    for rel in plan.deleted:
+        lines.append(f"  gone    {rel}  (deleted in this project, so not re-created)")
+    for rel in plan.others:
+        lines.append(f"  other   {rel}  (the project's own, beside files the framework installs)")
+    if plan.manifest_changes:
+        lines.append(f"  record  {MANIFEST}")
+    if plan.nothing_to_do:
+        lines.append(f"nothing to do: this project already matches agentic-framework {plan.manifest['framework']['release']}")
     if plan.notes:
         lines.append("")
         lines.extend(plan.notes)
+    if plan.others:
+        lines.append("")
+        lines.append("If an 'other' file does the job of a framework file beside it (two seat files for one")
+        lines.append("seat, say), delete one of the two. An update never re-creates a file deleted there.")
     if plan.sidecars:
         lines.append("")
         lines.append("Edited framework files were left alone. Review each difference, move any")
@@ -500,8 +581,9 @@ def apply(plan: Plan) -> None:
             parent.rmdir()
             parent = parent.parent
     manifest = plan.target / MANIFEST
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(json.dumps(plan.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if plan.manifest_changes:
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps(plan.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     hook = plan.target / ".githooks/pre-push"
     if any(item.rel == ".githooks/pre-push" for item, _p, r in plan.writes if r == "new") and (plan.target / ".git").exists():
         # Windows cannot record the executable bit on disk; record it in git.
@@ -535,11 +617,6 @@ def main(argv: list[str] | None = None) -> int:
     plan = build_plan(target, update=args.update, project=args.project, workers=workers,
                       verifier=args.verifier, adapters=args.adapter, hooks=args.hooks)
     print(describe(plan, update=args.update, old_release=old_release))
-    if args.dry_run:
-        print("\ndry run: nothing written")
-        return 0
-    apply(plan)
-
     if args.update:
         since = old_release if old and fw.version_tuple(old_release or "") else None
         steps = changelog_steps(since)
@@ -547,6 +624,10 @@ def main(argv: list[str] | None = None) -> int:
             print("\nWhat each release asks of this project:")
             for version, text in steps:
                 print(f"\n--- {version} ---\n{text}")
+    if args.dry_run:
+        print("\ndry run: nothing written")
+        return 0
+    apply(plan)
     findings = fw.check_project(target)
     if findings:
         print("\nProject checks still to satisfy (python3 tools/fw.py check):")

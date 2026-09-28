@@ -1031,7 +1031,7 @@ def framework_lines(root: Path, offline: bool) -> tuple[list[str], str | None]:
                 lines.append(f"up to date with the latest release ({latest})")
     edited = []
     for rel, entry in sorted(manifest.get("files", {}).items()):
-        if entry.get("kind") != "copy":
+        if entry.get("kind") != "copy" or entry.get("deleted"):
             continue
         path = root / rel
         if not path.is_file():
