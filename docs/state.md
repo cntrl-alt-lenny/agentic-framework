@@ -36,7 +36,7 @@ then running real product rounds on it.
 
 ## Queued, in order
 
-1. **Release 3.1.0** (round `025-release-3-1-0`): fix every open issue, make
+1. **Release 3.1.0** (rounds `025-release-3-1-0` and `026-release-3-1-0-fixes`): fix every open issue, make
    the owner's next action visible after a break, and make minor updates a
    light round. The three projects moved to 3.0.0 between 22 and 27 Sept.
 2. **Each project takes 3.1.0** in its own update round.
