@@ -23,7 +23,8 @@ fails at 3.0.0. No contract a project relies on changes.
   superseded, and `delivery`, `start` and `prompt` say so instead of asking
   for a rejected report to be rewritten. The "(+N more)" counts are gone.
 - **`fw.py prompt --round <id> --role <role>`** prints a seat's prompt, and
-  every prompt now has a header, `<project> · ROUND <number> · <ROLE>`; each
+  every prompt now has a header, `<project> · ROUND <number> · <ROLE>` (the
+  project is the repository's name); each
   seat ends its final reply with the same header and `DONE`, `STOPPED` or
   `BLOCKED` (`fw.py report --push` prints the line). The Brain card uses the
   command instead of a pasted template and opens every session with the
@@ -52,8 +53,9 @@ fails at 3.0.0. No contract a project relies on changes.
 - **Checks (#22, #23).** `fw.py report` refuses a report that quotes a
   personal path or email address, or links to a file that does not exist from
   the round folder, and says how to describe a finding without repeating it.
-  The personal-data check keeps its scope (the documents agents read) and its
-  message now names that scope: widening it would have failed all three
+  The personal-data check keeps its scope (the documents agents read, plus
+  round attachments in `docs/rounds/<id>/attachments/`) and its message now
+  names that scope: widening it would have failed all three
   projects' suites on archived documents (14, 1 and 49 lines). A project can
   also name one fast check, `settings.report_check` in
   `docs/agents/framework.json`, that `report` runs on the tree it is about to
@@ -66,7 +68,7 @@ fails at 3.0.0. No contract a project relies on changes.
 
 Net change: the documents copied into a project go from 3,173 to 3,172 words;
 `tools/fw.py` grows from 1,007 to 1,512 lines and `tools/adopt.py` from 562 to
-643; the suite gains 22 tests and extends one.
+643; the suite gains 27 tests and extends one.
 
 ### What an adopter must do
 
