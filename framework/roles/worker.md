@@ -35,6 +35,7 @@ the seat's scope.
 
 Write `docs/rounds/<id>/<role>.md`, commit your work first, then run
 `python3 tools/fw.py report --role <role> --round <id> --push`.
+Quote text as code, with no live links or personal paths.
 
 ```markdown
 ## Verified

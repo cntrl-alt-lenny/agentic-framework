@@ -354,3 +354,76 @@ class ReportChecks(RoundTest):
         result = fw(worker, "report", "--role", "worker", "--round", "040-leak", "--push")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(fw(worker, "check").returncode, 0)
+
+
+class ReReview(RoundTest):
+    """A re-review must win over the review it replaces (issue #30)."""
+
+    def test_a_re_review_after_a_report_only_fix_is_the_one_to_judge(self) -> None:
+        self.write_brief("090-again")
+        worker, _ = self.deliver_worker("worker", "090-again")
+        self.deliver_verifier("verifier", "090-again")
+        # The fix rewrites only the worker report: the shape seen in gx-spirit-caller.
+        path = worker / "docs/rounds/090-again/worker.md"
+        path.write_text(WORKER_REPORT.replace("- feature.txt: the feature.", "- feature.txt: the feature, described right."),
+                        encoding="utf-8")
+        self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "090-again", "--push").returncode, 0)
+        second = self.deliver_verifier("verifier-2", "090-again")
+        self.assertEqual(git(second, "branch", "--show-current"), "verifier/090-again-2")
+        result = fw(self.brain, "delivery", "--round", "090-again")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("most complete: origin/verifier/090-again-2", result.stdout)
+        self.assertIn("a newer review is on origin/verifier/090-again-2", result.stdout)
+
+    def test_two_unrelated_deliveries_get_no_recommendation(self) -> None:
+        import importlib.util
+        from tests.helpers import ROOT
+        spec = importlib.util.spec_from_file_location("fwmod", ROOT / "tools" / "fw.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        repo = self.brain
+        base = git(repo, "rev-parse", "HEAD")
+        heads = []
+        for name in ("a", "b"):
+            git(repo, "switch", "-q", "-c", f"side-{name}", base)
+            (repo / f"{name}.txt").write_text(name, encoding="utf-8")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", name)
+            heads.append(git(repo, "rev-parse", "HEAD"))
+        entries = [{"ref": f"side-{n}", "tip": h, "reports": {"worker": {"head": h}}, "problems": [], "stale": set()}
+                   for n, h in zip("ab", heads)]
+        best, why = module.most_complete(repo, entries)
+        self.assertIsNone(best)
+        self.assertIn("no single branch to judge", why)
+
+
+class ProjectReportCheck(RoundTest):
+    """A project's own fast check runs on the report before it is committed
+    (issue #23, second comment: a quoted link broke the project's link test)."""
+
+    def test_the_named_check_refuses_a_report_that_breaks_it(self) -> None:
+        import json
+        import sys
+        record = self.brain / "docs/agents/framework.json"
+        data = json.loads(record.read_text(encoding="utf-8"))
+        data["settings"]["report_check"] = f'"{sys.executable}" check_reports.py'
+        record.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        (self.brain / "check_reports.py").write_text(
+            "import pathlib, sys\n"
+            "bad = [p for p in pathlib.Path('docs/rounds').rglob('*.md') if 'FORBIDDEN' in p.read_text()]\n"
+            "print('broken:', bad)\nsys.exit(1 if bad else 0)\n", encoding="utf-8")
+        self.commit_all(self.brain, "A project check for reports")
+        git(self.brain, "push", "-q", "origin", "main")
+        self.write_brief("095-own", tier=1)
+        worker = self.clone(self.origin, "worker")
+        fw(worker, "start", "--role", "worker", "--round", "095-own")
+        path = worker / "docs/rounds/095-own/worker.md"
+        path.write_text(WORKER_REPORT.replace("None.\n\n## Changed", "FORBIDDEN\n\n## Changed"), encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "095-own", "--push")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("the project's report check fails", result.stderr)
+        self.assertIn("check_reports.py -> exit 1", result.stderr)
+        self.assertFalse(path.read_text(encoding="utf-8").startswith("<!-- fw-report"))
+        path.write_text(WORKER_REPORT, encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "095-own", "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

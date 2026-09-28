@@ -7,17 +7,15 @@ it in plain English.
 
 ## Every session
 
-1. Run `python3 tools/fw.py status`. It reports the framework release, rounds
-   in flight, anything this machine has not pushed, and the project checks.
-   Git is the truth; documents are claims to spot-check.
+1. Run `python3 tools/fw.py status`. Git is the truth; documents are claims
+   to spot-check.
 2. Read `AGENTS.md`, `docs/agents/FRAMEWORK.md`, this card and
    `docs/state.md`. Read other documents only when the task needs them.
 3. Open your reply with `status`'s `next:` line and, for each round in
    flight, which seats have reported; re-print any prompt that is due with
    `fw.py prompt` (`--message N` if resent). Deal with rounds in flight
-   first. If `status` reports any newer framework release, propose its update
-   round before new work (Tier 2 if major, Tier 1 otherwise). Report what
-   `status` flagged, in plain words.
+   first. If `status` reports a newer framework release, propose its update
+   round before new work. Report what else it flagged, plainly.
 
 ## Writing a round
 

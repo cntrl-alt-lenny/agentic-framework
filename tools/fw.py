@@ -401,6 +401,27 @@ def report_problems(root: Path, rel: str, text: str) -> list[str]:
     return problems
 
 
+def run_report_check(root: Path) -> str | None:
+    """Run the fast check a project names in docs/agents/framework.json,
+    settings.report_check, on the tree about to be committed. Returns what
+    to show when it fails, else None."""
+    try:
+        command = ((load_manifest(root) or {}).get("settings") or {}).get("report_check")
+    except FwError:
+        return None
+    if not command:
+        return None
+    try:
+        result = subprocess.run(command, shell=True, cwd=str(root), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=900)
+    except subprocess.TimeoutExpired:
+        return f"  {command}: still running after 15 minutes"
+    if result.returncode == 0:
+        return None
+    tail = (result.stdout + result.stderr).strip().splitlines()[-15:]
+    return f"  {command} -> exit {result.returncode}\n" + "\n".join(f"    {line}" for line in tail)
+
+
 def cmd_report(root: Path, role: str, round_id: str, push: bool) -> int:
     check_role(role)
     check_round(round_id)
@@ -455,6 +476,13 @@ def cmd_report(root: Path, role: str, round_id: str, push: bool) -> int:
         "",
     ])
     path.write_bytes((header + body.replace("\r\n", "\n")).encode("utf-8"))
+    failed = run_report_check(root)
+    if failed:
+        path.write_text(written, encoding="utf-8")
+        raise FwError(
+            f"{rel} was not committed: with it, the project's report check fails.\n{failed}\n"
+            "Quote text in a report as code, without live relative links or personal paths, then run this again."
+        )
     git(["add", "--", rel], root, check=True)
     commit = git(["commit", "--quiet", "-m", f"Report for round {round_id} ({role})", "--", rel], root)
     if commit.returncode != 0:
@@ -640,21 +668,45 @@ def newest_only(root: Path, refs: list[str]) -> list[str]:
 
 
 def flag_outdated_reviews(root: Path, evaluated: list[dict]) -> None:
-    """A review is outdated when newer executor work for the round exists elsewhere."""
+    """A review is outdated when newer executor work for the round exists
+    elsewhere, or another review is of a commit that descends from its own (a
+    re-review, even after a fix that only rewrote the executor's report)."""
     for entry in evaluated:
         review = entry["reports"].get("verifier")
         if not review:
             continue
+        mine = review.get("head", "")
         for other in evaluated:
+            if other is entry:
+                continue
             for role, header in other["reports"].items():
-                if role == "verifier" or other is entry:
-                    continue
-                if not is_ancestor(root, header.get("head", ""), review.get("head", "")):
+                head = header.get("head", "")
+                newer = (is_ancestor(root, mine, head) and head != mine) if role == "verifier" else (
+                    not is_ancestor(root, head, mine))
+                if newer and "verifier" not in entry["stale"]:
+                    what = "a newer review" if role == "verifier" else f"newer {role} work"
                     entry["problems"].append(
-                        f"newer {role} work is on {other['ref']} ({header.get('head', '')[:12]}); "
-                        "this review is of an older commit"
+                        f"{what} is on {other['ref']} ({head[:12]}); this review is of an older commit"
                     )
                     entry["stale"].add("verifier")
+
+
+def most_complete(root: Path, evaluated: list[dict]) -> tuple[dict | None, str]:
+    """The delivered branch to judge, or None and why. Among several, only one
+    whose reviewed commit (or tip) descends from every other's is chosen;
+    never one picked by name order."""
+    delivered = [e for e in evaluated if e["reports"] and not e["problems"]]
+    if len(delivered) <= 1:
+        return (delivered or [None])[0], ""
+    def point(entry: dict) -> str:
+        return entry["reports"].get("verifier", {}).get("head") or entry["tip"]
+    for entry in delivered:
+        if all(other is entry or is_ancestor(root, point(other), point(entry)) for other in delivered):
+            return entry, ""
+    return None, (
+        "no single branch to judge: " + ", ".join(e["ref"] for e in delivered)
+        + " are each delivered, and none holds work that descends from the others'. Ask Brain which is the round."
+    )
 
 
 def evaluate_round(index: RoundIndex, round_id: str) -> list[dict]:
@@ -710,12 +762,14 @@ def cmd_delivery(root: Path, round_id: str, branch: str | None, *, quiet_fetch: 
             )
         for problem in entry["problems"]:
             print(f"  problem: {problem}")
-    best = evaluated[0]
-    if best["reports"] and not best["problems"]:
-        if len(evaluated) > 1:
-            print(f"most complete: {best['ref']}")
-        return 0
-    return 1
+    best, why = most_complete(root, evaluated)
+    if why:
+        print(why)
+    if best is None:
+        return 1
+    if len(evaluated) > 1:
+        print(f"most complete: {best['ref']}")
+    return 0
 
 
 # --------------------------------------------------------------------------
@@ -1064,7 +1118,9 @@ def expected_seats(index: RoundIndex, round_id: str, tier: int | None, evaluated
 
 
 def seat_state(index: RoundIndex, round_id: str, role: str, evaluated: list[dict]) -> tuple[str, str]:
+    best, _why = most_complete(index.root, evaluated)
     valid = [e for e in evaluated if role in e["reports"] and role not in e["stale"]]
+    valid.sort(key=lambda e: e is not best)
     if valid:
         return "reported", f"reported at {valid[0]['reports'][role].get('head', '')[:12]}"
     if any(role in e["stale"] for e in evaluated):

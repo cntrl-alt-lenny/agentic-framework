@@ -11,7 +11,7 @@ After a break, the owner had to open every chat and compare prompts by hand
 to find which seat was waiting; a Verifier paste was missed; `status` listed
 rejected rounds as in flight with counts like "(+9 more)"; "not safe to leave
 this machine" fired on every run in one project; seat copies piled up to 8 GB.
-This release fixes issues #18-#27 and #29, each as a class, with a test that
+This release fixes issues #18-#27, #29 and #30, each as a class, with a test that
 fails at 3.0.0. No contract a project relies on changes.
 
 - **Next action after a break (#26, #27).** `fw.py status` shows each round
@@ -54,12 +54,19 @@ fails at 3.0.0. No contract a project relies on changes.
   the round folder, and says how to describe a finding without repeating it.
   The personal-data check keeps its scope (the documents agents read) and its
   message now names that scope: widening it would have failed all three
-  projects' suites on archived documents (14, 1 and 49 lines).
+  projects' suites on archived documents (14, 1 and 49 lines). A project can
+  also name one fast check, `settings.report_check` in
+  `docs/agents/framework.json`, that `report` runs on the tree it is about to
+  commit (#23, second comment).
+- **A re-review wins (#30).** When two review branches of a round are both
+  delivered, `delivery` recommends the one whose reviewed commit descends
+  from the other's, even after a fix that only rewrote the executor's report,
+  and flags the older review; if neither descends, it recommends none.
 - **An "Idea or question" issue form** beside "Framework feedback".
 
-Net change: the documents copied into a project go from 3,173 to 3,171 words;
-`tools/fw.py` grows from 1,007 to 1,456 lines and `tools/adopt.py` from 562 to
-643; the suite gains 19 tests and extends one.
+Net change: the documents copied into a project go from 3,173 to 3,172 words;
+`tools/fw.py` grows from 1,007 to 1,512 lines and `tools/adopt.py` from 562 to
+643; the suite gains 22 tests and extends one.
 
 ### What an adopter must do
 
@@ -74,7 +81,10 @@ round in flight.
    the two.
 2. If the project's `AGENTS.md` has its own prompt-header rule (from issue
    #26), delete it: `FRAMEWORK.md` now carries it.
-3. Run `python3 tools/fw.py status` and check that each round in flight is
+3. Optionally, if the project has a fast check that reports can break (a
+   link test, say), name it in `docs/agents/framework.json` under
+   `settings`, as `"report_check": "<command>"`.
+4. Run `python3 tools/fw.py status` and check that each round in flight is
    shown seat by seat and that the last line starts with `next:`.
 
 ## 3.0.0 — lean core, handoffs in git, one-command updates

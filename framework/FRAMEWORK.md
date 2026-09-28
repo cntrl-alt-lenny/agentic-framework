@@ -60,7 +60,7 @@ whose purpose it serves.
 13. **Plain English for the owner.** The owner never has to read a diff, run
     git, open a repository file, or carry text between machines. If a step
     needs them to, that is a framework defect: do it for them where you can,
-    and report it (below).
+    and report it.
 14. **Don't edit framework files.** `docs/agents/` and `tools/fw.py` are
     copies from the framework. Project rules go in `AGENTS.md`, or in
     `docs/agents/local/` for longer project guidance.
@@ -148,7 +148,8 @@ number first so folders sort in order.
 ## Reports
 
 `fw.py report` refuses a report that lacks these `##` sections or would fail
-the project's checks. Write `None.` in a section that genuinely has nothing.
+the project's checks, including one it names in `docs/agents/framework.json`
+(`settings.report_check`). Write `None.` in a section that has nothing.
 
 - **Worker:** `Verified`, `Not verified`, `Changed`, `Open questions`.
 - **Verifier:** `Findings`, `Not verified`, `Verdict`.
