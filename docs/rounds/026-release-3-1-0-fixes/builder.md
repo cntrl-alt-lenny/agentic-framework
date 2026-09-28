@@ -2,10 +2,10 @@
 round: 026-release-3-1-0-fixes
 role: builder
 branch: builder/026-release-3-1-0-fixes
-head: 499f7e0dd36370db36f02039d28e9ac627481e98
+head: ba57557b12f88f9c50514ff44b95f298e5f5afba
 os: macOS 27.0
 python: 3.9.6
-written: 2026-09-28T14:26:00Z
+written: 2026-09-28T14:26:21Z
 -->
 # Round 026 — Builder report: release 3.1.0 fixes
 
