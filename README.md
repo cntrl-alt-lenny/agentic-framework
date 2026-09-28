@@ -48,13 +48,15 @@ flowchart LR
 
 ## What works
 
-| | |
-|---|---|
-| **Where am I?** | One command shows each round seat by seat, and your next action. |
-| **Any tool, any machine** | Claude Code, Codex, Gemini or any tool that runs git and Python 3.9+, on Windows, macOS and Linux. |
-| **Independent review** | The Verifier reviews the exact commit blind; the Brain re-checks at least one claim itself. |
-| **Safe updates** | Projects see new releases on their own; an update never overwrites a file you edited. |
-| **Honest limits** | It guides agents; it cannot force them. That is why every claim needs evidence. |
+- **Where am I?** One command shows each round seat by seat, and your next action.
+- **Any tool, any machine.** Claude Code, Codex, Gemini or any tool that runs
+  git and Python 3.9+, on Windows, macOS and Linux.
+- **Independent review.** The Verifier reviews the exact commit blind; the
+  Brain re-checks at least one claim itself.
+- **Safe updates.** Projects see new releases on their own, and an update never
+  overwrites a file you edited.
+- **Honest limits.** It guides agents; it cannot force them. That is why every
+  claim needs evidence.
 
 <details>
 <summary><strong>What a project gets</strong></summary>
