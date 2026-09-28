@@ -155,5 +155,17 @@ class ScanScope(TempDirTest):
         adopt(project, "--project", "Demo")
         (project / "docs/state.md").write_text("# State\n\nsee /Users/someone/Dev/x\n", encoding="utf-8")
         result = fw(project, "check")
-        self.assertIn("docs/agents/**/*.md and docs/rounds/*/*.md", result.stdout)
+        self.assertIn("docs/agents/**/*.md, docs/rounds/*/*.md and docs/rounds/*/attachments/**", result.stdout)
         self.assertNotIn("tracked documents", result.stdout)
+
+    def test_round_attachments_are_scanned(self) -> None:
+        # Round 026: logs and long lists go in attachments/, where home folders are likeliest.
+        project = self.init_repo(self.tmp / "project")
+        adopt(project, "--project", "Demo")
+        folder = project / "docs/rounds/001-x/attachments/logs"
+        folder.mkdir(parents=True)
+        (folder / "run.log").write_text("ok\nread C:\\Users\\someone\\x.txt\n", encoding="utf-8")
+        (folder / "shot.png").write_bytes(b"\x89PNG\0\0/Users/someone/")
+        result = fw(project, "check")
+        self.assertIn("docs/rounds/001-x/attachments/logs/run.log:2 contains", result.stdout)
+        self.assertNotIn("shot.png", result.stdout)

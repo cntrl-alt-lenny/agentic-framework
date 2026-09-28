@@ -3,9 +3,9 @@
 Runs `check_project` from tools/fw.py -- state document budget, no stored
 commit ids, tool entry files that point at AGENTS.md, a declared merge rule,
 and no personal paths or email addresses in the documents agents read
-(AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/ and
-docs/rounds/*/*.md; other files are not scanned). Each exists because the
-failure happened in a real project. Replaced by framework updates; do not
+(AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/,
+docs/rounds/*/*.md and docs/rounds/*/attachments/; other files are not
+scanned). Each exists because the failure happened in a real project. Replaced by framework updates; do not
 edit it here.
 """
 

@@ -308,12 +308,12 @@ class ReportFiles:
 
 
 def project_name(root: Path) -> str:
-    path = root / "AGENTS.md"
-    if path.is_file():
-        match = re.search(r"^# +(.+?)\s*$", path.read_text(encoding="utf-8", errors="replace"), re.M)
-        if match:
-            return match.group(1)
-    return root.name
+    """The repository's name on origin (without .git), else the folder's."""
+    result = git(["remote", "get-url", "origin"], root)
+    url = result.stdout.strip().rstrip("/\\") if result.returncode == 0 else ""
+    name = re.split(r"[/\\:]", url)[-1] if url else ""
+    name = name[:-4] if name.endswith(".git") else name
+    return name or root.name
 
 
 def round_number(round_id: str) -> str:
@@ -966,6 +966,24 @@ def public_url(root: Path) -> str | None:
     return url[:-4] if url.endswith(".git") else url
 
 
+def review_suffix(root: Path, round_id: str) -> str:
+    """'' for the first review of a round, '-2', '-3' ... for later ones, so a
+    re-review's checkout does not collide with the earlier review's folder.
+    Numbered like the review branches: a review branch that holds no
+    verifier report yet is the review in progress."""
+    number, name, last = 1, f"verifier/{round_id}", None
+    while any(ok(["rev-parse", "--verify", "--quiet", r], root) for r in (f"origin/{name}", name)):
+        last, number = number, number + 1
+        name = f"verifier/{round_id}-{number}"
+    if last is None:
+        return ""
+    name = f"verifier/{round_id}" + (f"-{last}" if last > 1 else "")
+    ref = f"origin/{name}" if ok(["rev-parse", "--verify", "--quiet", f"origin/{name}"], root) else name
+    reviewed = show(root, ref, report_path(round_id, "verifier")) is not None
+    current = last + 1 if reviewed else last
+    return f"-{current}" if current > 1 else ""
+
+
 def seat_prompt(root: Path, round_id: str, role: str, message: int = 1) -> str:
     """The prompt Brain gives the owner for one seat. The first line is the
     header the owner compares across chats; the seat ends its last reply with
@@ -976,13 +994,14 @@ def seat_prompt(root: Path, round_id: str, role: str, message: int = 1) -> str:
     url = public_url(root)
     project = project_name(root)
     number = round_number(round_id)
+    folder = f"{role}-{number}" + (review_suffix(root, round_id) if role == "verifier" else "")
     where = (
         f"Work inside this project's folder on this machine (clone {url} if it is not here): "
         if url else "Work inside this project's folder on this machine: "
     )
     body = (
         f"You are the {role.capitalize()} for {project}, round {round_id}. {where}from its main checkout "
-        f"run git worktree add --detach .worktrees/{role}-{number} origin/{default_branch(root)} and work in "
+        f"run git worktree add --detach .worktrees/{folder} origin/{default_branch(root)} and work in "
         "that folder, never in a copy beside the project. In a cloud workspace, work in the clone it gives you."
         f"\n\nIn that folder, first run python3 tools/fw.py start --role {role} --round {round_id} (use py -3 "
         "or python if python3 is not found) and stop if it fails. Then read AGENTS.md, "
@@ -1146,6 +1165,8 @@ def next_action(round_id: str, seats: list[tuple[str, str, str]]) -> tuple[str, 
                             "send it the same prompt again as message 2")
         if state == "stale":
             return "ask", f"ask Brain what to send the {name} of round {round_id}: its report is out of date"
+    if not seats:
+        return "ask", f"ask Brain to merge round {round_id}: it is Tier 0, so no seat works on it"
     return "ask", f"ask Brain to judge round {round_id}: every seat has reported"
 
 
@@ -1347,7 +1368,8 @@ PERSONAL = [
 SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 #: What the personal-data check reads: the documents every agent reads, not
 #: every tracked file. Older archives in a project may hold paths it misses.
-SCANNED = "AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md and docs/rounds/*/*.md"
+SCANNED = ("AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md, docs/rounds/*/*.md "
+           "and docs/rounds/*/attachments/**")
 
 
 def personal_data(line: str) -> str | None:
@@ -1365,7 +1387,8 @@ def _live_docs(root: Path) -> list[Path]:
     docs = [root / name for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", STATE_DOC)]
     docs += sorted((root / "docs/agents").rglob("*.md")) if (root / "docs/agents").is_dir() else []
     docs += sorted((root / ROUNDS).glob("*/*.md")) if (root / ROUNDS).is_dir() else []
-    return [p for p in docs if p.is_file()]
+    docs += sorted((root / ROUNDS).glob("*/attachments/**/*")) if (root / ROUNDS).is_dir() else []
+    return [p for p in docs if p.is_file() and b"\0" not in p.read_bytes()[:8192]]  # skip binary attachments
 
 
 def check_project(root: Path) -> list[tuple[str, str]]:

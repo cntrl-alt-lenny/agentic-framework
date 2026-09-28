@@ -109,7 +109,7 @@ class TempDirTest(unittest.TestCase):
         data["framework"]["repository"] = str(ROOT)
         record.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         self.commit_all(seed, "Adopt the framework")
-        origin = self.tmp / "origin.git"
+        origin = self.tmp / "Demo.git"  # the prompt header names the project after its repository
         git(self.tmp, "clone", "-q", "--bare", str(seed), str(origin))
         return origin
 

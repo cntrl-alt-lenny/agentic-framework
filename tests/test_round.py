@@ -302,6 +302,14 @@ class NextAction(RoundTest):
         self.assertIn("worker: stale", out)
         self.assertIn("next: ask Brain what to send the Worker of round 022-stale", out)
 
+    def test_a_tier_0_round_asks_for_a_merge_not_a_judgement(self) -> None:
+        # Round 026: a Tier 0 round has no seats, so none of them has "reported".
+        self.write_brief("023-tiny", tier=0)
+        out = self.status()
+        self.assertIn("in flight: 023-tiny (Tier 0)", out)
+        self.assertNotIn("every seat has reported", out)
+        self.assertIn("next: ask Brain to merge round 023-tiny: it is Tier 0, so no seat works on it", out)
+
     def test_nothing_in_flight_says_so_in_the_next_line(self) -> None:
         out = self.status()
         self.assertIn("nothing in flight", out)
@@ -325,6 +333,46 @@ class Prompts(RoundTest):
         again = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "verifier", "--message", "2")
         self.assertEqual(again.stdout.splitlines()[0], "Demo · ROUND 030 · VERIFIER · message 2")
         self.assertEqual(again.stdout.splitlines()[1:], lines[1:])
+
+    def test_the_header_names_the_repository_not_the_agents_heading(self) -> None:
+        # Round 026: AGENTS.md's heading gave "AGENTS.md — coordination model for ...".
+        self.write_brief("031-name")
+        agents = self.brain / "AGENTS.md"
+        agents.write_text(agents.read_text(encoding="utf-8").replace(
+            "# Demo", "# AGENTS.md — coordination model for demo", 1), encoding="utf-8")
+        self.commit_all(self.brain, "A long AGENTS.md heading")
+        for url, name in (("https://github.com/someone/edopro-retro-formats.git", "edopro-retro-formats"),
+                          ("git@github.com:someone/edopro-next.git", "edopro-next"),
+                          ("https://github.com/someone/gx-spirit-caller", "gx-spirit-caller")):
+            git(self.brain, "remote", "set-url", "origin", url)
+            result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+            self.assertEqual(result.stdout.splitlines()[0], f"{name} · ROUND 031 · BUILDER", result.stderr)
+        git(self.brain, "remote", "remove", "origin")
+        result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+        self.assertEqual(result.stdout.splitlines()[0], "brain-mac · ROUND 031 · BUILDER", result.stderr)
+
+    def test_a_re_review_prompt_names_a_new_folder(self) -> None:
+        # Round 026: the first review's .worktrees/verifier-032 usually still exists.
+        self.write_brief("032-again")
+        worker, _ = self.deliver_worker("worker", "032-again")
+        verifier = self.clone(self.origin, "verifier")
+        self.assertEqual(fw(verifier, "start", "--role", "verifier", "--round", "032-again").returncode, 0)
+
+        def folder() -> str:
+            git(self.brain, "fetch", "-q", "origin")
+            out = fw(self.brain, "prompt", "--round", "032-again", "--role", "verifier").stdout
+            return out.split("git worktree add --detach ", 1)[1].split()[0]
+
+        self.assertEqual(folder(), ".worktrees/verifier-032")  # started, not yet reported: same seat
+        (verifier / "docs/rounds/032-again/verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(verifier, "report", "--role", "verifier", "--round", "032-again", "--push").returncode, 0)
+        self.assertEqual(folder(), ".worktrees/verifier-032-2")
+        path = worker / "docs/rounds/032-again/worker.md"
+        path.write_text(WORKER_REPORT.replace("the feature.", "the feature, fixed."), encoding="utf-8")
+        self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "032-again", "--push").returncode, 0)
+        second = self.deliver_verifier("verifier-2", "032-again")
+        self.assertEqual(git(second, "branch", "--show-current"), "verifier/032-again-2")
+        self.assertEqual(folder(), ".worktrees/verifier-032-3")
 
     def test_prompt_for_the_brain_is_refused(self) -> None:
         result = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "brain")
