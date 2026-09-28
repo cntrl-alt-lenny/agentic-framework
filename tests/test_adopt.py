@@ -415,7 +415,7 @@ class RealProjectLayouts(RoundTest):
         (folder / "attachments").mkdir()
         (folder / "attachments/log.md").write_text("log\n", encoding="utf-8")
         self.commit_all(worker, "Attachments")
-        git(worker, "push", "-q")
+        git(worker, "push", "-q", "-u", "origin", "worker/070-attach")
         second = self.clone(self.origin, "worker-2")
         result = fw(second, "start", "--role", "worker", "--round", "070-attach")
         self.assertIn("continuing earlier work", result.stdout)

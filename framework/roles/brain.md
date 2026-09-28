@@ -30,9 +30,8 @@ it in plain English.
   "confirm that".
 - Give the owner each seat's prompt as one code block, exactly as
   `python3 tools/fw.py prompt --round <id> --role <role>` prints it, with
-  the project's own role names. Add to it only what the brief cannot carry.
-  For Tier 2, give the Verifier prompt too and say plainly: **send this one
-  only after the Worker has finished.**
+  the project's own role names. For Tier 2, give the Verifier prompt too and
+  say plainly: **send this one only after the Worker has finished.**
 
 ## Judging a round
 

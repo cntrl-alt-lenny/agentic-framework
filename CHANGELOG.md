@@ -5,6 +5,78 @@ move to it. `tools/adopt.py --update` prints the "What an adopter must do"
 section of every release between a project's pinned release and the new one.
 Releases are tagged by Brain after the round that produces them merges.
 
+## 3.1.0 — the coordination fixes
+
+After a break, the owner had to open every chat and compare prompts by hand
+to find which seat was waiting; a Verifier paste was missed; `status` listed
+rejected rounds as in flight with counts like "(+9 more)"; "not safe to leave
+this machine" fired on every run in one project; seat copies piled up to 8 GB.
+This release fixes issues #18-#27 and #29, each as a class, with a test that
+fails at 3.0.0. No contract a project relies on changes.
+
+- **Next action after a break (#26, #27).** `fw.py status` shows each round
+  in flight seat by seat (the seats come from the brief's `Tier:`), each
+  `not started`, `started`, `reported at <commit>` or `stale`, and ends with
+  one line, `next:`, naming the owner's next action. `fw.py start` pushes the
+  seat's branch at once, so a started seat is not mistaken for a missed
+  paste. A round named under a later brief's `Supersedes:` is shown as
+  superseded, and `delivery`, `start` and `prompt` say so instead of asking
+  for a rejected report to be rewritten. The "(+N more)" counts are gone.
+- **`fw.py prompt --round <id> --role <role>`** prints a seat's prompt, and
+  every prompt now has a header, `<project> · ROUND <number> · <ROLE>`; each
+  seat ends its final reply with the same header and `DONE`, `STOPPED` or
+  `BLOCKED` (`fw.py report --push` prints the line). The Brain card uses the
+  command instead of a pasted template and opens every session with the
+  `next:` line.
+- **Round attachments (#24).** Only files named for a role are reports;
+  supporting files go in `docs/rounds/<id>/attachments/`.
+- **"Not safe to leave" means it (#18).** Work merged into the default branch
+  by squash or rebase, including after its remote branch was deleted, and
+  tags the remote holds at the same object, count as pushed. Unpushed work
+  is still reported.
+- **Seat checkouts (#29, #19).** The seat prompt puts a local seat in
+  `.worktrees/<role>-<number>` inside the project; adoption keeps that folder
+  ignored by git; `status` lists finished ones as removable and the Brain
+  card removes them when their round merges. `start` warns about
+  uninitialised submodules, as `status` does.
+- **Updates (#20, #21, #25).** `adopt.py --update` says "nothing to do" when
+  nothing changes and prints `record` only when the manifest would change;
+  names files it did not install in folders an adapter installs into (a
+  project's own `.claude/agents/builder.md`, say); leaves deleted a
+  project-owned or adapter file the project deleted (`--hooks` or `--adapter`
+  brings it back); and prints each release's adopter steps in a dry run too.
+- **Every release is proposed; minor ones are light.** Brain proposes an
+  update round for any newer release `status` reports: Tier 2 for a major
+  release, Tier 1 (no Verifier) for a minor or patch one, because the update
+  never overwrites an edited file and the project's checks run.
+- **Checks (#22, #23).** `fw.py report` refuses a report that quotes a
+  personal path or email address, or links to a file that does not exist from
+  the round folder, and says how to describe a finding without repeating it.
+  The personal-data check keeps its scope (the documents agents read) and its
+  message now names that scope: widening it would have failed all three
+  projects' suites on archived documents (14, 1 and 49 lines).
+- **An "Idea or question" issue form** beside "Framework feedback".
+
+Net change: the documents copied into a project go from 3,173 to 3,171 words;
+`tools/fw.py` grows from 1,007 to 1,456 lines and `tools/adopt.py` from 562 to
+643; the suite gains 19 tests and extends one.
+
+### What an adopter must do
+
+Run this as one Tier 1 round (Worker, then Brain re-derives), with no other
+round in flight.
+
+1. From a clone of the framework at `v3.1.0`, run
+   `python3 tools/adopt.py <project> --update --dry-run`, then without
+   `--dry-run`. Expect `replace` lines for framework files. A `gone` line is a
+   file the project deleted, and stays deleted. For each `other` line in
+   `.claude/agents/`, if it is a second seat file for one seat, delete one of
+   the two.
+2. If the project's `AGENTS.md` has its own prompt-header rule (from issue
+   #26), delete it: `FRAMEWORK.md` now carries it.
+3. Run `python3 tools/fw.py status` and check that each round in flight is
+   shown seat by seat and that the last line starts with `next:`.
+
 ## 3.0.0 — lean core, handoffs in git, one-command updates
 
 An independent audit found the framework cost more time than it saved. Its

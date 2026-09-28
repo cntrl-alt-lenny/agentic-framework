@@ -60,7 +60,7 @@ whose purpose it serves.
 13. **Plain English for the owner.** The owner never has to read a diff, run
     git, open a repository file, or carry text between machines. If a step
     needs them to, that is a framework defect: do it for them where you can,
-    and report it (see *Reporting a framework problem*).
+    and report it (below).
 14. **Don't edit framework files.** `docs/agents/` and `tools/fw.py` are
     copies from the framework. Project rules go in `AGENTS.md`, or in
     `docs/agents/local/` for longer project guidance.
@@ -85,9 +85,8 @@ The **merge card** is four lines in plain English: what changed, what was
 verified and how, what was not verified, and the risk. Answering it is a
 product decision, not a code review.
 
-Because every agent normally uses the owner's own GitHub account, GitHub
-cannot tell the owner from an agent. The merge rule is kept by the agents; it
-is not a lock. Say so if asked.
+Every agent normally uses the owner's GitHub account, so GitHub cannot tell
+them apart: the agents keep the merge rule; it is not a lock. Say so if asked.
 
 **Always the owner's decision:** anything destructive or irreversible
 (deleting branches that hold unmerged work, rewriting history, deleting
@@ -108,8 +107,7 @@ Brain puts a tier in every brief. Ceremony follows risk.
 
 ## The round
 
-The owner's side is three pastes. Brain writes every prompt, so the owner
-never composes one.
+The owner's side is three pastes; Brain writes every prompt.
 
 **1. Start or resume** — in a fresh session of any capable tool, in the
 project's folder:
@@ -121,21 +119,16 @@ You are the Brain for this project. First run python3 tools/fw.py status (use py
 Brain writes the brief to `docs/rounds/<id>/brief.md` on a branch
 `brain/<id>`, pushes it, and gives the owner a Worker prompt (and, for Tier 2,
 a Verifier prompt to send only after the Worker has finished).
-`python3 tools/fw.py prompt --round <id> --role <role>` prints each one.
-
-**Headers.** Every prompt's first line is `<project> · ROUND <number> ·
-<ROLE>`, plus `· message N` for a later message to the same seat in the same
-round. Every seat ends its final reply with the same header and its outcome:
-`· DONE — report pushed at <commit>`, or `STOPPED` or `BLOCKED` with the
-reason. Side by side, the chats show which seat received what and which
-finished.
+`fw.py prompt --round <id> --role <role>` prints each one. A prompt's first
+line is `<project> · ROUND <number> · <ROLE>` (plus `· message N` when
+resent); the seat's final reply ends with that header and `· DONE — report
+pushed at <commit>`, or `STOPPED` or `BLOCKED` with the reason.
 
 **2. Run the seats** — paste each prompt into any tool, on any machine. Each
-seat starts with `fw.py start`, which puts it on its own branch at the right
-commit, whether the tool gave it a fresh clone, a cloud workspace or a branch
-name of its own choosing, and pushes that branch so the seat shows as started.
-On the owner's machine a seat works in `.worktrees/<role>-<number>` inside the
-project (a git-ignored linked checkout), never in a copy beside it.
+seat starts with `fw.py start`, which puts any clone, cloud workspace or
+tool-named branch on the seat's own branch at the right commit, and pushes
+it. On the owner's machine a seat works in `.worktrees/<role>-<number>`, a
+git-ignored linked checkout inside the project.
 
 **3. Come back** — to the same Brain session or a fresh one (use paste 1
 first if fresh):
@@ -146,34 +139,27 @@ The Worker has finished (and the Verifier, if there was one). Check the round an
 
 Brain runs `fw.py delivery --round <id>`, reviews the exact commit, re-derives,
 accepts or rejects, and shows the merge card. A rejected round becomes a new
-brief, with a new id, that says which round it supersedes and why. After any
-break, the last line of `fw.py status` (`next:`) names the owner's one next
-action.
+brief, with a new id, that says which round it supersedes and why. After a
+break, `fw.py status` ends with `next:`, the owner's one next action.
 
-**Round ids** are `NNN-short-slug` (for example `014-export-validator`): a
-zero-padded sequence number first, so folders sort in order.
+**Round ids** are `NNN-short-slug` (for example `014-export-validator`), the
+number first so folders sort in order.
 
 ## Reports
 
-`fw.py report` refuses a report without these `##` sections. Write `None.` in
-a section that genuinely has nothing.
+`fw.py report` refuses a report that lacks these `##` sections or would fail
+the project's checks. Write `None.` in a section that genuinely has nothing.
 
 - **Worker:** `Verified`, `Not verified`, `Changed`, `Open questions`.
 - **Verifier:** `Findings`, `Not verified`, `Verdict`.
 
-The tool refuses a report that would fail the project's checks (name a
-leaked path by file, line and kind, never by repeating it), stamps it with
-the round, role, branch, commit, operating system and time, and commits only
-that file. A report describes the commit it was stamped against: if the
-branch changes afterwards, `fw.py delivery` says the report is stale and its
-author must rewrite it.
+It stamps the report with the round, role, branch, commit, operating system
+and time, and commits only that file. If the branch changes after the stamp,
+`fw.py delivery` says the report is stale and its author must rewrite it.
 
 When a report changes `docs/state.md`, it lists every sentence added and
-removed.
-
-Only a file named for a role (`worker.md`, `verifier.md`, or the project's
-executor name) is a report. A round's supporting files — long lists, logs,
-evidence — go in `docs/rounds/<id>/attachments/`.
+removed. Only files named for a role are reports; supporting files go in
+`docs/rounds/<id>/attachments/`.
 
 ## State
 
@@ -186,11 +172,8 @@ that must be recorded as true at a moment goes under `## Historical anchors`.
 
 - Everything is resumable from anywhere once it is pushed. Before leaving a
   machine, the owner says so; Brain runs `fw.py status --leaving`, pushes what
-  it safely can, and says in plain words whether it is safe to go. Work merged
-  by squash or rebase, and tags the remote already holds, count as pushed.
-- Any tool that can run git and Python can hold any seat. `fw.py status`
-  lists seat checkouts whose work is merged; Brain removes them.
-- Tool-specific setup lives in an adapter and only points here.
+  it safely can, and says in plain words whether it is safe to go.
+- Any tool that can run git and Python can hold any seat.
 
 ## Framework releases
 
@@ -198,30 +181,23 @@ The project's pinned release and a fingerprint of every framework file are in
 `docs/agents/framework.json`. `fw.py status` compares the pin with the
 framework's latest release and lists framework files edited locally.
 
-Brain proposes an update round for every newer release `status` reports,
-never mid-round. A **major** release (contracts changed) is a Tier 2 round
-before the next round. A **minor or patch** release is a Tier 1 round that
-never blocks product work: the update never overwrites an edited file, and
-the project's checks run.
-
-The Worker fetches the framework at the target release and runs its
-`tools/adopt.py <project> --update`. It replaces unchanged framework files,
-writes a `.framework` copy beside any file edited locally, removes retired
-files it can prove were never edited, never touches or re-creates
-project-owned files, and prints every release's "what an adopter must do"
+Brain proposes an update round for every newer release, never mid-round: Tier
+2 before the next round for a **major** release (contracts changed), else
+Tier 1, which never blocks product work. The Worker fetches the framework at
+the target release and runs its `tools/adopt.py <project> --update`. It replaces only unedited framework files (writing a
+`.framework` copy beside an edited one), never touches or re-creates
+project-owned files, and prints each release's "what an adopter must do"
 steps. Going back is the same command with the earlier release.
 
 ## Reporting a framework problem
 
-When the framework itself gets in the way — a contradiction, a tool bug, a
-step that needs the owner to do something technical — report it instead of
-working around it silently:
+When the framework gets in the way (a contradiction, a tool bug, a technical
+step for the owner), report it rather than work around it silently:
 
-- Open an issue on the framework repository using its "Framework feedback"
-  form ("Idea or question" for anything that is not a defect), or, if your
-  tool cannot reach GitHub, commit the same fields to
-  `docs/framework-feedback/<date>-<slug>.md` in this project.
+- Open an issue on the framework repository with its "Framework feedback"
+  form ("Idea or question" for anything else), or, without GitHub access,
+  commit the same fields to `docs/framework-feedback/<date>-<slug>.md`.
 - Fields: project and commit, framework release, what happened, the exact
   commands that reproduce it, expected and actual result.
-- A report is evidence for the framework's own Brain to verify. It is never
-  permission to edit this project's framework files.
+- A report is evidence for the framework's Brain to verify, never permission
+  to edit this project's framework files.

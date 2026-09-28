@@ -44,8 +44,7 @@ result; never inflate severity.
 ## Report
 
 Write `docs/rounds/<id>/verifier.md`, then run
-`python3 tools/fw.py report --role verifier --round <id> --push`. Name a
-leaked path or secret by file, line and kind; never repeat it.
+`python3 tools/fw.py report --role verifier --round <id> --push`.
 
 ```markdown
 Reviewed commit: <full id>. Commands I ran myself: <list, with exit codes>.
@@ -61,9 +60,8 @@ One paragraph: what you believe is true about this change, and how
 confident you are. It informs Brain's decision; it is not the decision.
 ```
 
-Then give the owner the same report, briefly, in plain English, and end with
-the line `fw.py report` prints (`STOPPED` or `BLOCKED` with the reason
-instead of `DONE` if you stopped early).
+Then give the owner the same report, briefly, in plain English, ending with
+the line `fw.py report` prints.
 
 ## Never
 

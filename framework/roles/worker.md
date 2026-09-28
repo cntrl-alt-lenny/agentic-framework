@@ -34,9 +34,7 @@ the seat's scope.
 ## Report — on every exit, including a stop
 
 Write `docs/rounds/<id>/<role>.md`, commit your work first, then run
-`python3 tools/fw.py report --role <role> --round <id> --push`. Name a leaked
-path or secret by file, line and kind; never repeat it. Long supporting lists
-go in `docs/rounds/<id>/attachments/`.
+`python3 tools/fw.py report --role <role> --round <id> --push`.
 
 ```markdown
 ## Verified
@@ -54,9 +52,8 @@ sentence added and removed.
 Anything unresolved, contradicting the brief, or deliberately left out.
 ```
 
-Then give the owner the same report, briefly, in plain English, and end with
-the line `fw.py report` prints (`STOPPED` or `BLOCKED` with the reason
-instead of `DONE` if you stopped early).
+Then give the owner the same report, briefly, in plain English, ending with
+the line `fw.py report` prints.
 
 ## Never
 
