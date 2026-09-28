@@ -8,7 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from tests.helpers import PYTHON, ROOT, TempDirTest, adopt, fw, git, run
+from tests.helpers import PYTHON, ROOT, WORKER_REPORT, RoundTest, TempDirTest, adopt, fw, git, run
 
 FIXTURE = ROOT / "tests" / "fixtures" / "v2_adopter"
 
@@ -258,3 +258,186 @@ class LegacyMigration(TempDirTest):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pinned to agentic-framework", result.stdout)
         self.assertIn(sys.platform == "win32" and "py -3" or "python3", result.stdout)
+
+
+class UpdateOutput(TempDirTest):
+    def adopted(self, *extra: str) -> Path:
+        target = self.init_repo(self.tmp / "project")
+        self.assertEqual(adopt(target, "--project", "Demo", "--adapter", "claude-code", *extra).returncode, 0)
+        self.commit_all(target, "adopt")
+        return target
+
+    def test_an_up_to_date_project_is_told_there_is_nothing_to_do(self) -> None:
+        # Issue #20: 'record' only when the manifest would change.
+        target = self.adopted()
+        before = (target / "docs/agents/framework.json").read_bytes()
+        for args in (("--update", "--dry-run"), ("--update",)):
+            result = adopt(target, *args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("nothing to do: this project already matches agentic-framework", result.stdout)
+            self.assertNotIn("record", result.stdout)
+        self.assertEqual((target / "docs/agents/framework.json").read_bytes(), before)
+        self.assertEqual(git(target, "status", "--porcelain"), "")
+
+    def test_a_dry_run_prints_what_each_release_asks(self) -> None:
+        target = self.adopted()
+        record = manifest(target)
+        record["framework"]["release"] = "2.99.0"
+        (target / "docs/agents/framework.json").write_text(json.dumps(record), encoding="utf-8")
+        result = adopt(target, "--update", "--dry-run")
+        self.assertIn("record  docs/agents/framework.json", result.stdout)
+        self.assertIn("What each release asks of this project:", result.stdout)
+        self.assertIn("--- 3.0.0 ---", result.stdout)
+        self.assertIn("dry run: nothing written", result.stdout)
+
+    def test_seat_checkouts_inside_the_project_are_ignored(self) -> None:
+        # Issue #29: .worktrees/ is where local seats work, and git ignores it.
+        target = self.adopted()
+        self.assertTrue((target / ".worktrees/.gitignore").is_file())
+        git(target, "worktree", "add", "-q", "--detach", ".worktrees/worker-001")
+        self.assertEqual(git(target, "status", "--porcelain"), "")
+        own = self.init_repo(self.tmp / "own-ignore")
+        (own / ".gitignore").write_text(".worktrees/\n", encoding="utf-8")
+        adopt(own, "--project", "Own")
+        self.assertFalse((own / ".worktrees/.gitignore").exists())
+
+
+class RealProjectLayouts(RoundTest):
+    """The layouts real projects had when these defects were found, each
+    rebuilt here: a seat file named for the project's executor (#21), a
+    deleted seed (#25), a squash-merged round on a seat's machine (#18),
+    archive tags (#18), a superseded round (#27), a round attachment (#24) and
+    a finished seat checkout (#29)."""
+
+    def test_a_seat_file_named_for_the_projects_executor_is_named(self) -> None:
+        (self.brain / ".claude/agents/builder.md").write_text("Builder seat: see AGENTS.md.\n", encoding="utf-8")
+        self.commit_all(self.brain, "the project's own seat file")
+        result = adopt(self.brain, "--update", "--dry-run")
+        self.assertIn("other   .claude/agents/builder.md", result.stdout)
+        self.assertIn("delete one of the two", result.stdout)
+        # Deleting the framework's own seat file is a decision the update keeps.
+        git(self.brain, "rm", "-q", ".claude/agents/worker.md")
+        self.commit_all(self.brain, "keep builder.md, drop worker.md")
+        result = adopt(self.brain, "--update")
+        self.assertIn("gone    .claude/agents/worker.md", result.stdout)
+        self.assertFalse((self.brain / ".claude/agents/worker.md").exists())
+        self.assertNotIn(".claude/agents/worker.md (missing)", fw(self.brain, "status", "--offline").stdout)
+
+    def test_a_deleted_seed_stays_deleted(self) -> None:
+        self.assertEqual(adopt(self.brain, "--update", "--hooks").returncode, 0)
+        self.commit_all(self.brain, "hook")
+        git(self.brain, "rm", "-q", ".githooks/pre-push")
+        self.commit_all(self.brain, "retire the hook")
+        for args in (("--update", "--dry-run"), ("--update",)):
+            result = adopt(self.brain, *args)
+            self.assertIn("gone    .githooks/pre-push  (deleted in this project, so not re-created)", result.stdout)
+            self.assertNotIn("create  .githooks/pre-push", result.stdout)
+        self.assertFalse((self.brain / ".githooks/pre-push").exists())
+        # Asking for it again brings it back.
+        result = adopt(self.brain, "--update", "--hooks", "--dry-run")
+        self.assertIn("create  .githooks/pre-push", result.stdout)
+
+    def squash_merge(self, round_id: str, branch: str) -> None:
+        git(self.brain, "fetch", "-q", "origin")
+        git(self.brain, "merge", "-q", "--squash", f"origin/{branch}")
+        git(self.brain, "commit", "-q", "-m", f"Round {round_id} (squashed)")
+        git(self.brain, "push", "-q", "origin", "main")
+        for name in git(self.brain, "ls-remote", "--heads", "origin").split("\n"):
+            ref = name.split("refs/heads/")[-1]
+            if ref.endswith(round_id):
+                git(self.brain, "push", "-q", "origin", "--delete", ref)
+
+    def test_a_squash_merged_round_is_safe_to_leave_on_the_seats_machine(self) -> None:
+        self.write_brief("050-squash", tier=1)
+        worker, _ = self.deliver_worker("worker-mac", "050-squash")
+        self.squash_merge("050-squash", "worker/050-squash")
+        git(worker, "switch", "-q", "main")
+        git(worker, "pull", "-q")
+        git(worker, "fetch", "-q", "--prune")
+        result = fw(worker, "status", "--offline", "--leaving")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("safe to leave this machine: yes", result.stdout)
+        # Work that is genuinely not on GitHub is still reported.
+        git(worker, "switch", "-q", "worker/050-squash")
+        (worker / "after.txt").write_text("after the merge\n", encoding="utf-8")
+        git(worker, "add", "after.txt")
+        git(worker, "commit", "-q", "-m", "Unpushed follow-up")
+        result = fw(worker, "status", "--offline", "--leaving")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("not on GitHub yet: worker/050-squash", result.stdout)
+
+    def test_archive_tags_on_the_remote_are_safe_to_leave(self) -> None:
+        git(self.brain, "switch", "-q", "-c", "old")
+        (self.brain / "old.txt").write_text("old\n", encoding="utf-8")
+        git(self.brain, "add", "old.txt")
+        git(self.brain, "commit", "-q", "-m", "Old work")
+        git(self.brain, "tag", "-a", "archive/branch-old", "-m", "archived")
+        git(self.brain, "push", "-q", "origin", "archive/branch-old")
+        git(self.brain, "switch", "-q", "main")
+        git(self.brain, "branch", "-q", "-D", "old")
+        result = fw(self.brain, "status", "--leaving")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        # A tag that exists only here is still reported.
+        git(self.brain, "switch", "-q", "--detach")
+        (self.brain / "new.txt").write_text("new\n", encoding="utf-8")
+        git(self.brain, "add", "new.txt")
+        git(self.brain, "commit", "-q", "-m", "Tagged, never pushed")
+        git(self.brain, "tag", "local-only")
+        git(self.brain, "switch", "-q", "main")
+        result = fw(self.brain, "status", "--leaving")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("not on GitHub yet: tag local-only", result.stdout)
+
+    def test_a_superseded_round_is_not_in_flight(self) -> None:
+        self.write_brief("060-a", tier=1)
+        self.deliver_worker("worker", "060-a")
+        self.write_brief("061-b", tier=1, supersedes="060-a, rejected: the export was wrong", start="origin/worker/060-a")
+        git(self.brain, "fetch", "-q", "origin")
+        result = fw(self.brain, "status", "--offline")
+        self.assertIn("superseded: 060-a, by 061-b -- not in flight", result.stdout)
+        self.assertNotIn("in flight: 060-a", result.stdout)
+        self.assertIn("in flight: 061-b (Tier 1)", result.stdout)
+        self.assertIn("worker: not started", result.stdout)
+        result = fw(self.brain, "delivery", "--round", "060-a")
+        self.assertIn("superseded by round 061-b", result.stdout)
+        self.assertNotIn("must rewrite", result.stdout)
+        seat = self.clone(self.origin, "late-seat")
+        result = fw(seat, "start", "--role", "worker", "--round", "060-a")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("superseded by round 061-b", result.stderr)
+
+    def test_a_round_attachment_is_not_a_report(self) -> None:
+        self.write_brief("070-attach")
+        worker = self.clone(self.origin, "worker")
+        fw(worker, "start", "--role", "worker", "--round", "070-attach")
+        folder = worker / "docs/rounds/070-attach"
+        (folder / "state-changes.md").write_text("# Every sentence\n\nA long list.\n", encoding="utf-8")
+        (folder / "attachments").mkdir()
+        (folder / "attachments/log.md").write_text("log\n", encoding="utf-8")
+        self.commit_all(worker, "Attachments")
+        git(worker, "push", "-q", "-u", "origin", "worker/070-attach")
+        second = self.clone(self.origin, "worker-2")
+        result = fw(second, "start", "--role", "worker", "--round", "070-attach")
+        self.assertIn("continuing earlier work", result.stdout)
+        (second / "docs/rounds/070-attach/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(second, "report", "--role", "worker", "--round", "070-attach", "--push").returncode, 0)
+        result = fw(self.brain, "delivery", "--round", "070-attach")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("state-changes", result.stdout)
+        verifier = self.deliver_verifier("verifier", "070-attach")
+        self.assertTrue((verifier / "docs/rounds/070-attach/state-changes.md").is_file())
+
+    def test_a_finished_seat_checkout_is_listed_as_removable(self) -> None:
+        self.write_brief("080-tree", tier=1)
+        seat = self.brain / ".worktrees/worker-080"
+        git(self.brain, "worktree", "add", "-q", "--detach", ".worktrees/worker-080", "origin/main")
+        self.assertEqual(fw(seat, "start", "--role", "worker", "--round", "080-tree").returncode, 0)
+        (seat / "docs/rounds/080-tree/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(seat, "report", "--role", "worker", "--round", "080-tree", "--push").returncode, 0)
+        self.assertEqual(git(self.brain, "status", "--porcelain"), "")
+        result = fw(self.brain, "status", "--offline")
+        self.assertNotIn("can be removed", result.stdout)
+        self.squash_merge("080-tree", "worker/080-tree")
+        result = fw(self.brain, "status", "--offline", "--leaving")
+        self.assertIn("can be removed: .worktrees/worker-080", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout)

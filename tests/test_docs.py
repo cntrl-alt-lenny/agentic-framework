@@ -31,6 +31,19 @@ fw = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(fw)
 
 
+COMMANDS = {"status", "start", "report", "delivery", "prompt", "check"}
+FENCE = re.compile(r"^```.*?^```", re.S | re.M)
+#: fw.py's command where one is written: after an interpreter, or followed by
+#: a flag, a placeholder or the end of a code span. Prose that names the file
+#: ("tools/fw.py and tests/...") is not a command.
+WRITTEN = re.compile(r"fw\.py[ \t]+(\w+)(?=[ \t]*(?:`|--|…|<|\.\.\.))|(?:python3?|py -3)\s+\S*fw\.py\s+(\w+)")
+
+
+def written_commands(text: str) -> list[str]:
+    found = [word for block in FENCE.findall(text) for word in re.findall(r"fw\.py\s+(\w+)", block)]
+    return found + [a or b for a, b in WRITTEN.findall(FENCE.sub(" ", text))]
+
+
 def markdown_files():
     for base in ("framework", "templates", "adapters", "docs"):
         yield from sorted((ROOT / base).rglob("*.md"))
@@ -58,10 +71,20 @@ class Budgets(unittest.TestCase):
 
 class Consistency(unittest.TestCase):
     def test_every_documented_command_exists(self) -> None:
-        commands = {"status", "start", "report", "delivery", "check"}
         for path in markdown_files():
-            for match in re.finditer(r"fw\.py (\w+)", path.read_text(encoding="utf-8")):
-                self.assertIn(match.group(1), commands, f"{path}: fw.py {match.group(1)}")
+            for word in written_commands(path.read_text(encoding="utf-8")):
+                self.assertIn(word, COMMANDS, f"{path}: fw.py {word}")
+
+    def test_a_command_is_told_from_prose(self) -> None:
+        # Round 026: prose naming the file tripped the check twice.
+        for text in ("Run `tools/fw.py prmpt --round 001-x`.", "`fw.py prmpt`", "python3 tools/fw.py prmpt",
+                     "py -3 tools/fw.py prmpt", "use `python3 tools/fw.py\nprmpt`", "```\nfw.py prmpt\n```",
+                     "`tools/fw.py prmpt <id>`", "`fw.py prmpt …`"):
+            self.assertEqual(written_commands(text), ["prmpt"], text)
+        for text in ("the three role cards, tools/fw.py and tests/test_framework.py",
+                     "`tools/fw.py and tests/test_framework.py`", "`tools/fw.py` and `tests/x.py`",
+                     "what fw.py itself does.", "`fw.py`'s output"):
+            self.assertEqual(written_commands(text), [], text)
 
     def test_relative_links_resolve(self) -> None:
         for path in markdown_files():

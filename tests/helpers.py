@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -22,7 +23,35 @@ ENV = {
     "GIT_CONFIG_COUNT": "2",
     "GIT_CONFIG_KEY_0": "maintenance.auto", "GIT_CONFIG_VALUE_0": "false",
     "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "0",
+    # The prompt header's '·' and '—' arrive intact from a child Python on Windows too.
+    "PYTHONIOENCODING": "utf-8",
 }
+
+WORKER_REPORT = """## Verified
+- feature works -- `python3 -c "print(1)"` -> exit 0
+  1
+
+## Not verified
+None.
+
+## Changed
+- feature.txt: the feature.
+
+## Open questions
+None.
+"""
+
+VERIFIER_REPORT = """Reviewed commit: see stamp.
+
+## Findings
+None.
+
+## Not verified
+None.
+
+## Verdict
+The change does what the brief asks.
+"""
 
 
 def run(args: list[str], cwd: Path, *, check: bool = True) -> subprocess.CompletedProcess:
@@ -74,8 +103,13 @@ class TempDirTest(unittest.TestCase):
         (seed / "README.md").write_text("# Demo\n", encoding="utf-8")
         result = adopt(seed, "--project", "Demo", "--verifier", "--adapter", "claude-code")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        # Ask this checkout, not GitHub, for the latest release: tests stay offline.
+        record = seed / "docs/agents/framework.json"
+        data = json.loads(record.read_text(encoding="utf-8"))
+        data["framework"]["repository"] = str(ROOT)
+        record.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         self.commit_all(seed, "Adopt the framework")
-        origin = self.tmp / "origin.git"
+        origin = self.tmp / "Demo.git"  # the prompt header names the project after its repository
         git(self.tmp, "clone", "-q", "--bare", str(seed), str(origin))
         return origin
 
@@ -84,3 +118,47 @@ class TempDirTest(unittest.TestCase):
         git(self.tmp, "clone", "-q", str(origin), str(path))
         git(path, "config", "core.autocrlf", "false")
         return path
+
+
+class RoundTest(TempDirTest):
+    """An adopted project on a shared remote, with Brain's clone; each seat
+    works in a clone of its own, as on another machine."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.origin = self.adopted_origin()
+        self.brain = self.clone(self.origin, "brain-mac")
+
+    def write_brief(self, round_id: str, *, tier: int = 2, supersedes: str = "none",
+                    start: str = "main") -> None:
+        git(self.brain, "fetch", "-q", "origin")
+        git(self.brain, "switch", "-q", "-c", f"brain/{round_id}", start)
+        folder = self.brain / "docs" / "rounds" / round_id
+        folder.mkdir(parents=True)
+        (folder / "brief.md").write_text(
+            f"# {round_id}\n\nTier: {tier}\nMode: implementation\nSupersedes: {supersedes}\n", encoding="utf-8")
+        git(self.brain, "add", "-A")
+        git(self.brain, "commit", "-q", "-m", f"Brief {round_id}")
+        git(self.brain, "push", "-q", "-u", "origin", f"brain/{round_id}")
+        git(self.brain, "switch", "-q", "main")
+
+    def deliver_worker(self, clone: str, round_id: str) -> tuple:
+        worker = self.clone(self.origin, clone)
+        result = fw(worker, "start", "--role", "worker", "--round", round_id)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        (worker / "feature.txt").write_text("feature\n", encoding="utf-8")
+        git(worker, "add", "feature.txt")
+        git(worker, "commit", "-q", "-m", "Add the feature")
+        (worker / "docs" / "rounds" / round_id / "worker.md").write_text(WORKER_REPORT, encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", round_id, "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return worker, result
+
+    def deliver_verifier(self, clone: str, round_id: str) -> Path:
+        verifier = self.clone(self.origin, clone)
+        result = fw(verifier, "start", "--role", "verifier", "--round", round_id)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        (verifier / "docs" / "rounds" / round_id / "verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
+        result = fw(verifier, "report", "--role", "verifier", "--round", round_id, "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return verifier

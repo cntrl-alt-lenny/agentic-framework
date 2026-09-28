@@ -5,6 +5,8 @@ One folder per round of work, named `NNN-short-slug`:
 - `brief.md` — the task, written by Brain.
 - `worker.md` (or the project's executor name) — the executor's report.
 - `verifier.md` — the Verifier's findings, for Tier 2 rounds.
+- `attachments/` — supporting files a report points to (long lists, logs).
+  Only files named for a role are reports.
 
 Reports are written by the seat and stamped and committed with
 `python3 tools/fw.py report`. A round is finished when its folder is merged

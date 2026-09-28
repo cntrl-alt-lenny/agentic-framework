@@ -98,6 +98,15 @@ class ReleaseCheck(TempDirTest):
         path.write_text(json.dumps(record), encoding="utf-8")
         result = fw(project, "status")
         self.assertIn("newer release available: 4.0.0 -- major", result.stdout)
+        self.assertIn("next: ask Brain to plan the update round to framework release 4.0.0", result.stdout)
+        record["framework"]["release"] = "4.0.0"
+        tag = self.tmp / "framework"
+        git(tag, "tag", "v4.0.1")
+        path.write_text(json.dumps(record), encoding="utf-8")
+        result = fw(project, "status")
+        # A patch release is proposed too, as a light round (no release is missed).
+        self.assertIn("newer release available: 4.0.1 -- minor or patch: a light Tier 1 update round; Brain proposes it",
+                      result.stdout)
 
     def test_unreachable_framework_is_unknown_not_an_error(self) -> None:
         project = self.init_repo(self.tmp / "project")
@@ -118,3 +127,45 @@ class ReleaseCheck(TempDirTest):
         result = fw(project, "status", "--offline")
         self.assertIn("framework files changed locally", result.stdout)
         self.assertIn("docs/agents/FRAMEWORK.md", result.stdout)
+
+
+class SeatStart(TempDirTest):
+    def test_start_warns_about_uninitialised_submodules(self) -> None:
+        # Issue #19: the seat most likely to lack a submodule is the one never told.
+        sub = self.init_repo(self.tmp / "engine")
+        (sub / "engine.h").write_text("x\n", encoding="utf-8")
+        self.commit_all(sub, "engine")
+        project = self.init_repo(self.tmp / "project")
+        adopt(project, "--project", "Demo")
+        git(project, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "ocgcore")
+        (project / "docs/rounds/001-x").mkdir(parents=True)
+        (project / "docs/rounds/001-x/brief.md").write_text("# 001-x\n\nTier: 1\n", encoding="utf-8")
+        self.commit_all(project, "adopt, engine, brief")
+        seat = self.tmp / "seat"
+        git(self.tmp, "clone", "-q", str(project), str(seat))
+        result = fw(seat, "start", "--role", "worker", "--round", "001-x")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("submodule(s) not initialised here: ocgcore", result.stdout)
+
+
+class ScanScope(TempDirTest):
+    def test_the_personal_data_message_says_which_documents_are_scanned(self) -> None:
+        # Issue #22: "0 errors" must not read as "the whole repository is clean".
+        project = self.init_repo(self.tmp / "project")
+        adopt(project, "--project", "Demo")
+        (project / "docs/state.md").write_text("# State\n\nsee /Users/someone/Dev/x\n", encoding="utf-8")
+        result = fw(project, "check")
+        self.assertIn("docs/agents/**/*.md, docs/rounds/*/*.md and docs/rounds/*/attachments/**", result.stdout)
+        self.assertNotIn("tracked documents", result.stdout)
+
+    def test_round_attachments_are_scanned(self) -> None:
+        # Round 026: logs and long lists go in attachments/, where home folders are likeliest.
+        project = self.init_repo(self.tmp / "project")
+        adopt(project, "--project", "Demo")
+        folder = project / "docs/rounds/001-x/attachments/logs"
+        folder.mkdir(parents=True)
+        (folder / "run.log").write_text("ok\nread C:\\Users\\someone\\x.txt\n", encoding="utf-8")
+        (folder / "shot.png").write_bytes(b"\x89PNG\0\0/Users/someone/")
+        result = fw(project, "check")
+        self.assertIn("docs/rounds/001-x/attachments/logs/run.log:2 contains", result.stdout)
+        self.assertNotIn("shot.png", result.stdout)

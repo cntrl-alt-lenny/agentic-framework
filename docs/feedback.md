@@ -6,8 +6,10 @@ to read it.
 
 ## Where feedback arrives
 
-- **GitHub issues** on this repository, from the "Framework feedback" form.
-  Any device with a browser, and any agent with GitHub access, can file one.
+- **GitHub issues** on this repository, from the "Framework feedback" form,
+  or the "Idea or question" form for proposals and questions that are not
+  defects. Any device with a browser, and any agent with GitHub access, can
+  file one.
 - **Files** at `docs/framework-feedback/*.md` in a project, when the agent
   that found the problem could not reach GitHub. Brain copies each into an
   issue when it sees one, and links back.

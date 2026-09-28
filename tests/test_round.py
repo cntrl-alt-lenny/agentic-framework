@@ -7,63 +7,10 @@ property the framework's continuity promise rests on.
 
 from __future__ import annotations
 
-from tests.helpers import TempDirTest, fw, git
-
-WORKER_REPORT = """## Verified
-- feature works -- `python3 -c "print(1)"` -> exit 0
-  1
-
-## Not verified
-None.
-
-## Changed
-- feature.txt: the feature.
-
-## Open questions
-None.
-"""
-
-VERIFIER_REPORT = """Reviewed commit: see stamp.
-
-## Findings
-None.
-
-## Not verified
-None.
-
-## Verdict
-The change does what the brief asks.
-"""
+from tests.helpers import VERIFIER_REPORT, WORKER_REPORT, RoundTest, fw, git
 
 
-class RoundAcrossMachines(TempDirTest):
-    def setUp(self) -> None:
-        super().setUp()
-        self.origin = self.adopted_origin()
-        self.brain = self.clone(self.origin, "brain-mac")
-
-    def write_brief(self, round_id: str) -> None:
-        git(self.brain, "switch", "-q", "-c", f"brain/{round_id}")
-        folder = self.brain / "docs" / "rounds" / round_id
-        folder.mkdir(parents=True)
-        (folder / "brief.md").write_text(f"# {round_id}\n\nTier: 2\n", encoding="utf-8")
-        git(self.brain, "add", "-A")
-        git(self.brain, "commit", "-q", "-m", f"Brief {round_id}")
-        git(self.brain, "push", "-q", "-u", "origin", f"brain/{round_id}")
-        git(self.brain, "switch", "-q", "main")
-
-    def deliver_worker(self, clone: str, round_id: str) -> tuple:
-        worker = self.clone(self.origin, clone)
-        result = fw(worker, "start", "--role", "worker", "--round", round_id)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        (worker / "feature.txt").write_text("feature\n", encoding="utf-8")
-        git(worker, "add", "feature.txt")
-        git(worker, "commit", "-q", "-m", "Add the feature")
-        (worker / "docs" / "rounds" / round_id / "worker.md").write_text(WORKER_REPORT, encoding="utf-8")
-        result = fw(worker, "report", "--role", "worker", "--round", round_id, "--push")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        return worker, result
-
+class RoundAcrossMachines(RoundTest):
     def test_full_round_on_three_machines_with_squash_merge(self) -> None:
         self.write_brief("001-feature")
         worker, _ = self.deliver_worker("worker-windows", "001-feature")
@@ -290,3 +237,241 @@ class RoundAcrossMachines(TempDirTest):
                      ("--role", "worker", "--round", "../escape")):
             result = fw(self.brain, "start", *args)
             self.assertEqual(result.returncode, 2, args)
+
+
+class NextAction(RoundTest):
+    """After a break, status says seat by seat where each round stands and
+    ends with the owner's one next action (issue #26)."""
+
+    def status(self) -> str:
+        result = fw(self.brain, "status")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
+
+    def test_each_seat_is_followed_from_not_started_to_judged(self) -> None:
+        self.write_brief("020-seats")
+        out = self.status()
+        self.assertIn("in flight: 020-seats (Tier 2)", out)
+        self.assertIn("worker: not started", out)
+        self.assertIn("verifier: not started", out)
+        self.assertEqual(out.strip().splitlines()[-1][:40], "next: send the Worker prompt for round 0")
+        self.assertIn("--role worker", out.strip().splitlines()[-1])
+
+        # start pushes the seat's branch, so a started seat is not a missed paste
+        worker = self.clone(self.origin, "worker")
+        result = fw(worker, "start", "--role", "worker", "--round", "020-seats")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("worker/020-seats", git(self.brain, "ls-remote", "--heads", "origin"))
+        out = self.status()
+        self.assertIn("worker: started on origin/worker/020-seats, no report yet", out)
+        self.assertIn("next: wait for the Worker of round 020-seats", out)
+
+        (worker / "docs/rounds/020-seats/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "020-seats", "--push")
+        self.assertIn("end your final reply with: Demo · ROUND 020 · WORKER · DONE — report pushed at", result.stdout)
+        out = self.status()
+        self.assertIn("worker: reported at", out)
+        self.assertIn("next: send the Verifier prompt for round 020-seats", out)
+        self.assertNotIn("more)", out)
+
+        self.deliver_verifier("verifier", "020-seats")
+        out = self.status()
+        self.assertIn("verifier: reported at", out)
+        self.assertIn("next: ask Brain to judge round 020-seats", out)
+
+    def test_tier_1_expects_no_verifier_and_uses_the_projects_executor_name(self) -> None:
+        agents = self.brain / "AGENTS.md"
+        agents.write_text(agents.read_text(encoding="utf-8").replace("| Worker |", "| Builder |"), encoding="utf-8")
+        git(self.brain, "commit", "-q", "-am", "Call the executor Builder")
+        git(self.brain, "push", "-q", "origin", "main")
+        self.write_brief("021-light", tier=1)
+        out = self.status()
+        self.assertIn("in flight: 021-light (Tier 1)", out)
+        self.assertIn("builder: not started", out)
+        self.assertNotIn("verifier:", out)
+        self.assertIn("next: send the Builder prompt for round 021-light", out)
+
+    def test_a_stale_report_is_shown_as_stale(self) -> None:
+        self.write_brief("022-stale", tier=1)
+        worker, _ = self.deliver_worker("worker", "022-stale")
+        (worker / "late.txt").write_text("late\n", encoding="utf-8")
+        git(worker, "add", "late.txt")
+        git(worker, "commit", "-q", "-m", "Late")
+        git(worker, "push", "-q")
+        out = self.status()
+        self.assertIn("worker: stale", out)
+        self.assertIn("next: ask Brain what to send the Worker of round 022-stale", out)
+
+    def test_a_tier_0_round_asks_for_a_merge_not_a_judgement(self) -> None:
+        # Round 026: a Tier 0 round has no seats, so none of them has "reported".
+        self.write_brief("023-tiny", tier=0)
+        out = self.status()
+        self.assertIn("in flight: 023-tiny (Tier 0)", out)
+        self.assertNotIn("every seat has reported", out)
+        self.assertIn("next: ask Brain to merge round 023-tiny: it is Tier 0, so no seat works on it", out)
+
+    def test_nothing_in_flight_says_so_in_the_next_line(self) -> None:
+        out = self.status()
+        self.assertIn("nothing in flight", out)
+        self.assertEqual(out.strip().splitlines()[-1], "next: nothing is waiting on you; ask Brain for the next round")
+
+
+class Prompts(RoundTest):
+    """fw.py prompt prints the seat's prompt from one template (issue #26),
+    including where a local checkout goes (issue #29)."""
+
+    def test_prompt_has_the_header_the_worktree_and_the_final_line(self) -> None:
+        self.write_brief("030-prompt")
+        result = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "verifier")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[0], "Demo · ROUND 030 · VERIFIER")
+        self.assertIn("git worktree add --detach .worktrees/verifier-030 origin/main", result.stdout)
+        self.assertIn("python3 tools/fw.py start --role verifier --round 030-prompt", result.stdout)
+        self.assertIn("docs/agents/roles/verifier.md", result.stdout)
+        self.assertIn("Demo · ROUND 030 · VERIFIER · DONE — report pushed at <commit>", result.stdout)
+        again = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "verifier", "--message", "2")
+        self.assertEqual(again.stdout.splitlines()[0], "Demo · ROUND 030 · VERIFIER · message 2")
+        self.assertEqual(again.stdout.splitlines()[1:], lines[1:])
+
+    def test_the_header_names_the_repository_not_the_agents_heading(self) -> None:
+        # Round 026: AGENTS.md's heading gave "AGENTS.md — coordination model for ...".
+        self.write_brief("031-name")
+        agents = self.brain / "AGENTS.md"
+        agents.write_text(agents.read_text(encoding="utf-8").replace(
+            "# Demo", "# AGENTS.md — coordination model for demo", 1), encoding="utf-8")
+        self.commit_all(self.brain, "A long AGENTS.md heading")
+        for url, name in (("https://github.com/someone/edopro-retro-formats.git", "edopro-retro-formats"),
+                          ("git@github.com:someone/edopro-next.git", "edopro-next"),
+                          ("https://github.com/someone/gx-spirit-caller", "gx-spirit-caller")):
+            git(self.brain, "remote", "set-url", "origin", url)
+            result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+            self.assertEqual(result.stdout.splitlines()[0], f"{name} · ROUND 031 · BUILDER", result.stderr)
+        git(self.brain, "remote", "remove", "origin")
+        result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+        self.assertEqual(result.stdout.splitlines()[0], "brain-mac · ROUND 031 · BUILDER", result.stderr)
+
+    def test_a_re_review_prompt_names_a_new_folder(self) -> None:
+        # Round 026: the first review's .worktrees/verifier-032 usually still exists.
+        self.write_brief("032-again")
+        worker, _ = self.deliver_worker("worker", "032-again")
+        verifier = self.clone(self.origin, "verifier")
+        self.assertEqual(fw(verifier, "start", "--role", "verifier", "--round", "032-again").returncode, 0)
+
+        def folder() -> str:
+            git(self.brain, "fetch", "-q", "origin")
+            out = fw(self.brain, "prompt", "--round", "032-again", "--role", "verifier").stdout
+            return out.split("git worktree add --detach ", 1)[1].split()[0]
+
+        self.assertEqual(folder(), ".worktrees/verifier-032")  # started, not yet reported: same seat
+        (verifier / "docs/rounds/032-again/verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
+        self.assertEqual(fw(verifier, "report", "--role", "verifier", "--round", "032-again", "--push").returncode, 0)
+        self.assertEqual(folder(), ".worktrees/verifier-032-2")
+        path = worker / "docs/rounds/032-again/worker.md"
+        path.write_text(WORKER_REPORT.replace("the feature.", "the feature, fixed."), encoding="utf-8")
+        self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "032-again", "--push").returncode, 0)
+        second = self.deliver_verifier("verifier-2", "032-again")
+        self.assertEqual(git(second, "branch", "--show-current"), "verifier/032-again-2")
+        self.assertEqual(folder(), ".worktrees/verifier-032-3")
+
+    def test_prompt_for_the_brain_is_refused(self) -> None:
+        result = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "brain")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("paste 1", result.stderr)
+
+
+class ReportChecks(RoundTest):
+    """fw.py report refuses a report that would fail the project's checks (issue #23)."""
+
+    def test_a_report_quoting_a_personal_path_or_a_dead_link_is_refused(self) -> None:
+        self.write_brief("040-leak", tier=1)
+        worker = self.clone(self.origin, "worker")
+        fw(worker, "start", "--role", "worker", "--round", "040-leak")
+        path = worker / "docs/rounds/040-leak/worker.md"
+        for bad, expected in (("Found /Users/someone/Dev/x in docs/setup.md.", "contains a macOS home folder"),
+                              ("See [the build notes](../BUILD.md).", "links to ../BUILD.md")):
+            path.write_text(WORKER_REPORT.replace("None.\n\n## Changed", f"{bad}\n\n## Changed"), encoding="utf-8")
+            result = fw(worker, "report", "--role", "worker", "--round", "040-leak", "--push")
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertIn(expected, result.stderr)
+            self.assertIn("never the value itself", result.stderr)
+            self.assertNotIn("Report for round", git(worker, "log", "-1", "--format=%s"))
+        path.write_text(WORKER_REPORT.replace(
+            "None.\n\n## Changed", "docs/setup.md:1 contains a home-folder path; see `docs/BUILD.md`.\n\n## Changed"),
+            encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "040-leak", "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(fw(worker, "check").returncode, 0)
+
+
+class ReReview(RoundTest):
+    """A re-review must win over the review it replaces (issue #30)."""
+
+    def test_a_re_review_after_a_report_only_fix_is_the_one_to_judge(self) -> None:
+        self.write_brief("090-again")
+        worker, _ = self.deliver_worker("worker", "090-again")
+        self.deliver_verifier("verifier", "090-again")
+        # The fix rewrites only the worker report: the shape seen in gx-spirit-caller.
+        path = worker / "docs/rounds/090-again/worker.md"
+        path.write_text(WORKER_REPORT.replace("- feature.txt: the feature.", "- feature.txt: the feature, described right."),
+                        encoding="utf-8")
+        self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "090-again", "--push").returncode, 0)
+        second = self.deliver_verifier("verifier-2", "090-again")
+        self.assertEqual(git(second, "branch", "--show-current"), "verifier/090-again-2")
+        result = fw(self.brain, "delivery", "--round", "090-again")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("most complete: origin/verifier/090-again-2", result.stdout)
+        self.assertIn("a newer review is on origin/verifier/090-again-2", result.stdout)
+
+    def test_two_unrelated_deliveries_get_no_recommendation(self) -> None:
+        import importlib.util
+        from tests.helpers import ROOT
+        spec = importlib.util.spec_from_file_location("fwmod", ROOT / "tools" / "fw.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        repo = self.brain
+        base = git(repo, "rev-parse", "HEAD")
+        heads = []
+        for name in ("a", "b"):
+            git(repo, "switch", "-q", "-c", f"side-{name}", base)
+            (repo / f"{name}.txt").write_text(name, encoding="utf-8")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", name)
+            heads.append(git(repo, "rev-parse", "HEAD"))
+        entries = [{"ref": f"side-{n}", "tip": h, "reports": {"worker": {"head": h}}, "problems": [], "stale": set()}
+                   for n, h in zip("ab", heads)]
+        best, why = module.most_complete(repo, entries)
+        self.assertIsNone(best)
+        self.assertIn("no single branch to judge", why)
+
+
+class ProjectReportCheck(RoundTest):
+    """A project's own fast check runs on the report before it is committed
+    (issue #23, second comment: a quoted link broke the project's link test)."""
+
+    def test_the_named_check_refuses_a_report_that_breaks_it(self) -> None:
+        import json
+        import sys
+        record = self.brain / "docs/agents/framework.json"
+        data = json.loads(record.read_text(encoding="utf-8"))
+        data["settings"]["report_check"] = f'"{sys.executable}" check_reports.py'
+        record.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        (self.brain / "check_reports.py").write_text(
+            "import pathlib, sys\n"
+            "bad = [p for p in pathlib.Path('docs/rounds').rglob('*.md') if 'FORBIDDEN' in p.read_text()]\n"
+            "print('broken:', bad)\nsys.exit(1 if bad else 0)\n", encoding="utf-8")
+        self.commit_all(self.brain, "A project check for reports")
+        git(self.brain, "push", "-q", "origin", "main")
+        self.write_brief("095-own", tier=1)
+        worker = self.clone(self.origin, "worker")
+        fw(worker, "start", "--role", "worker", "--round", "095-own")
+        path = worker / "docs/rounds/095-own/worker.md"
+        path.write_text(WORKER_REPORT.replace("None.\n\n## Changed", "FORBIDDEN\n\n## Changed"), encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "095-own", "--push")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("the project's report check fails", result.stderr)
+        self.assertIn("check_reports.py -> exit 1", result.stderr)
+        self.assertFalse(path.read_text(encoding="utf-8").startswith("<!-- fw-report"))
+        path.write_text(WORKER_REPORT, encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "095-own", "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
