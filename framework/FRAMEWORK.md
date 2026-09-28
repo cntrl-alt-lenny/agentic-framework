@@ -104,7 +104,7 @@ Brain puts a tier in every brief. Ceremony follows risk.
 |---|---|---|
 | 0 | Housekeeping: `docs/state.md`, typos, record fixes | Brain does it on a `brain/<topic>` branch and merges under the merge rule. No brief, no Verifier. |
 | 1 | Ordinary changes whose tests would catch a mistake | Brief → Worker → Brain review and re-derivation → merge. |
-| 2 | Canonical data, security, claims about external facts, anything tests cannot catch, framework updates | Brief → Worker → Verifier (blind first pass) → Brain → merge. |
+| 2 | Canonical data, security, claims about external facts, anything tests cannot catch, major framework updates | Brief → Worker → Verifier (blind first pass) → Brain → merge. |
 
 ## The round
 
@@ -121,11 +121,21 @@ You are the Brain for this project. First run python3 tools/fw.py status (use py
 Brain writes the brief to `docs/rounds/<id>/brief.md` on a branch
 `brain/<id>`, pushes it, and gives the owner a Worker prompt (and, for Tier 2,
 a Verifier prompt to send only after the Worker has finished).
+`python3 tools/fw.py prompt --round <id> --role <role>` prints each one.
+
+**Headers.** Every prompt's first line is `<project> · ROUND <number> ·
+<ROLE>`, plus `· message N` for a later message to the same seat in the same
+round. Every seat ends its final reply with the same header and its outcome:
+`· DONE — report pushed at <commit>`, or `STOPPED` or `BLOCKED` with the
+reason. Side by side, the chats show which seat received what and which
+finished.
 
 **2. Run the seats** — paste each prompt into any tool, on any machine. Each
 seat starts with `fw.py start`, which puts it on its own branch at the right
-commit, whether the tool gave it a fresh clone, a cloud workspace, a linked
-checkout or a branch name of its own choosing.
+commit, whether the tool gave it a fresh clone, a cloud workspace or a branch
+name of its own choosing, and pushes that branch so the seat shows as started.
+On the owner's machine a seat works in `.worktrees/<role>-<number>` inside the
+project (a git-ignored linked checkout), never in a copy beside it.
 
 **3. Come back** — to the same Brain session or a fresh one (use paste 1
 first if fresh):
@@ -136,7 +146,9 @@ The Worker has finished (and the Verifier, if there was one). Check the round an
 
 Brain runs `fw.py delivery --round <id>`, reviews the exact commit, re-derives,
 accepts or rejects, and shows the merge card. A rejected round becomes a new
-brief, with a new id, that says which round it supersedes and why.
+brief, with a new id, that says which round it supersedes and why. After any
+break, the last line of `fw.py status` (`next:`) names the owner's one next
+action.
 
 **Round ids** are `NNN-short-slug` (for example `014-export-validator`): a
 zero-padded sequence number first, so folders sort in order.
@@ -149,13 +161,19 @@ a section that genuinely has nothing.
 - **Worker:** `Verified`, `Not verified`, `Changed`, `Open questions`.
 - **Verifier:** `Findings`, `Not verified`, `Verdict`.
 
-The tool stamps the report with the round, role, branch, the commit it
-describes, operating system and time, then commits only that file. A report
-describes the commit it was stamped against: if the branch changes afterwards,
-`fw.py delivery` says the report is stale and its author must rewrite it.
+The tool refuses a report that would fail the project's checks (name a
+leaked path by file, line and kind, never by repeating it), stamps it with
+the round, role, branch, commit, operating system and time, and commits only
+that file. A report describes the commit it was stamped against: if the
+branch changes afterwards, `fw.py delivery` says the report is stale and its
+author must rewrite it.
 
 When a report changes `docs/state.md`, it lists every sentence added and
 removed.
+
+Only a file named for a role (`worker.md`, `verifier.md`, or the project's
+executor name) is a report. A round's supporting files — long lists, logs,
+evidence — go in `docs/rounds/<id>/attachments/`.
 
 ## State
 
@@ -168,10 +186,10 @@ that must be recorded as true at a moment goes under `## Historical anchors`.
 
 - Everything is resumable from anywhere once it is pushed. Before leaving a
   machine, the owner says so; Brain runs `fw.py status --leaving`, pushes what
-  it safely can, and says in plain words whether it is safe to go.
-- Any tool that can run git and Python can hold any seat. Linked checkouts
-  (`git worktree`) are an optional convenience for running several seats on
-  one machine; they are never required.
+  it safely can, and says in plain words whether it is safe to go. Work merged
+  by squash or rebase, and tags the remote already holds, count as pushed.
+- Any tool that can run git and Python can hold any seat. `fw.py status`
+  lists seat checkouts whose work is merged; Brain removes them.
 - Tool-specific setup lives in an adapter and only points here.
 
 ## Framework releases
@@ -180,15 +198,18 @@ The project's pinned release and a fingerprint of every framework file are in
 `docs/agents/framework.json`. `fw.py status` compares the pin with the
 framework's latest release and lists framework files edited locally.
 
-- **Major release** (contracts changed): update before starting the next round.
-- **Minor or patch**: update when convenient. Never block product work for it.
-- An update is a Tier 2 round, never started mid-round. The Worker fetches the
-  framework at the target release and runs its `tools/adopt.py <project>
-  --update`, which replaces unchanged framework files, writes a `.framework`
-  copy beside any file edited locally, removes retired files it can prove were
-  never edited, never touches project-owned files, and prints every release's
-  "what an adopter must do" steps. Going back is the same command with the
-  earlier release.
+Brain proposes an update round for every newer release `status` reports,
+never mid-round. A **major** release (contracts changed) is a Tier 2 round
+before the next round. A **minor or patch** release is a Tier 1 round that
+never blocks product work: the update never overwrites an edited file, and
+the project's checks run.
+
+The Worker fetches the framework at the target release and runs its
+`tools/adopt.py <project> --update`. It replaces unchanged framework files,
+writes a `.framework` copy beside any file edited locally, removes retired
+files it can prove were never edited, never touches or re-creates
+project-owned files, and prints every release's "what an adopter must do"
+steps. Going back is the same command with the earlier release.
 
 ## Reporting a framework problem
 
@@ -197,7 +218,8 @@ step that needs the owner to do something technical — report it instead of
 working around it silently:
 
 - Open an issue on the framework repository using its "Framework feedback"
-  form, or, if your tool cannot reach GitHub, commit the same fields to
+  form ("Idea or question" for anything that is not a defect), or, if your
+  tool cannot reach GitHub, commit the same fields to
   `docs/framework-feedback/<date>-<slug>.md` in this project.
 - Fields: project and commit, framework release, what happened, the exact
   commands that reproduce it, expected and actual result.

@@ -22,7 +22,7 @@ weeks away.
 | `docs/agents/roles/` | One short card each for Brain, Worker and Verifier. |
 | `docs/state.md` | The owner's standing decisions. Short, and checked to stay short. |
 | `docs/rounds/<id>/` | One folder per round: the brief and each seat's committed report. |
-| `tools/fw.py` | The one tool: `status`, `start`, `report`, `delivery`, `check`. |
+| `tools/fw.py` | The one tool: `status`, `start`, `report`, `delivery`, `prompt`, `check`. |
 | `tests/test_framework.py` | Runs the project checks with the project's own tests. |
 | `docs/agents/framework.json` | The pinned release and a fingerprint of every framework file. |
 

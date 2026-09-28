@@ -58,7 +58,7 @@ class Budgets(unittest.TestCase):
 
 class Consistency(unittest.TestCase):
     def test_every_documented_command_exists(self) -> None:
-        commands = {"status", "start", "report", "delivery", "check"}
+        commands = {"status", "start", "report", "delivery", "prompt", "check"}
         for path in markdown_files():
             for match in re.finditer(r"fw\.py (\w+)", path.read_text(encoding="utf-8")):
                 self.assertIn(match.group(1), commands, f"{path}: fw.py {match.group(1)}")

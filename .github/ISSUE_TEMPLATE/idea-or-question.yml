@@ -1,0 +1,27 @@
+name: Idea or question
+description: A proposal or a question about the framework that is not a defect. Defects go in "Framework feedback".
+title: "[idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One idea or question per issue. No personal paths, email addresses, secrets or work data. A proposal is triaged like any feedback: it changes the framework only if its cost is shown and the change removes more than it adds.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea or question
+      description: In plain words. What would be different for the owner or a project?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: What it costs today (time, mistakes, confusion), with an example from a project if there is one.
+    validations:
+      required: true
+  - type: input
+    id: project
+    attributes:
+      label: Project and framework release
+      description: Where it came up, if anywhere, and the release from docs/agents/framework.json.
