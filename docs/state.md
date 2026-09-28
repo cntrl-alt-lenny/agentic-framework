@@ -36,12 +36,10 @@ then running real product rounds on it.
 
 ## Queued, in order
 
-1. **Release 3.1.0** (rounds `025-release-3-1-0` and `026-release-3-1-0-fixes`): fix every open issue, make
-   the owner's next action visible after a break, and make minor updates a
-   light round. The three projects moved to 3.0.0 between 22 and 27 Sept.
-2. **Each project takes 3.1.0** in its own update round.
-3. **Ten product rounds with no framework release.** Then review where time
-   actually went, with numbers.
+1. **Each project takes 3.1.0** in its own Tier 1 update round, as the 3.1.0
+   CHANGELOG entry describes (released 2026-09-28, rounds 025 and 026).
+2. **Ten product rounds with no framework release.** Then review where time
+   actually went, with numbers. Issues #31 and #32 wait for that batch.
 
 ## Deliberately not done
 
