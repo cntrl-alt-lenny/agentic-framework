@@ -96,7 +96,20 @@ In scope, one class per item (the issue says more):
 7. **An "Idea or question" issue form** beside "Framework feedback", for
    proposals and questions that are not defects (the owner asked where ideas
    like #26 belong).
-8. **Release mechanics.** `VERSION` 3.1.0; a CHANGELOG entry saying what changed,
+8. **Addendum, 28 Sept (two findings from gx-spirit-caller while this round ran).**
+   - **A re-review must win (#30).** When two review branches of the same round
+     are both delivered, `delivery` recommends the one whose reviewed commit
+     descends from the other's, never the older one by name order; if neither
+     descends from the other, it recommends nothing and says why. Reproduce it
+     with a fix that only rewrites the worker report (the shape in #30's
+     comment), not only with a code fix.
+   - **A report must not break the project's own checks (#23, second comment).**
+     Extend item 6: besides `fw.py check`, a project can name one fast check
+     command (for example in `docs/agents/framework.json` `settings`) that
+     `fw.py report` runs on the tree it is about to commit, refusing on
+     failure. The Worker and Verifier cards say that text quoted in a report
+     carries no live relative links and no personal paths (quote it as code).
+9. **Release mechanics.** `VERSION` 3.1.0; a CHANGELOG entry saying what changed,
    why, words and lines added and removed, and "What an adopter must do";
    `tests/test_adopt.py` extended with a fixture for each defect that came from a
    real project's layout (a seat file named for the project's executor, a
@@ -124,7 +137,7 @@ the owner's yes.
 
 ## Acceptance criteria
 
-1. Each issue #18–#27 and #29 has at least one test that fails at `v3.0.0` and
+1. Each issue #18–#27, #29 and #30 (and #23's second comment) has at least one test that fails at `v3.0.0` and
    passes at your head. The report names each test and shows it failing at the
    old commit (break-then-fix or run against `v3.0.0`'s `tools/`).
 2. On a scratch copy of each of the three projects, `fw.py status` (from your
