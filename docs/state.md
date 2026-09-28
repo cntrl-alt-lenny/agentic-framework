@@ -28,18 +28,19 @@ then running real product rounds on it.
   moved to issues when next read.
 - **Releases are batched**: at most one every two weeks, and none for ten
   product rounds after a release, unless an issue is marked `required`.
+  The owner lifted this once (2026-09-28) for 3.1.0: after six product rounds,
+  the coordination issues (#18-#29) were costing the owner time every day.
 - **The README standard** lives here at `standards/readme.md`.
 - **One standing chat per seat** may be reused across rounds; a fresh chat is
   better after a rejected round or when a chat has grown long.
 
 ## Queued, in order
 
-1. **Migrate each project to 3.0.0** — each project's own Tier 2 round, run
-   there, using `python3 tools/adopt.py <project> --update` from a clone of
-   this repository at `v3.0.0`. Order: edopro-retro-formats, edopro-next,
-   gx-spirit-caller (its large state document and its pre-framework queue
-   need a decision first: which one is the project's real state model).
-2. **Ten product rounds with no framework release.** Then review where time
+1. **Release 3.1.0** (round `025-release-3-1-0`): fix every open issue, make
+   the owner's next action visible after a break, and make minor updates a
+   light round. The three projects moved to 3.0.0 between 22 and 27 Sept.
+2. **Each project takes 3.1.0** in its own update round.
+3. **Ten product rounds with no framework release.** Then review where time
    actually went, with numbers.
 
 ## Deliberately not done
