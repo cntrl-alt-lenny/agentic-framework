@@ -995,7 +995,8 @@ def cmd_worktree_start(root: Path, role: str, round_id: str, review: str | None,
     if role == "brain":
         raise FwError("Brain does not start a seat worktree")
     relative = Path(folder)
-    if len(relative.parts) != 2 or relative.parts[0] != ".worktrees" or not ROLE_NAME.fullmatch(relative.parts[1]):
+    # A folder includes the role, round number and optional review suffix.
+    if len(relative.parts) != 2 or relative.parts[0] != ".worktrees" or not re.fullmatch(r"[a-z][a-z0-9_-]{0,127}", relative.parts[1]):
         raise FwError("--worktree must name .worktrees/<seat-folder>")
     if (root / ".worktrees").is_symlink() or (root / relative).is_symlink():
         raise FwError("seat worktree path is a symlink; it was not touched")

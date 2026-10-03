@@ -78,6 +78,21 @@ class SeatResumption(HandoffRound):
         self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
         self.assertEqual(git(seat, "rev-parse", "HEAD"), head)
 
+    def test_maximum_length_project_role_has_a_usable_generated_folder(self):
+        role = "w" * 40  # Legal role limit; the folder also includes a round number.
+        agents = self.brain / "AGENTS.md"
+        agents.write_text(agents.read_text(encoding="utf-8").replace("| Worker |", f"| {role.capitalize()} |"),
+                          encoding="utf-8")
+        self.commit_all(self.brain, "Declare long project role")
+        git(self.brain, "push", "-q", "origin", "main")
+        self.write_brief("126-long-role")
+        prompt = self.prompt("126-long-role", role)
+        started, seat = dispatch_start(self, self.brain, prompt)
+        self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+        self.assertEqual(git(seat, "branch", "--show-current"), f"{role}/126-long-role")
+        resumed, _ = dispatch_start(self, self.brain, prompt)
+        self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+
     def test_dirty_matching_checkout_is_preserved(self):
         self.write_brief("121-dirty")
         prompt = self.prompt("121-dirty")
