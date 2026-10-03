@@ -2,10 +2,10 @@
 round: 027-explicit-seat-names
 role: builder
 branch: builder/027-explicit-seat-names
-head: 3d643a5aae1d439fc55feae97ba230913abeecc6
+head: 3b38c6b75d07dd16d9eabb8b1b36531767a20ba7
 os: macOS 27.0
 python: 3.9.6
-written: 2026-10-03T16:51:49Z
+written: 2026-10-03T16:52:32Z
 -->
 ## Verified
 
@@ -62,9 +62,11 @@ Introduction: before 44, after 32 (12 removed)
 Dispatch bullet: before 48, after 60 (12 added)
 ```
 
-The exact wording diff from `git diff ffd38eb^ ffd38eb -- framework/roles/brain.md`
+The exact wording diff from `git diff --unified=0 ffd38eb^ ffd38eb -- framework/roles/brain.md`
 is recorded verbatim in `docs/rounds/027-explicit-seat-names/attachments/brain.diff`.
 It changes only the introduction and dispatch bullet; other guidance is intact.
+Zero context lines avoid trailing spaces in the saved diff. A final range diff
+check found whitespace in the original attachment; this attachment corrects it.
 
 Illustrative opening labels for the surrounding explanation (evidence of how
 seat and specialty can be distinguished, not replacement prompts):
