@@ -17,4 +17,3 @@ Explicit unchanged delivery: 0
 origin/verifier/210-reviewed (1fa5c7440a9f): delivered
   verifier: report describes a6f50b155410 (written 2026-10-03T20:25:11Z on macOS 27.0)
   worker: report describes 71d7abf9315e (written 2026-10-03T20:25:10Z on macOS 27.0)
-
