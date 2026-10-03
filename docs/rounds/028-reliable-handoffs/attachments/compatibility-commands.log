@@ -1,0 +1,31 @@
+generated prompt
+$ python3 tools/fw.py prompt --round 126-long-role --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+exit 0
+Demo · ROUND 126 · WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+
+You are the Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww for Demo, round 126-long-role. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --worktree .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/126-long-role/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/126-long-role/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.md and running python3 tools/fw.py report --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --push. End your final reply with exactly one line: Demo · ROUND 126 · WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --worktree .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
+exit 0
+created .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
+  continuing earlier work from wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww/126-long-role
+seat ok: wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww, round 126-long-role, branch wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww/126-long-role at a0b5157a9e2d
+  brief: docs/rounds/126-long-role/brief.md
+  finish with: write docs/rounds/126-long-role/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.md, then python3 tools/fw.py report --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --push
+work in: .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
+
+generated startup command
+$ python3 tools/fw.py start --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --worktree .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
+exit 0
+  continuing earlier work from origin/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww/126-long-role
+resuming .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
+  continuing earlier work from origin/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww/126-long-role
+seat ok: wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww, round 126-long-role, branch wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww/126-long-role at a0b5157a9e2d
+  brief: docs/rounds/126-long-role/brief.md
+  finish with: write docs/rounds/126-long-role/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww.md, then python3 tools/fw.py report --role wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --round 126-long-role --push
+work in: .worktrees/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-126
