@@ -2,10 +2,10 @@
 round: 028-reliable-handoffs
 role: builder
 branch: builder/028-reliable-handoffs
-head: 51e512ef1c39fbce466b0802e3db6a45dae89077
+head: 7a8480f2e8317b2b39db1c2aa45f2fe9541fbba9
 os: macOS 27.0
 python: 3.9.6
-written: 2026-10-03T19:37:26Z
+written: 2026-10-03T19:41:51Z
 -->
 ## Verified
 
@@ -202,7 +202,13 @@ A newly added maximum-length project-role case failed before the correction:
 startup exited 2 because the folder validator incorrectly reused the role's
 40-character limit. The folder includes the round/review suffix too. Its
 separate bound now accommodates every generated legal role/round combination.
-No role name or role validation changed.
+No role name or role validation changed. Commit `dc66d701942c15e4724a039548e947cf46edf02b` also keeps the
+existing nonnumeric round ID characters usable in generated folder names.
+At that commit the same targeted test passed (one test in 7.592s, exit 0),
+executing startup and resend for both `126-long-role` and `A_1.shape` with a
+40-character declared role. The exact output is in
+`attachments/role-shapes-tests.log` and actual commands are in
+`attachments/role-shapes-commands.log`.
 
 At that commit, `python3 -m unittest tests.test_handoffs.SeatResumption.test_maximum_length_project_role_has_a_usable_generated_folder -v`
 exited 0; the actual generated startup and its repeat both exited 0 and kept
