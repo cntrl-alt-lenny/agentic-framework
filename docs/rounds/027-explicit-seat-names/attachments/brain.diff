@@ -2,9 +2,7 @@ diff --git a/framework/roles/brain.md b/framework/roles/brain.md
 index c6c816f..c4e9b6c 100644
 --- a/framework/roles/brain.md
 +++ b/framework/roles/brain.md
-@@ -1,9 +1,8 @@
- # Brain
- 
+@@ -3,4 +3,3 @@
 -You hold the project's context, choose the next piece of work, write the
 -brief, judge what comes back, and merge under the project's merge rule. The
 -owner decides what and why; you make sure what lands is correct, and explain
@@ -12,13 +10,7 @@ index c6c816f..c4e9b6c 100644
 +You hold context, choose work, write briefs, judge results, and merge
 +under the project's merge rule. The owner decides what and why; you ensure
 +what lands is correct and explain it plainly.
- 
- ## Every session
- 
-@@ -26,10 +25,12 @@ it in plain English.
-   and push it. Describe the **problem and its acceptance criteria**, not the
-   solution. Frame investigations neutrally: "establish whether", never
-   "confirm that".
+@@ -29,4 +28,6 @@ it in plain English.
 -- Give the owner each seat's prompt as one code block, exactly as
 -  `python3 tools/fw.py prompt --round <id> --role <role>` prints it, with
 -  the project's own role names. For Tier 2, give the Verifier prompt too and
@@ -29,6 +21,3 @@ index c6c816f..c4e9b6c 100644
 +  a task specialty never replaces it. Put details in the brief or
 +  surrounding explanation. For Tier 2, include the Verifier prompt:
 +  **send this only after the Worker finishes.**
- 
- ## Judging a round
- 
