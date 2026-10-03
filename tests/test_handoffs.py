@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from tests.helpers import (ROOT, VERIFIER_REPORT, WORKER_REPORT, RoundTest,
+from tests.helpers import (ENV, ROOT, VERIFIER_REPORT, WORKER_REPORT, RoundTest,
                            TempDirTest, fw, git, run)
 
 
@@ -211,12 +211,23 @@ class FirstAdoption(TempDirTest):
             shutil.copyfile(baseline, self.source / "tools/fw.py")
         self.commit_all(self.source, "Pinned framework fixture")
         self.pin = git(self.source, "rev-parse", "HEAD")
+        self.address = "https://fixture.invalid/framework"
+        # Git rewrites this portable, non-personal source to our local fixture.
+        # No network is contacted, and every clone executes the same prompt.
+        self.saved_env = ENV.copy()
+        ENV.update({"GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_2": f"url.{self.source.as_posix()}.insteadOf",
+                    "GIT_CONFIG_VALUE_2": self.address})
         self.project = self.init_repo(self.tmp / "seed")
         (self.project / "README.md").write_text("# Demo\n", encoding="utf-8")
         self.commit_all(self.project, "Unadopted project")
         self.origin = self.tmp / "Demo.git"
         git(self.tmp, "clone", "-q", "--bare", str(self.project), str(self.origin))
         self.brain = self.clone(self.origin, "brain")
+
+    def tearDown(self):
+        ENV.clear()
+        ENV.update(self.saved_env)
+        super().tearDown()
 
     def external(self, repo, *args):
         command = [sys.executable, str(self.source / "tools/fw.py"), "--cwd", str(repo), *args]
@@ -230,7 +241,7 @@ class FirstAdoption(TempDirTest):
         folder.mkdir(parents=True)
         (folder / "brief.md").write_text(
             f"# 130-adopt\nTier: 2\nMode: {mode}\nSupersedes: none\n"
-            f"Framework-source: {source or self.source}\nFramework-commit: {pin or self.pin}\n"
+            f"Framework-source: {source or self.address}\nFramework-commit: {pin or self.pin}\n"
             "Install the pinned framework and adapt AGENTS.md.\n", encoding="utf-8")
         self.commit_all(self.brain, "First-adoption brief only")
         git(self.brain, "push", "-q", "-u", "origin", "brain/130-adopt")
@@ -336,7 +347,8 @@ class FirstAdoption(TempDirTest):
         (publisher / "later.txt").write_text("later source work\n", encoding="utf-8")
         self.commit_all(publisher, "Advance source branch")
         git(publisher, "push", "-q")
-        self.adoption_brief(source=remote)
+        ENV["GIT_CONFIG_KEY_2"] = f"url.{remote.as_posix()}.insteadOf"
+        self.adoption_brief()
         result = self.external(self.brain, "prompt", "--round", "130-adopt", "--role", "worker")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(self.pin, result.stdout)
