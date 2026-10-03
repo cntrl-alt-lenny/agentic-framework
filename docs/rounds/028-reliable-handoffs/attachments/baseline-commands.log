@@ -1,0 +1,110 @@
+generated prompt
+$ python3 tools/fw.py prompt --round 120-resume --role worker
+exit 0
+Demo · ROUND 120 · WORKER
+
+You are the Worker for Demo, round 120-resume. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here): from its main checkout run git worktree add --detach .worktrees/worker-120 origin/main and work in that folder, never in a copy beside the project. In a cloud workspace, work in the clone it gives you.
+
+In that folder, first run python3 tools/fw.py start --role worker --round 120-resume (use py -3 or python if python3 is not found) and stop if it fails. Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/120-resume/brief.md, and carry out the brief.
+
+Finish, even if you stop early, by writing docs/rounds/120-resume/worker.md and running python3 tools/fw.py report --role worker --round 120-resume --push. End your final reply with exactly one line: Demo · ROUND 120 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated worktree command
+$ git worktree add --detach .worktrees/worker-120 origin/main
+exit 0
+HEAD is now at 74ca0fe Use baseline tool
+Preparing worktree (detached HEAD 74ca0fe)
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 120-resume
+exit 0
+seat ok: worker, round 120-resume, branch worker/120-resume at 676b0f560edc
+  brief: docs/rounds/120-resume/brief.md
+  finish with: write docs/rounds/120-resume/worker.md, then python3 tools/fw.py report --role worker --round 120-resume --push
+
+generated worktree command
+$ git worktree add --detach .worktrees/worker-120 origin/main
+exit 128
+Preparing worktree (detached HEAD 74ca0fe)
+fatal: '.worktrees/worker-120' already exists
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status --offline
+exit 0
+Framework
+  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  nothing in flight
+This machine
+  on main; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: nothing is waiting on you; ask Brain for the next round
+
+before successor status
+$ python3 tools/fw.py status
+exit 0
+Framework
+  pinned to agentic-framework 3.1.0 (<framework>)
+  up to date with the latest release (3.1.0)
+  framework files changed locally (project rules belong in AGENTS.md): tools/fw.py
+Merge rule
+  owner-approves
+Rounds
+  in flight: 110-audit (Tier 2)
+    worker: reported at 90f92dff6a66
+    verifier: reported at 25c18725d32a
+This machine
+  on main; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to judge round 110-audit: every seat has reported
+
+after successor status
+$ python3 tools/fw.py status
+exit 0
+Framework
+  pinned to agentic-framework 3.1.0 (<framework>)
+  up to date with the latest release (3.1.0)
+  framework files changed locally (project rules belong in AGENTS.md): tools/fw.py
+Merge rule
+  owner-approves
+Rounds
+  in flight: 110-audit (Tier 2)
+    worker: stale -- its report no longer describes its branch
+    verifier: stale -- its report no longer describes its branch
+  in flight: 111-followup (Tier 2)
+    worker: not started
+    verifier: not started
+  in flight: 112-sibling (Tier 1)
+    worker: not started
+This machine
+  on z-inherited; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain what to send the Worker of round 110-audit: its report is out of date
+
+automatic original delivery
+$ python3 tools/fw.py delivery --round 110-audit
+exit 1
+origin/brain/111-followup (37c6f6be0e4a): NOT delivered
+  problem: origin/brain/111-followup changed after the verifier report (docs/rounds/111-followup/brief.md); the report describes an older commit, so the verifier must rewrite it
+  problem: origin/brain/111-followup changed after the worker report (docs/rounds/111-followup/brief.md); the report describes an older commit, so the worker must rewrite it
+origin/z-inherited (ddf373ebb894): NOT delivered
+  problem: origin/z-inherited changed after the verifier report (docs/rounds/112-sibling/brief.md, docs/rounds/112-sibling/notes.md); the report describes an older commit, so the verifier must rewrite it
+  problem: origin/z-inherited changed after the worker report (docs/rounds/112-sibling/brief.md, docs/rounds/112-sibling/notes.md); the report describes an older commit, so the worker must rewrite it
+
+named unchanged delivery
+$ python3 tools/fw.py delivery --round 110-audit --branch origin/verifier/110-audit
+exit 0
+origin/verifier/110-audit (254e16a0ef2d): delivered
+  verifier: report describes 25c18725d32a (written 2026-10-03T19:19:04Z on macOS 27.0)
+  worker: report describes 90f92dff6a66 (written 2026-10-03T19:19:03Z on macOS 27.0)

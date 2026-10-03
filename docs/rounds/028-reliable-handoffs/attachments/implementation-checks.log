@@ -1,0 +1,14 @@
+Checked implementation commit: 419779a7d4d225e7389ebbb3a4efc791b95dbbe5
+$ ruff check --select F,E9,B,UP --target-version py39 tools templates tests
+exit 0
+All checks passed!
+
+$ python3 tools/fw.py check
+exit 0
+0 error(s), 0 warning(s)
+
+$ git diff --check
+exit 0
+
+$ git diff 7f29a13162a8 HEAD --check
+exit 0

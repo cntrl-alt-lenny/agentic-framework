@@ -1,0 +1,4 @@
+framework/FRAMEWORK.md: 1707 -> 1707; delta 0
+framework/roles/brain.md: 656 -> 651; delta -5
+framework/roles/worker.md: 381 -> 370; delta -11
+README.md: 652 -> 634; delta -18

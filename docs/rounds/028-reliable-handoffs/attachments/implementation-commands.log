@@ -1,0 +1,520 @@
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker
+exit 0
+Demo · ROUND 130 · WORKER
+
+You are the Worker for Demo, round 130-adopt. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). Before running framework code, prepare the brief's verified source: if .worktrees/framework-b40c20d2d071 is absent, run git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-b40c20d2d071, then git -C .worktrees/framework-b40c20d2d071 checkout --detach b40c20d2d07162c0da5bfd84eb163e3c90a5c93b. If it exists, require a clean checkout whose git -C .worktrees/framework-b40c20d2d071 rev-parse HEAD is exactly b40c20d2d07162c0da5bfd84eb163e3c90a5c93b; otherwise stop without changing it. Use this pinned external tool for first adoption only. Worker installs from this same source as the brief directs; Brain does not install it.
+
+From its main checkout, run python3 .worktrees/framework-b40c20d2d071/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 .worktrees/framework-b40c20d2d071/tools/fw.py start --role worker --round 130-adopt without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/130-adopt/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/130-adopt/worker.md and running python3 tools/fw.py report --role worker --round 130-adopt --push. If the installed tool is still absent, from the project's main checkout use python3 .worktrees/framework-b40c20d2d071/tools/fw.py --cwd .worktrees/worker-130 report --role worker --round 130-adopt --push (in a cloud clone use --cwd .). End your final reply with exactly one line: Demo · ROUND 130 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated bootstrap instruction
+$ git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-b40c20d2d071
+exit 0
+Cloning into '.worktrees/framework-b40c20d2d071'...
+done.
+
+generated bootstrap instruction
+$ git -C .worktrees/framework-b40c20d2d071 checkout --detach b40c20d2d07162c0da5bfd84eb163e3c90a5c93b
+exit 0
+HEAD is now at b40c20d Pinned framework fixture
+
+generated cloud startup without worktree
+$ python3 .worktrees/framework-b40c20d2d071/tools/fw.py start --role worker --round 130-adopt
+exit 0
+seat ok: worker, round 130-adopt, branch worker/130-adopt at 4edac8c4db08
+  brief: docs/rounds/130-adopt/brief.md
+  finish with: write docs/rounds/130-adopt/worker.md, then python3 tools/fw.py report --role worker --round 130-adopt --push
+
+external report after early adoption stop
+$ python3 .worktrees/framework-b40c20d2d071/tools/fw.py --cwd . report --role worker --round 130-adopt --push
+exit 0
+report committed: docs/rounds/130-adopt/worker.md at 19cd4fbc2fbc; it describes 4edac8c4db08 on worker/130-adopt
+pushed worker/130-adopt to origin
+end your final reply with: Demo · ROUND 130 · WORKER · DONE — report pushed at 19cd4fbc2fbc
+  (or STOPPED or BLOCKED instead of DONE, with the reason, if you stopped early)
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker
+exit 0
+Demo · ROUND 130 · WORKER
+
+You are the Worker for Demo, round 130-adopt. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). Before running framework code, prepare the brief's verified source: if .worktrees/framework-ceff8780c60c is absent, run git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ceff8780c60c, then git -C .worktrees/framework-ceff8780c60c checkout --detach ceff8780c60cc5ce70cffac5e456d41e32eb7efb. If it exists, require a clean checkout whose git -C .worktrees/framework-ceff8780c60c rev-parse HEAD is exactly ceff8780c60cc5ce70cffac5e456d41e32eb7efb; otherwise stop without changing it. Use this pinned external tool for first adoption only. Worker installs from this same source as the brief directs; Brain does not install it.
+
+From its main checkout, run python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role worker --round 130-adopt without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/130-adopt/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/130-adopt/worker.md and running python3 tools/fw.py report --role worker --round 130-adopt --push. If the installed tool is still absent, from the project's main checkout use python3 .worktrees/framework-ceff8780c60c/tools/fw.py --cwd .worktrees/worker-130 report --role worker --round 130-adopt --push (in a cloud clone use --cwd .). End your final reply with exactly one line: Demo · ROUND 130 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated bootstrap instruction
+$ git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ceff8780c60c
+exit 0
+Cloning into '.worktrees/framework-ceff8780c60c'...
+done.
+
+generated bootstrap instruction
+$ git -C .worktrees/framework-ceff8780c60c checkout --detach ceff8780c60cc5ce70cffac5e456d41e32eb7efb
+exit 0
+HEAD is now at ceff878 Pinned framework fixture
+
+generated startup command
+$ python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130
+exit 0
+created .worktrees/worker-130
+  continuing earlier work from worker/130-adopt
+seat ok: worker, round 130-adopt, branch worker/130-adopt at 788bfaba5826
+  brief: docs/rounds/130-adopt/brief.md
+  finish with: write docs/rounds/130-adopt/worker.md, then python3 tools/fw.py report --role worker --round 130-adopt --push
+work in: .worktrees/worker-130
+
+generated startup command
+$ python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130
+exit 0
+  continuing earlier work from origin/worker/130-adopt
+resuming .worktrees/worker-130
+  continuing earlier work from origin/worker/130-adopt
+seat ok: worker, round 130-adopt, branch worker/130-adopt at 788bfaba5826
+  brief: docs/rounds/130-adopt/brief.md
+  finish with: write docs/rounds/130-adopt/worker.md, then python3 tools/fw.py report --role worker --round 130-adopt --push
+work in: .worktrees/worker-130
+
+Worker adopts from exact pinned source
+$ python3 <pinned-source>/tools/adopt.py <seat> --project Demo --verifier
+exit 0
+adopt: <fixture>/worker/.worktrees/worker-130 -> agentic-framework 3.1.0
+  create  docs/agents/FRAMEWORK.md
+  create  docs/agents/roles/brain.md
+  create  docs/agents/roles/worker.md
+  create  docs/agents/roles/verifier.md
+  create  tools/fw.py
+  create  tests/test_framework.py
+  create  AGENTS.md
+  create  docs/state.md
+  create  docs/rounds/README.md
+  create  .gitattributes
+  create  .worktrees/.gitignore
+  create  tests/__init__.py
+  record  docs/agents/framework.json
+
+Next: fill in AGENTS.md (what the project is, roles, invariants, evidence,
+what is enforced), then commit this as the project's first round.
+
+normal installed Worker report
+$ python3 tools/fw.py report --role worker --round 130-adopt --push
+exit 0
+report committed: docs/rounds/130-adopt/worker.md at 6db539b555a6; it describes bc31c348adb1 on worker/130-adopt
+pushed worker/130-adopt to origin
+end your final reply with: Demo · ROUND 130 · WORKER · DONE — report pushed at 6db539b555a6
+  (or STOPPED or BLOCKED instead of DONE, with the reason, if you stopped early)
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status
+exit 0
+Framework
+  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  in flight: 130-adopt (Tier 2)
+    worker: reported at bc31c348adb1
+    verifier: not started
+This machine
+  on main; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  installation new: project configuration is not verified
+Command form before adoption: python3 <pinned-framework>/tools/fw.py --cwd <project> <command>
+next: send the Verifier prompt for round 130-adopt (Brain prints it with: python3 tools/fw.py prompt --round 130-adopt --role verifier) (first adoption: use the pinned external framework tool)
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role verifier
+exit 0
+Demo · ROUND 130 · VERIFIER
+
+You are the Verifier for Demo, round 130-adopt. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). Before running framework code, prepare the brief's verified source: if .worktrees/framework-ceff8780c60c is absent, run git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ceff8780c60c, then git -C .worktrees/framework-ceff8780c60c checkout --detach ceff8780c60cc5ce70cffac5e456d41e32eb7efb. If it exists, require a clean checkout whose git -C .worktrees/framework-ceff8780c60c rev-parse HEAD is exactly ceff8780c60cc5ce70cffac5e456d41e32eb7efb; otherwise stop without changing it. Use this pinned external tool for first adoption only. Worker installs from this same source as the brief directs; Brain does not install it.
+
+From its main checkout, run python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role verifier --round 130-adopt --worktree .worktrees/verifier-130 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role verifier --round 130-adopt without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/verifier.md and docs/rounds/130-adopt/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/130-adopt/verifier.md and running python3 tools/fw.py report --role verifier --round 130-adopt --push. If the installed tool is still absent, from the project's main checkout use python3 .worktrees/framework-ceff8780c60c/tools/fw.py --cwd .worktrees/verifier-130 report --role verifier --round 130-adopt --push (in a cloud clone use --cwd .). End your final reply with exactly one line: Demo · ROUND 130 · VERIFIER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated bootstrap instruction
+$ git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ceff8780c60c
+exit 0
+Cloning into '.worktrees/framework-ceff8780c60c'...
+done.
+
+generated bootstrap instruction
+$ git -C .worktrees/framework-ceff8780c60c checkout --detach ceff8780c60cc5ce70cffac5e456d41e32eb7efb
+exit 0
+HEAD is now at ceff878 Pinned framework fixture
+
+generated startup command
+$ python3 .worktrees/framework-ceff8780c60c/tools/fw.py start --role verifier --round 130-adopt --worktree .worktrees/verifier-130
+exit 0
+created .worktrees/verifier-130
+seat ok: verifier, round 130-adopt, branch verifier/130-adopt at 6db539b555a6
+  brief: docs/rounds/130-adopt/brief.md
+  reviewing exactly 6db539b555a69710b2cda31431def2637b8cc472 from origin/worker/130-adopt
+  do not open docs/rounds/130-adopt/worker.md until your first pass is finished
+  finish with: write docs/rounds/130-adopt/verifier.md, then python3 tools/fw.py report --role verifier --round 130-adopt --push
+work in: .worktrees/verifier-130
+
+normal installed Verifier report
+$ python3 tools/fw.py report --role verifier --round 130-adopt --push
+exit 0
+report committed: docs/rounds/130-adopt/verifier.md at 3de3c680c1ad; it describes 6db539b555a6 on verifier/130-adopt
+pushed verifier/130-adopt to origin
+end your final reply with: Demo · ROUND 130 · VERIFIER · DONE — report pushed at 3de3c680c1ad
+  (or STOPPED or BLOCKED instead of DONE, with the reason, if you stopped early)
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain delivery --round 130-adopt
+exit 0
+origin/verifier/130-adopt (3de3c680c1ad): delivered
+  verifier: report describes 6db539b555a6 (written 2026-10-03T19:19:57Z on macOS 27.0)
+  worker: report describes bc31c348adb1 (written 2026-10-03T19:19:52Z on macOS 27.0)
+
+adoption becomes normal installed routing
+$ python3 tools/fw.py prompt --round 130-adopt --role worker
+exit 0
+Demo · ROUND 130 · WORKER
+
+You are the Worker for Demo, round 130-adopt. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role worker --round 130-adopt without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/130-adopt/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/130-adopt/worker.md and running python3 tools/fw.py report --role worker --round 130-adopt --push. End your final reply with exactly one line: Demo · ROUND 130 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status --offline
+exit 0
+Framework
+  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  nothing in flight
+This machine
+  on main; 1 uncommitted change(s)
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  installation ambiguous: project configuration is not verified
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to diagnose the ambiguous framework installation before dispatch; do not assume first adoption
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status --offline
+exit 0
+Framework
+  damaged framework manifest: docs/agents/framework.json is unreadable: files must be a JSON object
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  nothing in flight
+This machine
+  on main; 2 uncommitted change(s)
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  installation damaged: project configuration is not verified
+  error: docs/agents/framework.json is unreadable: files must be a JSON object
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to diagnose the damaged framework installation before dispatch; do not assume first adoption
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status --offline
+exit 0
+Framework
+  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  nothing in flight
+This machine
+  on main; 2 uncommitted change(s)
+  not on GitHub yet: main (1 commit(s))
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  installation damaged: project configuration is not verified
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to diagnose the damaged framework installation before dispatch; do not assume first adoption
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain status --offline
+exit 0
+Framework
+  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged
+Merge rule
+  not declared in AGENTS.md (the framework default is owner-approves)
+Rounds
+  nothing in flight
+This machine
+  on main; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  installation new: project configuration is not verified
+Command form before adoption: python3 <pinned-framework>/tools/fw.py --cwd <project> <command>
+next: ask Brain to prepare a first-adoption round with a verified framework source and commit
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker
+exit 2
+fw: first adoption requires a dedicated Mode: adoption brief with Framework-source and a full Framework-commit; ask Brain to prepare it using the pinned external tool
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker --offline
+exit 2
+fw: offline first-adoption dispatch cannot verify Framework-source; retry online
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker
+exit 2
+fw: the external tool's clone does not contain Framework-commit
+
+external framework command
+$ python3 <fixture>/framework/tools/fw.py --cwd <fixture>/brain prompt --round 130-adopt --role worker
+exit 0
+Demo · ROUND 130 · WORKER
+
+You are the Worker for Demo, round 130-adopt. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). Before running framework code, prepare the brief's verified source: if .worktrees/framework-ec400fb82c36 is absent, run git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ec400fb82c36, then git -C .worktrees/framework-ec400fb82c36 checkout --detach ec400fb82c36bb3e37dcb7b6ba3ae3ca7e3e662f. If it exists, require a clean checkout whose git -C .worktrees/framework-ec400fb82c36 rev-parse HEAD is exactly ec400fb82c36bb3e37dcb7b6ba3ae3ca7e3e662f; otherwise stop without changing it. Use this pinned external tool for first adoption only. Worker installs from this same source as the brief directs; Brain does not install it.
+
+From its main checkout, run python3 .worktrees/framework-ec400fb82c36/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 .worktrees/framework-ec400fb82c36/tools/fw.py start --role worker --round 130-adopt without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/130-adopt/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/130-adopt/worker.md and running python3 tools/fw.py report --role worker --round 130-adopt --push. If the installed tool is still absent, from the project's main checkout use python3 .worktrees/framework-ec400fb82c36/tools/fw.py --cwd .worktrees/worker-130 report --role worker --round 130-adopt --push (in a cloud clone use --cwd .). End your final reply with exactly one line: Demo · ROUND 130 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated bootstrap instruction
+$ git clone --no-checkout https://fixture.invalid/framework .worktrees/framework-ec400fb82c36
+exit 0
+Cloning into '.worktrees/framework-ec400fb82c36'...
+done.
+
+generated bootstrap instruction
+$ git -C .worktrees/framework-ec400fb82c36 checkout --detach ec400fb82c36bb3e37dcb7b6ba3ae3ca7e3e662f
+exit 0
+HEAD is now at ec400fb Pinned framework fixture
+
+generated startup command
+$ python3 .worktrees/framework-ec400fb82c36/tools/fw.py start --role worker --round 130-adopt --worktree .worktrees/worker-130
+exit 0
+created .worktrees/worker-130
+  continuing earlier work from worker/130-adopt
+seat ok: worker, round 130-adopt, branch worker/130-adopt at d6a4238bbc9b
+  brief: docs/rounds/130-adopt/brief.md
+  finish with: write docs/rounds/130-adopt/worker.md, then python3 tools/fw.py report --role worker --round 130-adopt --push
+work in: .worktrees/worker-130
+
+generated prompt
+$ python3 tools/fw.py prompt --round 121-dirty --role worker
+exit 0
+Demo · ROUND 121 · WORKER
+
+You are the Worker for Demo, round 121-dirty. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role worker --round 121-dirty --worktree .worktrees/worker-121 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role worker --round 121-dirty without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/121-dirty/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/121-dirty/worker.md and running python3 tools/fw.py report --role worker --round 121-dirty --push. End your final reply with exactly one line: Demo · ROUND 121 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 121-dirty --worktree .worktrees/worker-121
+exit 0
+created .worktrees/worker-121
+  continuing earlier work from worker/121-dirty
+seat ok: worker, round 121-dirty, branch worker/121-dirty at a631f0259cbd
+  brief: docs/rounds/121-dirty/brief.md
+  finish with: write docs/rounds/121-dirty/worker.md, then python3 tools/fw.py report --role worker --round 121-dirty --push
+work in: .worktrees/worker-121
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 121-dirty --worktree .worktrees/worker-121
+exit 2
+  continuing earlier work from origin/worker/121-dirty
+resuming .worktrees/worker-121
+fw: this checkout has uncommitted changes, so it is not a clean place to start a seat: dirty.txt. Start in a fresh clone or checkout, or ask Brain.
+
+generated prompt
+$ python3 tools/fw.py prompt --round 122-safety --role worker
+exit 0
+Demo · ROUND 122 · WORKER
+
+You are the Worker for Demo, round 122-safety. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role worker --round 122-safety --worktree .worktrees/worker-122 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role worker --round 122-safety without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/122-safety/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/122-safety/worker.md and running python3 tools/fw.py report --role worker --round 122-safety --push. End your final reply with exactly one line: Demo · ROUND 122 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 122-safety --worktree .worktrees/worker-122
+exit 2
+fw: .worktrees/worker-122 is not this repository's matching worker/122-safety checkout; it was not touched
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 122-safety --worktree .worktrees/worker-122
+exit 2
+fw: .worktrees/worker-122 is not this repository's matching worker/122-safety checkout; it was not touched
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 122-safety --worktree .worktrees/worker-122
+exit 2
+fw: .worktrees/worker-122 is not this repository's matching worker/122-safety checkout; it was not touched
+
+generated prompt
+$ python3 tools/fw.py prompt --round 120-resume --role worker
+exit 0
+Demo · ROUND 120 · WORKER
+
+You are the Worker for Demo, round 120-resume. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role worker --round 120-resume --worktree .worktrees/worker-120 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role worker --round 120-resume without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/120-resume/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/120-resume/worker.md and running python3 tools/fw.py report --role worker --round 120-resume --push. End your final reply with exactly one line: Demo · ROUND 120 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 120-resume --worktree .worktrees/worker-120
+exit 0
+created .worktrees/worker-120
+  continuing earlier work from worker/120-resume
+seat ok: worker, round 120-resume, branch worker/120-resume at 83b88e1a8a47
+  brief: docs/rounds/120-resume/brief.md
+  finish with: write docs/rounds/120-resume/worker.md, then python3 tools/fw.py report --role worker --round 120-resume --push
+work in: .worktrees/worker-120
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 120-resume --worktree .worktrees/worker-120
+exit 0
+  continuing earlier work from worker/120-resume
+resuming .worktrees/worker-120
+  continuing earlier work from worker/120-resume
+seat ok: worker, round 120-resume, branch worker/120-resume at 67dfefcad662
+  brief: docs/rounds/120-resume/brief.md
+  finish with: write docs/rounds/120-resume/worker.md, then python3 tools/fw.py report --role worker --round 120-resume --push
+work in: .worktrees/worker-120
+
+generated prompt
+$ python3 tools/fw.py prompt --round 123-interrupted --role worker
+exit 0
+Demo · ROUND 123 · WORKER
+
+You are the Worker for Demo, round 123-interrupted. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role worker --round 123-interrupted --worktree .worktrees/worker-123 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role worker --round 123-interrupted without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/worker.md and docs/rounds/123-interrupted/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/123-interrupted/worker.md and running python3 tools/fw.py report --role worker --round 123-interrupted --push. End your final reply with exactly one line: Demo · ROUND 123 · WORKER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 123-interrupted --worktree .worktrees/worker-123
+exit 0
+  continuing earlier work from worker/123-interrupted
+resuming .worktrees/worker-123
+  continuing earlier work from worker/123-interrupted
+seat ok: worker, round 123-interrupted, branch worker/123-interrupted at 098d9c15166c
+  brief: docs/rounds/123-interrupted/brief.md
+  finish with: write docs/rounds/123-interrupted/worker.md, then python3 tools/fw.py report --role worker --round 123-interrupted --push
+work in: .worktrees/worker-123
+
+generated startup command
+$ python3 tools/fw.py start --role worker --round 125-offline --worktree .worktrees/worker-125
+exit 2
+fw: could not fetch from origin (fatal: '<fixture>/unreachable' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.); using what this clone already has; cannot safely select a seat worktree without remote history
+
+generated prompt
+$ python3 tools/fw.py prompt --round 124-review --role verifier
+exit 0
+Demo · ROUND 124 · VERIFIER
+
+You are the Verifier for Demo, round 124-review. Work inside this project's folder on this machine (clone <fixture>/Demo if it is not here). From its main checkout, run python3 tools/fw.py start --role verifier --round 124-review --worktree .worktrees/verifier-124-2 (use py -3 or python if python3 is not found). Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. In a cloud workspace, work in the clone it gives you and run python3 tools/fw.py start --role verifier --round 124-review without --worktree instead.
+
+Then read AGENTS.md, docs/agents/FRAMEWORK.md, docs/agents/roles/verifier.md and docs/rounds/124-review/brief.md, and carry out the brief. For first adoption, read the pinned source's framework documents until the installed copies exist.
+
+Finish, even if you stop early, by writing docs/rounds/124-review/verifier.md and running python3 tools/fw.py report --role verifier --round 124-review --push. End your final reply with exactly one line: Demo · ROUND 124 · VERIFIER · DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.
+
+generated startup command
+$ python3 tools/fw.py start --role verifier --round 124-review --worktree .worktrees/verifier-124-2
+exit 0
+created .worktrees/verifier-124-2
+seat ok: verifier, round 124-review, branch verifier/124-review-2 at 7a4f534c2cd5
+  brief: docs/rounds/124-review/brief.md
+  reviewing exactly 7a4f534c2cd5456421d74dd6a38801614314e0f0 from origin/worker/124-review
+  do not open docs/rounds/124-review/worker.md until your first pass is finished
+  finish with: write docs/rounds/124-review/verifier.md, then python3 tools/fw.py report --role verifier --round 124-review --push
+work in: .worktrees/verifier-124-2
+
+generated startup command
+$ python3 tools/fw.py start --role verifier --round 124-review --worktree .worktrees/verifier-124-2
+exit 0
+resuming .worktrees/verifier-124-2
+seat ok: verifier, round 124-review, branch verifier/124-review-2 at 7a4f534c2cd5
+  brief: docs/rounds/124-review/brief.md
+  reviewing exactly 7a4f534c2cd5456421d74dd6a38801614314e0f0 from origin/verifier/124-review-2
+  do not open docs/rounds/124-review/worker.md until your first pass is finished
+  finish with: write docs/rounds/124-review/verifier.md, then python3 tools/fw.py report --role verifier --round 124-review --push
+work in: .worktrees/verifier-124-2
+
+before successor status
+$ python3 tools/fw.py status
+exit 0
+Framework
+  pinned to agentic-framework 3.1.0 (<framework>)
+  up to date with the latest release (3.1.0)
+Merge rule
+  owner-approves
+Rounds
+  in flight: 110-audit (Tier 2)
+    worker: reported at 68d57ce03933
+    verifier: reported at c11a93a26ad5
+This machine
+  on main; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to judge round 110-audit: every seat has reported
+
+after successor status
+$ python3 tools/fw.py status
+exit 0
+Framework
+  pinned to agentic-framework 3.1.0 (<framework>)
+  up to date with the latest release (3.1.0)
+Merge rule
+  owner-approves
+Rounds
+  in flight: 110-audit (Tier 2)
+    worker: reported at 68d57ce03933
+    verifier: reported at c11a93a26ad5
+  in flight: 111-followup (Tier 2)
+    worker: not started
+    verifier: not started
+  in flight: 112-sibling (Tier 1)
+    worker: not started
+This machine
+  on z-inherited; no uncommitted changes
+  safe to leave this machine: yes
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to judge round 110-audit: every seat has reported
+
+automatic original delivery
+$ python3 tools/fw.py delivery --round 110-audit
+exit 0
+origin/verifier/110-audit (34931b98b905): delivered
+  verifier: report describes c11a93a26ad5 (written 2026-10-03T19:20:44Z on macOS 27.0)
+  worker: report describes 68d57ce03933 (written 2026-10-03T19:20:43Z on macOS 27.0)
+
+named unchanged delivery
+$ python3 tools/fw.py delivery --round 110-audit --branch origin/verifier/110-audit
+exit 0
+origin/verifier/110-audit (34931b98b905): delivered
+  verifier: report describes c11a93a26ad5 (written 2026-10-03T19:20:44Z on macOS 27.0)
+  worker: report describes 68d57ce03933 (written 2026-10-03T19:20:43Z on macOS 27.0)

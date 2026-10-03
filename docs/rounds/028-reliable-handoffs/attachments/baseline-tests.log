@@ -1,0 +1,34 @@
+test_generated_startup_twice_resumes_unpushed_work (tests.test_handoffs.SeatResumption) ... FAIL
+test_external_status_routes_first_adoption_without_green_checks (tests.test_handoffs.FirstAdoption) ... FAIL
+test_successor_brief_does_not_invalidate_original_delivery (tests.test_handoffs.SuccessorDelivery) ... FAIL
+
+======================================================================
+FAIL: test_generated_startup_twice_resumes_unpushed_work (tests.test_handoffs.SeatResumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<framework>/tests/test_handoffs.py", line 78, in test_generated_startup_twice_resumes_unpushed_work
+    self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+AssertionError: 128 != 0 : Preparing worktree (detached HEAD 74ca0fe)
+fatal: '.worktrees/worker-120' already exists
+
+
+======================================================================
+FAIL: test_external_status_routes_first_adoption_without_green_checks (tests.test_handoffs.FirstAdoption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<framework>/tests/test_handoffs.py", line 263, in test_external_status_routes_first_adoption_without_green_checks
+    self.assertNotIn("all project checks pass", result.stdout)
+AssertionError: 'all project checks pass' unexpectedly found in 'Framework\n  no framework manifest (docs/agents/framework.json) -- not adopted, or damaged\nMerge rule\n  not declared in AGENTS.md (the framework default is owner-approves)\nRounds\n  nothing in flight\nThis machine\n  on main; no uncommitted changes\n  safe to leave this machine: yes\nChecks\n  all project checks pass\nCommand form on this machine: python3 tools/fw.py <command>\nnext: nothing is waiting on you; ask Brain for the next round\n'
+
+======================================================================
+FAIL: test_successor_brief_does_not_invalidate_original_delivery (tests.test_handoffs.SuccessorDelivery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<framework>/tests/test_handoffs.py", line 179, in test_successor_brief_does_not_invalidate_original_delivery
+    self.assertNotIn("worker: stale", after.stdout)
+AssertionError: 'worker: stale' unexpectedly found in 'Framework\n  pinned to agentic-framework 3.1.0 (<framework>)\n  up to date with the latest release (3.1.0)\n  framework files changed locally (project rules belong in AGENTS.md): tools/fw.py\nMerge rule\n  owner-approves\nRounds\n  in flight: 110-audit (Tier 2)\n    worker: stale -- its report no longer describes its branch\n    verifier: stale -- its report no longer describes its branch\n  in flight: 111-followup (Tier 2)\n    worker: not started\n    verifier: not started\n  in flight: 112-sibling (Tier 1)\n    worker: not started\nThis machine\n  on z-inherited; no uncommitted changes\n  safe to leave this machine: yes\nChecks\n  all project checks pass\nCommand form on this machine: python3 tools/fw.py <command>\nnext: ask Brain what to send the Worker of round 110-audit: its report is out of date\n'
+
+----------------------------------------------------------------------
+Ran 3 tests in 13.122s
+
+FAILED (failures=3)
