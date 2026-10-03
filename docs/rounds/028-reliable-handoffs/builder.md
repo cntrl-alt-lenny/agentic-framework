@@ -2,10 +2,10 @@
 round: 028-reliable-handoffs
 role: builder
 branch: builder/028-reliable-handoffs
-head: 8beb13849e238a928d6cd312209531503e622ee0
+head: 51e512ef1c39fbce466b0802e3db6a45dae89077
 os: macOS 27.0
 python: 3.9.6
-written: 2026-10-03T19:29:15Z
+written: 2026-10-03T19:37:26Z
 -->
 ## Verified
 
@@ -195,6 +195,31 @@ The test now fetches for the live relay; source metadata now uses a URL
 redirected locally by Git. Both corrections are committed, and the observed
 implementation CI above is green.
 
+### Final compatibility correction
+
+Final work also includes `06aed905334e4a7ba0a0c124cf5f2f345c1d0453`.
+A newly added maximum-length project-role case failed before the correction:
+startup exited 2 because the folder validator incorrectly reused the role's
+40-character limit. The folder includes the round/review suffix too. Its
+separate bound now accommodates every generated legal role/round combination.
+No role name or role validation changed.
+
+At that commit, `python3 -m unittest tests.test_handoffs.SeatResumption.test_maximum_length_project_role_has_a_usable_generated_folder -v`
+exited 0; the actual generated startup and its repeat both exited 0 and kept
+the declared role's branch. Real output:
+
+```text
+Ran 1 test in 3.196s
+
+OK
+```
+
+`attachments/compatibility-commands.log` and
+`attachments/compatibility-tests.log` record this case. There are now 15 new
+handoff cases, so the final suite has 98 tests. This adds to, rather than
+relabels, the 97-test and CI evidence at the earlier implementation commit.
+The final report commit still receives the full required local and CI checks.
+
 ## Not verified
 
 - Final report-commit local checks and CI are pending at the report's stamp;
@@ -211,7 +236,7 @@ implementation CI above is green.
 - `tools/fw.py`: safe local worktree startup, fetched/cached prompt handling,
   pinned first-adoption startup/report support, installation diagnosis,
   and original delivery candidate selection without relaxing freshness.
-- `tests/test_handoffs.py`: 14 disposable regression and safety cases,
+- `tests/test_handoffs.py`: 15 disposable regression and safety cases,
   including actual generated command execution and a complete adoption relay.
 - `tests/test_round.py`: retain prompt assertions for the supported startup
   command, unchanged-review resumption, and offline repository-name fixtures.
