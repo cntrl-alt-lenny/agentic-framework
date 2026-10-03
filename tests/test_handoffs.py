@@ -278,7 +278,7 @@ class FirstAdoption(TempDirTest):
         evidence(self, "normal installed Worker report", ["python3", "tools/fw.py", "report", "--role", "worker",
                                                         "--round", "130-adopt", "--push"], result)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        handoff = self.external(self.brain, "status", "--offline")
+        handoff = self.external(self.brain, "status")
         self.assertIn("next: send the Verifier prompt", handoff.stdout)
         self.assertIn("first adoption: use the pinned external framework tool", handoff.stdout)
         verifier_prompt = self.external(self.brain, "prompt", "--round", "130-adopt", "--role", "verifier")
