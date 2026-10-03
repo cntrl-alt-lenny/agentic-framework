@@ -326,7 +326,7 @@ class Prompts(RoundTest):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], "Demo · ROUND 030 · VERIFIER")
-        self.assertIn("git worktree add --detach .worktrees/verifier-030 origin/main", result.stdout)
+        self.assertIn("--worktree .worktrees/verifier-030", result.stdout)
         self.assertIn("python3 tools/fw.py start --role verifier --round 030-prompt", result.stdout)
         self.assertIn("docs/agents/roles/verifier.md", result.stdout)
         self.assertIn("Demo · ROUND 030 · VERIFIER · DONE — report pushed at <commit>", result.stdout)
@@ -345,10 +345,10 @@ class Prompts(RoundTest):
                           ("git@github.com:someone/edopro-next.git", "edopro-next"),
                           ("https://github.com/someone/gx-spirit-caller", "gx-spirit-caller")):
             git(self.brain, "remote", "set-url", "origin", url)
-            result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+            result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder", "--offline")
             self.assertEqual(result.stdout.splitlines()[0], f"{name} · ROUND 031 · BUILDER", result.stderr)
         git(self.brain, "remote", "remove", "origin")
-        result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder")
+        result = fw(self.brain, "prompt", "--round", "031-name", "--role", "builder", "--offline")
         self.assertEqual(result.stdout.splitlines()[0], "brain-mac · ROUND 031 · BUILDER", result.stderr)
 
     def test_a_re_review_prompt_names_a_new_folder(self) -> None:
@@ -361,18 +361,18 @@ class Prompts(RoundTest):
         def folder() -> str:
             git(self.brain, "fetch", "-q", "origin")
             out = fw(self.brain, "prompt", "--round", "032-again", "--role", "verifier").stdout
-            return out.split("git worktree add --detach ", 1)[1].split()[0]
+            return out.split("--worktree ", 1)[1].split()[0]
 
         self.assertEqual(folder(), ".worktrees/verifier-032")  # started, not yet reported: same seat
         (verifier / "docs/rounds/032-again/verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
         self.assertEqual(fw(verifier, "report", "--role", "verifier", "--round", "032-again", "--push").returncode, 0)
-        self.assertEqual(folder(), ".worktrees/verifier-032-2")
+        self.assertEqual(folder(), ".worktrees/verifier-032")  # unchanged review resumes
         path = worker / "docs/rounds/032-again/worker.md"
         path.write_text(WORKER_REPORT.replace("the feature.", "the feature, fixed."), encoding="utf-8")
         self.assertEqual(fw(worker, "report", "--role", "worker", "--round", "032-again", "--push").returncode, 0)
         second = self.deliver_verifier("verifier-2", "032-again")
         self.assertEqual(git(second, "branch", "--show-current"), "verifier/032-again-2")
-        self.assertEqual(folder(), ".worktrees/verifier-032-3")
+        self.assertEqual(folder(), ".worktrees/verifier-032-2")  # unchanged re-review resumes
 
     def test_prompt_for_the_brain_is_refused(self) -> None:
         result = fw(self.brain, "prompt", "--round", "030-prompt", "--role", "brain")

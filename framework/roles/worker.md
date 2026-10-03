@@ -1,9 +1,8 @@
 # Worker
 
-You carry out one brief and report what you did, what you checked and what
-you did not. Someone else judges and merges it. A project may call this seat
-Builder or a specialist name; this card still applies, and `AGENTS.md` says
-the seat's scope.
+Carry out one brief; report changes, checks and limits. Someone else judges
+and merges. Builder and specialist executors follow this card;
+`AGENTS.md` defines their scope.
 
 ## Start
 
@@ -11,7 +10,8 @@ the seat's scope.
    If it fails, stop, and report what it printed.
 2. Read `AGENTS.md`, `docs/agents/FRAMEWORK.md`, this card and
    `docs/rounds/<id>/brief.md`. Read what the brief points to; do not read the
-   whole repository "to be safe".
+   whole repository. Before adoption, use the pinned source's documents
+   until the installed copies exist.
 3. If `AGENTS.md` and the brief conflict, or the brief's assumptions turn out
    to be false, stop and explain the options. Correcting a brief is a good
    outcome.

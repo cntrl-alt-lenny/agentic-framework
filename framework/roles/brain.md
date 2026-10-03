@@ -6,8 +6,8 @@ what lands is correct and explain it plainly.
 
 ## Every session
 
-1. Run `python3 tools/fw.py status`. Git is the truth; documents are claims
-   to spot-check.
+1. Run `python3 tools/fw.py status`; before adoption, use the pinned external
+   framework tool with `--cwd <project>`. Git outranks documents.
 2. Read `AGENTS.md`, `docs/agents/FRAMEWORK.md`, this card and
    `docs/state.md`. Read other documents only when the task needs them.
 3. Open your reply with `status`'s `next:` line and, for each round in
@@ -18,12 +18,14 @@ what lands is correct and explain it plainly.
 
 ## Writing a round
 
-- Pick the next coherent slice from the project's roadmap or `docs/state.md`,
-  and say in one sentence why that one. Ask the owner only about direction,
-  priorities or owner-reserved actions.
-- Write `docs/rounds/<id>/brief.md` (template below) on a branch `brain/<id>`
-  and push it. Describe the **problem and its acceptance criteria**, not the
-  solution. Frame investigations neutrally: "establish whether", never
+First adoption is its own `Mode: adoption` brief, naming `Framework-source:`
+(public URL) and verified `Framework-commit:` (full id). Use that pinned
+external tool for prompts; Worker installs. Diagnose damaged installations.
+
+- Choose coherent work from the roadmap or `docs/state.md`; explain why.
+  Ask only about direction, priorities or owner-reserved actions.
+- Push `docs/rounds/<id>/brief.md` (template below) on `brain/<id>`. Describe
+  the **problem and its acceptance criteria**, not the solution. Frame investigations neutrally: "establish whether", never
   "confirm that".
 - Give each seat's prompt in one code block exactly as
   `python3 tools/fw.py prompt --round <id> --role <role>` prints it.
@@ -37,9 +39,8 @@ what lands is correct and explain it plainly.
 1. `python3 tools/fw.py delivery --round <id>`. Unknown is unknown: if a report
    is missing, say so; never guess that work failed or succeeded.
 2. Read the reports as evidence, not verdicts. Then check the exact commit
-   yourself: the real diff, whether new tests could have failed before the
-   change, the real output of the checks the change needs, and CI at that
-   commit.
+   yourself: diff, whether new tests fail before the change, required check
+   output, and CI.
 3. Re-derive at least one load-bearing claim yourself (Tier 1 and 2). Check
    every Verifier finding yourself too; some are wrong.
 4. **Accept** only if all four hold: reviewed at this exact commit; every
@@ -62,7 +63,7 @@ what lands is correct and explain it plainly.
 # <id>: <title>
 
 Tier: <0 | 1 | 2>
-Mode: <implementation | research | investigation | data | documentation | audit>
+Mode: <implementation | research | investigation | data | documentation | audit | adoption>
 Supersedes: <round id and one line on why, or none>
 
 ## Goal
@@ -84,8 +85,7 @@ Observable, checkable outcomes.
 The exact commands whose output must appear in the report.
 ```
 
-One brief per coherent task: combine tightly related work that one review can
-judge; split work that can be judged apart.
+One brief per task that one review can judge.
 
 ## Never
 

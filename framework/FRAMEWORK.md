@@ -1,21 +1,18 @@
 # The agentic framework
 
-A human owner directs the work, AI agents do it, and evidence decides what is
-accepted. It works with any AI tool that can run git and Python 3.9 or newer,
-on Windows, macOS or Linux, and a project can be picked up on another machine
-or tool at any point — after an interrupted session, or weeks later.
+The owner directs work, AI agents do it, and evidence decides acceptance.
+Any tool with git and Python 3.9+ works on Windows, macOS or Linux. Git lets
+another session resume interrupted work, even weeks later.
 
-This file is the whole operating model. The three role cards in `roles/` say
-what each seat does. The project's `AGENTS.md` adds the project's own
-invariants and settings. Nothing else is required reading.
+This is the operating model. `roles/` defines the seats; `AGENTS.md` adds
+project invariants and settings.
 
 Commands below are written `python3 tools/fw.py …`. If `python3` is not found,
 use `py -3` (Windows) or `python`.
 
 ## The rules
 
-These are not negotiable. When a situation is not covered, follow the rule
-whose purpose it serves.
+Follow these rules and their purposes in uncovered situations.
 
 1. **Roles.** The **owner** decides what gets built and why, and can veto or
    reverse anything. **Brain** plans, writes briefs, reviews what comes back,
@@ -81,12 +78,11 @@ a tool's settings folder) only point at `AGENTS.md` and never add rules.
 - **`brain-merges`**. Brain merges accepted work itself and shows the same card
   as a record.
 
-The **merge card** is four lines in plain English: what changed, what was
-verified and how, what was not verified, and the risk. Answering it is a
-product decision, not a code review.
+The **merge card** has four plain English lines: what changed, what
+was verified and how, what was not verified, and risk. The owner decides.
 
-Every agent normally uses the owner's GitHub account, so GitHub cannot tell
-them apart: the agents keep the merge rule; it is not a lock. Say so if asked.
+Agents normally share the owner's GitHub account; GitHub cannot distinguish
+them. Agents keep the merge rule; it is not a lock.
 
 **Always the owner's decision:** anything destructive or irreversible
 (deleting branches that hold unmerged work, rewriting history, deleting
@@ -107,7 +103,16 @@ Brain puts a tier in every brief. Ceremony follows risk.
 
 ## The round
 
-The owner's side is three pastes; Brain writes every prompt.
+Brain writes every prompt; the owner relays them.
+
+**First adoption:** before the installed tool exists, use a clean framework
+clone at a verified commit: `python3 <framework>/tools/fw.py --cwd <project>
+status`. Brain prepares a dedicated `Mode: adoption` brief with
+`Framework-source:` (public clone URL) and `Framework-commit:` (full commit id),
+then prints prompts using that same external tool. Prompts verify the pin
+and bootstrap each seat. Worker installs; Verifier reviews; Brain judges.
+Read the pinned source's cards until installed copies exist. Missing files
+with installation evidence require diagnosis, not assumed first adoption.
 
 **1. Start or resume** — in a fresh session of any capable tool, in the
 project's folder:
@@ -124,11 +129,12 @@ line is `<project> · ROUND <number> · <ROLE>` (plus `· message N` when
 resent); the seat's final reply ends with that header and `· DONE — report
 pushed at <commit>`, or `STOPPED` or `BLOCKED` with the reason.
 
-**2. Run the seats** — paste each prompt into any tool, on any machine. Each
-seat starts with `fw.py start`, which puts any clone, cloud workspace or
-tool-named branch on the seat's own branch at the right commit, and pushes
-it. On the owner's machine a seat works in `.worktrees/<role>-<number>`, a
-git-ignored linked checkout inside the project.
+**2. Run the seats** — paste each prompt into any tool, on any machine.
+`fw.py start --worktree .worktrees/<role>-<number>` creates or resumes the
+matching linked checkout and pushes its seat branch. Dirty or unrelated
+checkouts are preserved and diagnosed. Cloud seats omit `--worktree` and use
+their supplied clone. `prompt` fetches review history; `--offline` discloses
+cached state, and worktree startup stops if origin is unavailable.
 
 **3. Come back** — to the same Brain session or a fresh one (use paste 1
 first if fresh):
@@ -158,15 +164,13 @@ It stamps the report with the round, role, branch, commit, operating system
 and time, and commits only that file. If the branch changes after the stamp,
 `fw.py delivery` says the report is stale and its author must rewrite it.
 
-When a report changes `docs/state.md`, it lists every sentence added and
-removed. Only files named for a role are reports; supporting files go in
-`docs/rounds/<id>/attachments/`.
+Reports list sentences added/removed from `docs/state.md`. Only role-named
+files are reports; evidence goes in `docs/rounds/<id>/attachments/`.
 
 ## State
 
-`docs/state.md` is short (the budget is checked; default 1,000 words): the
-owner's standing decisions, what is parked and why, and pointers. No commit
-ids, pull-request numbers or "current round" lines — those go stale. A value
+`docs/state.md` holds standing decisions, parked work and reasons, and
+pointers (checked budget: 1,000 words). No commit ids, pull-request numbers or "current round" lines — those go stale. A value
 that must be recorded as true at a moment goes under `## Historical anchors`.
 
 ## Moving between machines and tools

@@ -2,16 +2,12 @@
 
 The repository's presentation house standard is [standards/readme.md](standards/readme.md).
 
-A small operating model for building software and research projects with AI
-agents when the person in charge is not a programmer. The owner says what they
-want. A Brain agent plans the work and checks it. Worker agents do it, and an
-optional Verifier agent reviews it. Nothing counts as done unless the evidence
-shows it.
+An operating model for software and research work with AI agents, for an
+owner who is not a programmer. Brain plans and judges; Workers implement;
+an optional Verifier reviews. Evidence decides what is done.
 
-It works with any AI tool that can run git and Python 3.9+, on Windows, macOS
-and Linux. Everything a later session needs is committed to git, so work
-started on one machine or tool can be finished on another, including after
-weeks away.
+Any tool with git and Python 3.9+ works on Windows, macOS and Linux.
+Committed evidence lets another session resume work, even weeks later.
 
 ## What a project gets
 
@@ -32,17 +28,21 @@ can hold which seat.
 
 ## Using it
 
-**Adopt:** tell an agent *"Apply the framework at
-https://github.com/cntrl-alt-lenny/agentic-framework to this repository"*. The
-mechanical half is one command, run from a clone of this repository:
+**Adopt:** Brain uses a clean framework clone at a verified commit to run
+`python3 <framework>/tools/fw.py --cwd <project> status`. It pushes a dedicated
+`Mode: adoption` brief naming `Framework-source:` (public URL) and
+`Framework-commit:` (full id), then generates seat prompts with that external
+tool. Worker installs from the pin; Verifier reviews; Brain judges. The owner
+only relays prompts. Damaged installations need diagnosis first.
+
+Worker's mechanical installation, from the pinned framework clone:
 
 ```
 python3 tools/adopt.py <project> --project "My Project" --adapter claude-code
 ```
 
-Add `--verifier` to list the Verifier seat, `--workers builder` to name the
-executor, `--hooks` for a sample pre-push hook, `--dry-run` to preview.
-Existing files are never overwritten. Then fill in `AGENTS.md`.
+Options: `--verifier`, `--workers builder`, `--hooks`, `--dry-run`.
+Existing files are preserved; Worker fills in `AGENTS.md`.
 
 **Run:** open a fresh session in the project and paste the start prompt from
 [FRAMEWORK.md](framework/FRAMEWORK.md#the-round). Brain gives you every prompt

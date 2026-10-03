@@ -8,7 +8,7 @@ can run git and Python 3.9+. Standard library only.
         Where things stand: framework release, each round in flight seat by
         seat, what this machine has not pushed, the project checks, and one
         last line naming the owner's next action. Brain's first command.
-    python3 tools/fw.py start --role ROLE --round ID [--review BRANCH]
+    python3 tools/fw.py start --role ROLE --round ID [--review BRANCH] [--worktree FOLDER]
         First command of a Worker or Verifier session. Puts the session on its
         own branch at the right commit, from any clone or checkout, and pushes
         that branch so the seat shows as started.
@@ -18,7 +18,7 @@ can run git and Python 3.9+. Standard library only.
         (and pushes) only that file.
     python3 tools/fw.py delivery --round ID [--branch BRANCH]
         Whether a round's work is delivered, on which branch, at which commit.
-    python3 tools/fw.py prompt --round ID --role ROLE [--message N]
+    python3 tools/fw.py prompt --round ID --role ROLE [--message N] [--offline]
         The exact prompt Brain gives the owner for one seat, header included.
     python3 tools/fw.py check
         The project hygiene checks. Exit 1 when one fails.
@@ -43,6 +43,7 @@ import platform
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROUNDS = "docs/rounds"
@@ -437,7 +438,7 @@ def cmd_report(root: Path, role: str, round_id: str, push: bool) -> int:
         raise FwError("HEAD is detached; switch to your own branch before reporting")
     if branch == default_branch(root):
         raise FwError(f"you are on {branch}; reports are committed on your own branch, never on the default branch")
-    others = [p for p in dirty_paths(root) if p.replace("\\", "/") != rel]
+    others = [p for p in seat_dirty_paths(root, round_id) if p.replace("\\", "/") != rel]
     if others:
         raise FwError(
             "commit (or discard) your other changes first -- the report must "
@@ -667,6 +668,36 @@ def newest_only(root: Path, refs: list[str]) -> list[str]:
     return keep
 
 
+def round_candidates(index: RoundIndex, round_id: str) -> list[str]:
+    """Ignore inherited copies only when all later changes add new round folders.
+
+    Freshness is still evaluated against the original tip. Other later work
+    dominates its ancestors as before, including changes to the original brief.
+    """
+    root = index.root
+    refs = index.branches_with_reports(round_id)
+    inherited = set()
+    for older in refs:
+        for newer in refs:
+            if older == newer or not is_ancestor(root, older, newer):
+                continue
+            changes = out(["diff", "--name-status", "--no-renames", older, newer], root).splitlines()
+            added_rounds = set()
+            for line in changes:
+                status, _, path = line.partition("\t")
+                parts = path.split("/")
+                if status != "A" or len(parts) < 4 or parts[:2] != ["docs", "rounds"]:
+                    break
+                other = parts[2]
+                if other == round_id or any(p.startswith(f"{ROUNDS}/{other}/") for p in index.files[older]):
+                    break
+                added_rounds.add(other)
+            else:
+                if changes and all(f"{ROUNDS}/{other}/brief.md" in index.files[newer] for other in added_rounds):
+                    inherited.add(newer)
+    return newest_only(root, [ref for ref in refs if ref not in inherited])
+
+
 def flag_outdated_reviews(root: Path, evaluated: list[dict]) -> None:
     """A review is outdated when newer executor work for the round exists
     elsewhere, or another review is of a commit that descends from its own (a
@@ -711,7 +742,7 @@ def most_complete(root: Path, evaluated: list[dict]) -> tuple[dict | None, str]:
 
 def evaluate_round(index: RoundIndex, round_id: str) -> list[dict]:
     """Every branch holding the newest reports for a round, most complete first."""
-    candidates = newest_only(index.root, index.branches_with_reports(round_id))
+    candidates = round_candidates(index, round_id)
     evaluated = [evaluate_branch(index.root, ref, round_id, index.reports) for ref in candidates]
     flag_outdated_reviews(index.root, evaluated)
     evaluated.sort(key=lambda e: (len(e["reports"]), -len(e["problems"])), reverse=True)
@@ -800,6 +831,8 @@ def resume_point(index: RoundIndex, role: str, round_id: str) -> tuple[str, str]
         added = {p: b for p, b in files.items() if p.startswith(prefix) and index.base_files.get(p) != b}
         roles = index.roles_on(added, round_id)
         named = ref in (f"{role}/{round_id}", f"origin/{role}/{round_id}")
+        if named and prefix + "brief.md" not in files:
+            raise FwError(f"{ref} has no matching round brief; it was not continued")
         if (named or role in roles) and not roles - {role}:
             own.append(ref)
     own = newest_only(root, own)
@@ -858,15 +891,168 @@ def publish_start(root: Path, branch: str, wanted: str) -> None:
             return
 
 
-def cmd_start(root: Path, role: str, round_id: str, review: str | None) -> int:
+def verifier_target(index: RoundIndex, round_id: str, review: str | None) -> tuple[str, str] | None:
+    root = index.root
+    if review:
+        refs = [review] if ok(["rev-parse", "--verify", "--quiet", review], root) else [f"origin/{review}"]
+    else:
+        refs = []
+        for ref in index.branches_with_reports(round_id):
+            entry = evaluate_branch(root, ref, round_id, index.reports)
+            if not entry["problems"] and "verifier" not in entry["reports"] and entry["reports"]:
+                refs.append(ref)
+    refs = newest_only(root, refs)
+    if not refs:
+        print(f"not delivered yet: no executor report for round {round_id} on any branch")
+        return None
+    if len(refs) > 1:
+        print("more than one branch carries this round's work; rerun with --review <branch>:")
+        for ref in refs:
+            print(f"  {ref}")
+        return None
+    entry = evaluate_branch(root, refs[0], round_id, index.reports)
+    if not any(k != "verifier" for k in entry["reports"]) or entry["problems"]:
+        print(f"not delivered yet on {refs[0]}:")
+        for problem in entry["problems"]:
+            print(f"  {problem}")
+        return None
+    return refs[0], entry["tip"]
+
+
+def installation(root: Path) -> str:
+    """Use current files and reachable history; absence alone is not proof."""
+    if (root / "VERSION").is_file() and (root / "framework/FRAMEWORK.md").is_file():
+        return "framework"
+    try:
+        manifest = load_manifest(root)
+    except FwError:
+        return "damaged"
+    if manifest is not None:
+        required = ("AGENTS.md", "tools/fw.py", "docs/agents/FRAMEWORK.md")
+        missing = any(not (root / name).is_file() for name in required)
+        missing = missing or any(
+            entry.get("kind") == "copy" and not entry.get("deleted") and not (root / name).is_file()
+            for name, entry in manifest.get("files", {}).items()
+        )
+        return "damaged" if missing else "adopted"
+    if (root / "docs/agents/CONSTITUTION.md").is_file():
+        return "legacy"
+    if out(["log", "HEAD", base_ref(root), "-1", "--format=%H", "--",
+            MANIFEST, "tools/fw.py", "docs/agents/FRAMEWORK.md"], root):
+        return "damaged"
+    if (root / "docs/agents").exists() or (root / "tools/fw.py").exists():
+        return "ambiguous"
+    return "new"
+
+
+def adoption_pin(root: Path, round_id: str) -> tuple[str, str]:
+    brief = RoundIndex(root).brief(round_id) or ""
+    mode = re.search(r"^Mode:[ \t]*adoption[ \t]*$", brief, re.M)
+    source = re.search(r"^Framework-source:[ \t]*(\S+)[ \t]*$", brief, re.M)
+    commit = re.search(r"^Framework-commit:[ \t]*([0-9a-f]{40})[ \t]*$", brief, re.M)
+    if not mode or not source or not commit:
+        raise FwError("first adoption requires a dedicated Mode: adoption brief with Framework-source and "
+                      "a full Framework-commit; ask Brain to prepare it using the pinned external tool")
+    address, sha = source.group(1), commit.group(1)
+    # Only public HTTPS sources in dispatches; local paths are allowed for
+    # disposable fixtures, never passed to the owner as private machine paths.
+    if not re.fullmatch(r"[A-Za-z0-9_./:\\-]+", address) or address.startswith("-"):
+        raise FwError("Framework-source is not a safe clone address")
+    runner = Path(__file__).resolve().parent.parent
+    if not ok(["cat-file", "-e", f"{sha}:tools/fw.py"], runner):
+        raise FwError("the external tool's clone does not contain Framework-commit")
+    if out(["rev-parse", "HEAD"], runner) != sha or dirty_paths(runner):
+        raise FwError("use a clean external framework checkout at exactly Framework-commit")
+    advertised = git(["ls-remote", address], root, timeout=30)
+    if advertised.returncode:
+        raise FwError("Framework-source is unreachable; no bootstrap prompt issued")
+    if sha not in {line.split()[0] for line in advertised.stdout.splitlines() if line.split()}:
+        # A pinned ancestor stays usable after the source's branch tips advance.
+        # Fetch into disposable storage, never into the project's refs.
+        with tempfile.TemporaryDirectory(prefix="fw-pin-") as directory:
+            scratch = Path(directory)
+            git(["init", "--quiet", "--bare"], scratch, check=True)
+            fetched = git(["fetch", "--quiet", "--depth=1", address, sha], scratch, timeout=60)
+            if fetched.returncode or out(["rev-parse", "FETCH_HEAD"], scratch) != sha:
+                raise FwError("Framework-commit is not verified reachable at Framework-source; no bootstrap prompt issued")
+    return address, sha
+
+
+def seat_dirty_paths(root: Path, round_id: str) -> list[str]:
+    """A verified bootstrap clone is tooling, not unpublished project work."""
+    dirty = dirty_paths(root)
+    runner = Path(__file__).resolve().parent.parent
+    if runner.parent == root / ".worktrees" and runner.name.startswith("framework-"):
+        _source, sha = adoption_pin(root, round_id)
+        if runner.name == f"framework-{sha[:12]}":
+            return [path for path in dirty if path != f".worktrees/{runner.name}/"]
+    return dirty
+
+
+def cmd_worktree_start(root: Path, role: str, round_id: str, review: str | None, folder: str) -> int:
+    check_role(role)
+    check_round(round_id)
+    if role == "brain":
+        raise FwError("Brain does not start a seat worktree")
+    relative = Path(folder)
+    if len(relative.parts) != 2 or relative.parts[0] != ".worktrees" or not ROLE_NAME.fullmatch(relative.parts[1]):
+        raise FwError("--worktree must name .worktrees/<seat-folder>")
+    if (root / ".worktrees").is_symlink() or (root / relative).is_symlink():
+        raise FwError("seat worktree path is a symlink; it was not touched")
+    warning = fetch(root)
+    if warning:
+        raise FwError(warning + "; cannot safely select a seat worktree without remote history")
+    index = RoundIndex(root)
+    newer = index.superseded().get(round_id)
+    if newer:
+        raise FwError(superseded_message(round_id, newer))
+    state = installation(root)
+    if state == "new":
+        adoption_pin(root, round_id)
+    elif state not in ("adopted", "framework"):
+        raise FwError(f"installation is {state}; ask Brain to repair or update it before seat startup")
+    if role == "verifier":
+        chosen = verifier_target(index, round_id, review)
+        if chosen is None:
+            return 1
+        _source, target = chosen
+        wanted = free_review_branch(root, round_id, target)
+    else:
+        _source, target = resume_point(index, role, round_id)
+        wanted = f"{role}/{round_id}"
+    seat = root / relative
+    if seat.exists():
+        registered = {Path(item["worktree"]).resolve() for item in worktrees(root)}
+        if seat.resolve() not in registered or current_branch(seat) != wanted:
+            raise FwError(f"{folder} is not this repository's matching {wanted} checkout; it was not touched")
+        if show(seat, "HEAD", f"{ROUNDS}/{round_id}/brief.md") is None:
+            raise FwError(f"{folder} has no matching round brief; it was not touched")
+        print(f"resuming {folder}")
+    else:
+        # A named branch is the durable identity even if startup is interrupted
+        # immediately after worktree creation. Never steal a branch checked out elsewhere.
+        exists = ok(["rev-parse", "--verify", "--quiet", f"refs/heads/{wanted}"], root)
+        args = ["worktree", "add", "--quiet"]
+        args += [str(relative), wanted] if exists else ["-b", wanted, str(relative), target]
+        git(args, root, check=True)
+        print(f"created {folder}")
+    result = cmd_start(seat, role, round_id, review, fetched=True)
+    if result == 0:
+        print(f"work in: {folder}")
+    return result
+
+
+def cmd_start(root: Path, role: str, round_id: str, review: str | None, *, fetched: bool = False) -> int:
     check_role(role)
     check_round(round_id)
     if role == "brain":
         return cmd_status(root, offline=False, leaving=False)
-    warning = fetch(root)
+    warning = None if fetched else fetch(root)
     if warning:
         print(f"note: {warning}")
-    dirty = dirty_paths(root)
+    if installation(root) == "new":
+        adoption_pin(root, round_id)
+    dirty = seat_dirty_paths(root, round_id)
     if dirty:
         raise FwError(
             "this checkout has uncommitted changes, so it is not a clean place to "
@@ -878,33 +1064,10 @@ def cmd_start(root: Path, role: str, round_id: str, review: str | None) -> int:
     if newer:
         raise FwError(superseded_message(round_id, newer) + " Ask Brain for that round's prompt.")
     if role == "verifier":
-        if review:
-            refs = [review] if ok(["rev-parse", "--verify", "--quiet", review], root) else [f"origin/{review}"]
-        else:
-            # Branches carrying an executor report and no review yet. A branch
-            # that already holds a verifier report is an earlier review.
-            refs = []
-            for ref in index.branches_with_reports(round_id):
-                reports = evaluate_branch(root, ref, round_id, index.reports)["reports"]
-                if "verifier" not in reports and any(k != "verifier" for k in reports):
-                    refs.append(ref)
-        if not refs:
-            print(f"not delivered yet: no executor report for round {round_id} on any branch")
+        chosen = verifier_target(index, round_id, review)
+        if chosen is None:
             return 1
-        if len(refs) > 1:
-            print("more than one branch carries this round's work; rerun with --review <branch>:")
-            for ref in refs:
-                print(f"  {ref}")
-            return 1
-        entry = evaluate_branch(root, refs[0], round_id, index.reports)
-        executor = {k: v for k, v in entry["reports"].items() if k != "verifier"}
-        if not executor or entry["problems"]:
-            print(f"not delivered yet on {refs[0]}:")
-            for problem in entry["problems"]:
-                print(f"  {problem}")
-            return 1
-        target = entry["tip"]
-        source = refs[0]
+        source, target = chosen
     else:
         source, target = resume_point(index, role, round_id)
 
@@ -984,47 +1147,86 @@ def review_suffix(root: Path, round_id: str) -> str:
     return f"-{current}" if current > 1 else ""
 
 
-def seat_prompt(root: Path, round_id: str, role: str, message: int = 1) -> str:
-    """The prompt Brain gives the owner for one seat. The first line is the
-    header the owner compares across chats; the seat ends its last reply with
-    the same header and its outcome."""
+def seat_prompt(root: Path, round_id: str, role: str, message: int = 1, *, offline: bool = False) -> str:
+    """Canonical dispatch; startup owns checkout creation and safe reuse."""
     header = seat_line(root, round_id, role) + (f" · message {message}" if message > 1 else "")
     docs = "docs/agents" if (root / "docs/agents/FRAMEWORK.md").is_file() or not (root / "framework/FRAMEWORK.md").is_file() else "framework"
     card = "verifier" if role == "verifier" else "worker"
     url = public_url(root)
     project = project_name(root)
     number = round_number(round_id)
-    folder = f"{role}-{number}" + (review_suffix(root, round_id) if role == "verifier" else "")
-    where = (
-        f"Work inside this project's folder on this machine (clone {url} if it is not here): "
-        if url else "Work inside this project's folder on this machine: "
-    )
+    suffix = ""
+    if role == "verifier":
+        # Printing an early Verifier prompt is supported before Worker delivery.
+        index = RoundIndex(root)
+        refs = [ref for ref in index.branches_with_reports(round_id)
+                if (entry := evaluate_branch(root, ref, round_id, index.reports))["reports"]
+                and not entry["problems"] and "verifier" not in entry["reports"]]
+        refs = newest_only(root, refs)
+        if len(refs) == 1:
+            name = free_review_branch(root, round_id, out(["rev-parse", refs[0]], root))
+            suffix = name[len(f"verifier/{round_id}"):]
+        else:
+            suffix = review_suffix(root, round_id)
+    folder = f".worktrees/{role}-{number}{suffix}"
+    where = (f"Work inside this project's folder on this machine (clone {url} if it is not here). "
+             if url else "Work inside this project's folder on this machine. ")
+    bootstrap = ""
+    tool = "tools/fw.py"
+    state = installation(root)
+    if state == "new":
+        if offline:
+            raise FwError("offline first-adoption dispatch cannot verify Framework-source; retry online")
+        source, sha = adoption_pin(root, round_id)
+        checkout = f".worktrees/framework-{sha[:12]}"
+        tool = f"{checkout}/tools/fw.py"
+        bootstrap = (
+            f"Before running framework code, prepare the brief's verified source: if {checkout} is absent, "
+            f"run git clone --no-checkout {source} {checkout}, then git -C {checkout} checkout --detach {sha}. "
+            f"If it exists, require a clean checkout whose git -C {checkout} rev-parse HEAD is exactly {sha}; "
+            "otherwise stop without changing it. Use this pinned external tool for first adoption only. "
+            "Worker installs from this same source as the brief directs; Brain does not install it.\n\n"
+        )
+    elif state not in ("adopted", "framework"):
+        raise FwError(f"installation is {state}; ask Brain to repair or update it before dispatch")
+    command = f"python3 {tool} start --role {role} --round {round_id}"
     body = (
-        f"You are the {role.capitalize()} for {project}, round {round_id}. {where}from its main checkout "
-        f"run git worktree add --detach .worktrees/{folder} origin/{default_branch(root)} and work in "
-        "that folder, never in a copy beside the project. In a cloud workspace, work in the clone it gives you."
-        f"\n\nIn that folder, first run python3 tools/fw.py start --role {role} --round {round_id} (use py -3 "
-        "or python if python3 is not found) and stop if it fails. Then read AGENTS.md, "
-        f"{docs}/FRAMEWORK.md, {docs}/roles/{card}.md and {ROUNDS}/{round_id}/brief.md, and carry out the brief."
-        f"\n\nFinish, even if you stop early, by writing {report_path(round_id, role)} and running python3 "
-        f"tools/fw.py report --role {role} --round {round_id} --push. End your final reply with exactly one "
-        f"line: {seat_line(root, round_id, role)} · DONE — report pushed at <commit>, or STOPPED or BLOCKED "
-        "with the reason."
+        f"You are the {role.capitalize()} for {project}, round {round_id}. {where}"
+        + bootstrap
+        + f"From its main checkout, run {command} --worktree {folder} (use py -3 or python if python3 is not found). "
+        "Stop if it fails. Work in the folder it prints; startup creates or safely resumes the matching seat. "
+        f"In a cloud workspace, work in the clone it gives you and run {command} without --worktree instead.\n\n"
+        f"Then read AGENTS.md, {docs}/FRAMEWORK.md, {docs}/roles/{card}.md and "
+        f"{ROUNDS}/{round_id}/brief.md, and carry out the brief. For first adoption, read the pinned source's "
+        "framework documents until the installed copies exist.\n\n"
+        f"Finish, even if you stop early, by writing {report_path(round_id, role)} and running python3 "
+        f"tools/fw.py report --role {role} --round {round_id} --push. "
     )
+    if bootstrap:
+        body += (f"If the installed tool is still absent, from the project's main checkout use python3 {tool} "
+                 f"--cwd {folder} report --role {role} --round {round_id} --push "
+                 "(in a cloud clone use --cwd .). ")
+    body += (f"End your final reply with exactly one line: {seat_line(root, round_id, role)} "
+             "· DONE — report pushed at <commit>, or STOPPED or BLOCKED with the reason.")
+    if offline:
+        body += "\n\nRemote history was not checked. Worktree startup fetches and stops if origin is unavailable."
     return f"{header}\n\n{body}"
 
 
-def cmd_prompt(root: Path, round_id: str, role: str, message: int) -> int:
+def cmd_prompt(root: Path, round_id: str, role: str, message: int, *, offline: bool = False) -> int:
     check_round(round_id)
     check_role(role)
     if role == "brain":
         raise FwError("Brain's prompt is paste 1 in the framework's FRAMEWORK.md ('The round')")
     if message < 1:
         raise FwError("--message counts from 1")
+    warning = None if offline else fetch(root)
+    if warning:
+        print(f"note: {warning}", file=sys.stderr)
     newer = RoundIndex(root).superseded().get(round_id)
     if newer:
         raise FwError(superseded_message(round_id, newer))
-    print(seat_prompt(root, round_id, role, message))
+    print(seat_prompt(root, round_id, role, message, offline=offline or bool(warning) or not has_origin(root)))
     if locate_brief(root, round_id) is None:
         print(f"\nnote: no brief for round {round_id} is on any branch here yet; push it before sending this",
               file=sys.stderr)
@@ -1045,7 +1247,15 @@ def load_manifest(root: Path) -> dict | None:
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+        for field in ("framework", "files", "settings"):
+            if field in data and not isinstance(data[field], dict):
+                raise ValueError(f"{field} must be a JSON object")
+        if any(not isinstance(entry, dict) for entry in data.get("files", {}).values()):
+            raise ValueError("file entries must be JSON objects")
+        return data
     except (OSError, ValueError) as exc:
         raise FwError(f"{MANIFEST} is unreadable: {exc}") from exc
 
@@ -1071,7 +1281,10 @@ def latest_release(repository: str) -> tuple[str | None, str | None]:
 
 
 def framework_lines(root: Path, offline: bool) -> tuple[list[str], str | None]:
-    manifest = load_manifest(root)
+    try:
+        manifest = load_manifest(root)
+    except FwError as exc:
+        return [f"damaged framework manifest: {exc}"], None
     if manifest is None:
         if (root / "VERSION").is_file() and (root / "framework" / "FRAMEWORK.md").is_file():
             version = (root / "VERSION").read_text(encoding="utf-8").strip()
@@ -1341,14 +1554,31 @@ def cmd_status(root: Path, *, offline: bool, leaving: bool) -> int:
         print(f"  {line}")
     findings = check_project(root)
     print("Checks")
-    if not findings:
+    state = installation(root)
+    if state not in ("adopted", "framework"):
+        print(f"  installation {state}: project configuration is not verified")
+    elif not findings:
         print("  all project checks pass")
     for level, message in findings:
         print(f"  {level}: {message}")
-    print(f"Command form on this machine: {python_hint()} <command>")
+    if state == "new":
+        print("Command form before adoption: python3 <pinned-framework>/tools/fw.py --cwd <project> <command>")
+    else:
+        print(f"Command form on this machine: {python_hint()} <command>")
     if not action:
         action = (f"ask Brain to plan the update round to framework release {newer}" if newer
                   else "nothing is waiting on you; ask Brain for the next round")
+    if state == "new":
+        named = re.search(r"\bround ([A-Za-z0-9._-]+)", action)
+        brief = RoundIndex(root).brief(named.group(1)) if named else None
+        if re.search(r"^Mode:[ \t]*adoption[ \t]*$", brief or "", re.M):
+            action += " (first adoption: use the pinned external framework tool)"
+        else:
+            action = "ask Brain to prepare a first-adoption round with a verified framework source and commit"
+    elif state in ("damaged", "ambiguous"):
+        action = f"ask Brain to diagnose the {state} framework installation before dispatch; do not assume first adoption"
+    elif state == "legacy":
+        action = "ask Brain to prepare a framework update round for the legacy installation"
     print(f"next: {action}")
     return 1 if (leaving and not safe) else 0
 
@@ -1491,6 +1721,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("start", help="first command of a Worker or Verifier session")
     p.add_argument("--role", required=True)
     p.add_argument("--round", required=True)
+    p.add_argument("--worktree", default=None, help="create or resume .worktrees/<seat-folder> from the main checkout")
     p.add_argument("--review", default=None, help="Verifier: the branch to review, if more than one carries the round")
 
     p = sub.add_parser("report", help="stamp and commit docs/rounds/ID/ROLE.md")
@@ -1505,6 +1736,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("prompt", help="print the prompt for one seat of a round")
     p.add_argument("--round", required=True)
     p.add_argument("--role", required=True)
+    p.add_argument("--offline", action="store_true", help="use cached refs; disclose unchecked remote history")
     p.add_argument("--message", type=int, default=1, help="N for a later message to the same seat (adds '· message N')")
 
     sub.add_parser("check", help="project hygiene checks")
@@ -1518,13 +1750,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "status":
             return cmd_status(root, offline=args.offline, leaving=args.leaving)
         if args.command == "start":
+            if args.worktree:
+                return cmd_worktree_start(root, args.role, args.round, args.review, args.worktree)
             return cmd_start(root, args.role, args.round, args.review)
         if args.command == "report":
             return cmd_report(root, args.role, args.round, args.push)
         if args.command == "delivery":
             return cmd_delivery(root, args.round, args.branch)
         if args.command == "prompt":
-            return cmd_prompt(root, args.round, args.role, args.message)
+            return cmd_prompt(root, args.round, args.role, args.message, offline=args.offline)
         return cmd_check(root)
     except FwError as exc:
         print(f"fw: {exc}", file=sys.stderr)
