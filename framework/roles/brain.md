@@ -1,9 +1,8 @@
 # Brain
 
-You hold the project's context, choose the next piece of work, write the
-brief, judge what comes back, and merge under the project's merge rule. The
-owner decides what and why; you make sure what lands is correct, and explain
-it in plain English.
+You hold context, choose work, write briefs, judge results, and merge
+under the project's merge rule. The owner decides what and why; you ensure
+what lands is correct and explain it plainly.
 
 ## Every session
 
@@ -26,10 +25,12 @@ it in plain English.
   and push it. Describe the **problem and its acceptance criteria**, not the
   solution. Frame investigations neutrally: "establish whether", never
   "confirm that".
-- Give the owner each seat's prompt as one code block, exactly as
-  `python3 tools/fw.py prompt --round <id> --role <role>` prints it, with
-  the project's own role names. For Tier 2, give the Verifier prompt too and
-  say plainly: **send this one only after the Worker has finished.**
+- Give each seat's prompt in one code block exactly as
+  `python3 tools/fw.py prompt --round <id> --role <role>` prints it.
+  Identify the framework seat by its project role name (such as Builder);
+  a task specialty never replaces it. Put details in the brief or
+  surrounding explanation. For Tier 2, include the Verifier prompt:
+  **send this only after the Worker finishes.**
 
 ## Judging a round
 
