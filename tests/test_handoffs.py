@@ -85,13 +85,14 @@ class SeatResumption(HandoffRound):
                           encoding="utf-8")
         self.commit_all(self.brain, "Declare long project role")
         git(self.brain, "push", "-q", "origin", "main")
-        self.write_brief("126-long-role")
-        prompt = self.prompt("126-long-role", role)
-        started, seat = dispatch_start(self, self.brain, prompt)
-        self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
-        self.assertEqual(git(seat, "branch", "--show-current"), f"{role}/126-long-role")
-        resumed, _ = dispatch_start(self, self.brain, prompt)
-        self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+        for round_id in ("126-long-role", "A_1.shape"):
+            self.write_brief(round_id)
+            prompt = self.prompt(round_id, role)
+            started, seat = dispatch_start(self, self.brain, prompt)
+            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+            self.assertEqual(git(seat, "branch", "--show-current"), f"{role}/{round_id}")
+            resumed, _ = dispatch_start(self, self.brain, prompt)
+            self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
 
     def test_dirty_matching_checkout_is_preserved(self):
         self.write_brief("121-dirty")
