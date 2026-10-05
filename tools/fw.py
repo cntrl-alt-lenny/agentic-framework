@@ -669,7 +669,7 @@ def newest_only(root: Path, refs: list[str]) -> list[str]:
 
 
 def round_candidates(index: RoundIndex, round_id: str) -> list[str]:
-    """Ignore inherited copies only when all later changes add new round folders.
+    """Ignore inherited copies that only add successor rounds and review evidence.
 
     Freshness is still evaluated against the original tip. Other later work
     dominates its ancestors as before, including changes to the original brief.
@@ -689,11 +689,17 @@ def round_candidates(index: RoundIndex, round_id: str) -> list[str]:
                 if status != "A" or len(parts) < 4 or parts[:2] != ["docs", "rounds"]:
                     break
                 other = parts[2]
-                if other == round_id or any(p.startswith(f"{ROUNDS}/{other}/") for p in index.files[older]):
-                    break
-                added_rounds.add(other)
+                if any(p.startswith(f"{ROUNDS}/{other}/") for p in index.files[older]):
+                    # Existing rounds may gain evidence, but never acceptance
+                    # briefs or seat reports (including custom stamped seats).
+                    if path in (f"{ROUNDS}/{other}/brief.md", f"{ROUNDS}/{other}/README.md") or index.reports.role(
+                        path, index.files[newer][path]
+                    ):
+                        break
+                else:
+                    added_rounds.add(other)
             else:
-                if changes and all(f"{ROUNDS}/{other}/brief.md" in index.files[newer] for other in added_rounds):
+                if added_rounds and all(f"{ROUNDS}/{other}/brief.md" in index.files[newer] for other in added_rounds):
                     inherited.add(newer)
     return newest_only(root, [ref for ref in refs if ref not in inherited])
 

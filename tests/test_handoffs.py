@@ -168,6 +168,140 @@ class SeatResumption(HandoffRound):
 
 
 class SuccessorDelivery(HandoffRound):
+    def review_successors(self, separate):
+        self.write_brief("210-reviewed")
+        self.deliver_worker("worker", "210-reviewed")
+        verifier = self.deliver_verifier("verifier", "210-reviewed")
+        original = git(verifier, "rev-parse", "HEAD")
+        # Arbitrary names, sorting on either side of the original delivery.
+        for branch in ("a-followup", "z-followup"):
+            git(self.brain, "fetch", "-q", "origin")
+            git(self.brain, "switch", "-q", "-c", branch, "origin/verifier/210-reviewed")
+            self.add_review("210-reviewed", f"{branch}.txt")
+            if separate:
+                self.commit_all(self.brain, "Record predecessor review")
+            folder = self.brain / "docs/rounds/211-next"
+            folder.mkdir()
+            (folder / "brief.md").write_text("Tier: 2\nMode: implementation\n", encoding="utf-8")
+            self.commit_all(self.brain, "Prepare successor")
+            git(self.brain, "push", "-q", "origin", branch)
+        # A further round inherits both the successor and predecessor evidence.
+        self.write_brief("212-later", start="z-followup")
+        git(self.brain, "switch", "-q", "brain/212-later")
+        self.add_review("211-next", "decision.txt")
+        self.add_review("210-reviewed", "second-pass.txt")
+        self.commit_all(self.brain, "Record successive reviews")
+        git(self.brain, "push", "-q")
+        status = fw(self.brain, "status")
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertNotIn("stale", status.stdout)
+        for round_id in ("211-next", "212-later"):
+            self.assertIn(f"in flight: {round_id} (Tier 2)\n    worker: not started\n    verifier: not started",
+                          status.stdout)
+        for args in ((), ("--branch", "origin/verifier/210-reviewed")):
+            result = fw(self.brain, "delivery", "--round", "210-reviewed", *args)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn(f"origin/verifier/210-reviewed ({original[:12]}): delivered", result.stdout)
+
+    def add_review(self, round_id, name):
+        path = self.brain / f"docs/rounds/{round_id}/attachments/{name}"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("Independent review evidence\n", encoding="utf-8")
+
+    def test_successor_and_review_added_together(self):
+        self.review_successors(separate=False)
+
+    def test_successor_and_review_in_separate_commits(self):
+        self.review_successors(separate=True)
+
+    def test_successor_evidence_does_not_hide_changed_delivery(self):
+        # Each shape gets an independent origin: no earlier bad branch can
+        # accidentally supply the rejection expected for a later shape.
+        shapes = ("production", "brief", "report-body", "report-stamp", "unstamped-report",
+                  "custom-stamp", "edit-evidence", "delete-evidence", "missing-brief")
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                case = HandoffRound()
+                case.setUp()
+                try:
+                    case.write_brief("220-strict")
+                    worker, _ = case.deliver_worker("worker", "220-strict")
+                    old = worker / "docs/rounds/220-strict/attachments/old.txt"
+                    old.parent.mkdir()
+                    old.write_text("Original evidence\n", encoding="utf-8")
+                    case.commit_all(worker, "Original evidence")
+                    git(worker, "push", "-q")
+                    case.deliver_verifier("verifier", "220-strict")
+                    case.write_brief("221-next", start="origin/verifier/220-strict")
+                    git(case.brain, "switch", "-q", "brain/221-next")
+                    folder = case.brain / "docs/rounds/220-strict"
+                    (folder / "attachments/review.txt").write_text("Review\n", encoding="utf-8")
+                    if shape == "production":
+                        (case.brain / "feature.txt").write_text("New work\n", encoding="utf-8")
+                    elif shape == "brief":
+                        (folder / "brief.md").write_text("Changed acceptance\n", encoding="utf-8")
+                    elif shape.startswith("report-"):
+                        path = folder / "worker.md"
+                        text = path.read_text(encoding="utf-8")
+                        if shape == "report-stamp":
+                            text = text.replace("role: worker", "role: verifier")
+                        else:
+                            text += "Changed report claim\n"
+                        path.write_text(text, encoding="utf-8")
+                    elif shape in ("unstamped-report", "custom-stamp"):
+                        (folder / ("worker.md" if shape == "unstamped-report" else "specialist.md")).write_text(
+                            WORKER_REPORT if shape == "unstamped-report" else (folder / "verifier.md").read_text(encoding="utf-8"),
+                            encoding="utf-8")
+                    elif shape == "edit-evidence":
+                        (folder / "attachments/old.txt").write_text("Rewritten evidence\n", encoding="utf-8")
+                    elif shape == "delete-evidence":
+                        (folder / "attachments/old.txt").unlink()
+                    else:
+                        (case.brain / "docs/rounds/221-next/brief.md").unlink()
+                        (case.brain / "docs/rounds/221-next/notes.txt").write_text("No brief\n", encoding="utf-8")
+                    case.commit_all(case.brain, "Successor with incompatible changes")
+                    git(case.brain, "push", "-q")
+                    result = fw(case.brain, "delivery", "--round", "220-strict")
+                    self.assertEqual(result.returncode, 1, result.stdout)
+                    self.assertIn("NOT delivered", result.stdout)
+                    named = fw(case.brain, "delivery", "--round", "220-strict", "--branch",
+                               "origin/verifier/220-strict")
+                    self.assertEqual(named.returncode, 0, named.stdout)
+                finally:
+                    case.tearDown()
+
+    def test_new_worker_delivery_after_review_records_requires_review(self):
+        self.write_brief("230-reviewed")
+        worker, _ = self.deliver_worker("worker", "230-reviewed")
+        self.deliver_verifier("verifier", "230-reviewed")
+        self.write_brief("231-next", start="origin/verifier/230-reviewed")
+        git(self.brain, "switch", "-q", "brain/231-next")
+        self.add_review("230-reviewed", "judgment.txt")
+        self.commit_all(self.brain, "Record review")
+        git(self.brain, "push", "-q")
+        (worker / "feature.txt").write_text("New executor work\n", encoding="utf-8")
+        self.commit_all(worker, "Fix after review")
+        (worker / "docs/rounds/230-reviewed/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
+        result = fw(worker, "report", "--role", "worker", "--round", "230-reviewed", "--push")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = fw(self.brain, "delivery", "--round", "230-reviewed")
+        self.assertIn("this review is of an older commit", result.stdout)
+        status = fw(self.brain, "status")
+        self.assertIn("verifier: stale", status.stdout)
+
+    def test_successor_review_records_do_not_override_supersession(self):
+        self.write_brief("240-reviewed")
+        self.deliver_worker("worker", "240-reviewed")
+        self.deliver_verifier("verifier", "240-reviewed")
+        self.write_brief("241-corrective", start="origin/verifier/240-reviewed", supersedes="240-reviewed")
+        git(self.brain, "switch", "-q", "brain/241-corrective")
+        self.add_review("240-reviewed", "rejection.txt")
+        self.commit_all(self.brain, "Record rejection")
+        git(self.brain, "push", "-q")
+        result = fw(self.brain, "delivery", "--round", "240-reviewed")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("was superseded by round 241-corrective", result.stdout)
+
     def test_successor_brief_does_not_invalidate_original_delivery(self):
         self.write_brief("110-audit")
         self.deliver_worker("worker", "110-audit")
