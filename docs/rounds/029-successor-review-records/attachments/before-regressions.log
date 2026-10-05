@@ -1,0 +1,29 @@
+$ python3 -m unittest tests.test_handoffs.SuccessorDelivery.test_successor_and_review_added_together tests.test_handoffs.SuccessorDelivery.test_successor_and_review_in_separate_commits -v
+test_successor_and_review_added_together (tests.test_handoffs.SuccessorDelivery) ... FAIL
+test_successor_and_review_in_separate_commits (tests.test_handoffs.SuccessorDelivery) ... FAIL
+
+======================================================================
+FAIL: test_successor_and_review_added_together (tests.test_handoffs.SuccessorDelivery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<framework>/tests/test_handoffs.py", line 212, in test_successor_and_review_added_together
+    self.review_successors(separate=False)
+  File "<framework>/tests/test_handoffs.py", line 197, in review_successors
+    self.assertNotIn("stale", status.stdout)
+AssertionError: 'stale' unexpectedly found in 'Framework\n  pinned to agentic-framework 3.1.0 (<framework>)\n  up to date with the latest release (3.1.0)\n  framework files changed locally (project rules belong in AGENTS.md): tools/fw.py\nMerge rule\n  owner-approves\nRounds\n  in flight: 210-reviewed (Tier 2)\n    worker: stale -- its report no longer describes its branch\n    verifier: stale -- its report no longer describes its branch\n  in flight: 211-next (Tier 2)\n    worker: not started\n    verifier: not started\n  in flight: 212-later (Tier 2)\n    worker: not started\n    verifier: not started\nThis machine\n  on brain/212-later; no uncommitted changes\n  safe to leave this machine: yes\nChecks\n  all project checks pass\nCommand form on this machine: python3 tools/fw.py <command>\nnext: ask Brain what to send the Worker of round 210-reviewed: its report is out of date\n'
+
+======================================================================
+FAIL: test_successor_and_review_in_separate_commits (tests.test_handoffs.SuccessorDelivery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<framework>/tests/test_handoffs.py", line 215, in test_successor_and_review_in_separate_commits
+    self.review_successors(separate=True)
+  File "<framework>/tests/test_handoffs.py", line 197, in review_successors
+    self.assertNotIn("stale", status.stdout)
+AssertionError: 'stale' unexpectedly found in 'Framework\n  pinned to agentic-framework 3.1.0 (<framework>)\n  up to date with the latest release (3.1.0)\n  framework files changed locally (project rules belong in AGENTS.md): tools/fw.py\nMerge rule\n  owner-approves\nRounds\n  in flight: 210-reviewed (Tier 2)\n    worker: stale -- its report no longer describes its branch\n    verifier: stale -- its report no longer describes its branch\n  in flight: 211-next (Tier 2)\n    worker: not started\n    verifier: not started\n  in flight: 212-later (Tier 2)\n    worker: not started\n    verifier: not started\nThis machine\n  on brain/212-later; no uncommitted changes\n  safe to leave this machine: yes\nChecks\n  all project checks pass\nCommand form on this machine: python3 tools/fw.py <command>\nnext: ask Brain what to send the Worker of round 210-reviewed: its report is out of date\n'
+
+----------------------------------------------------------------------
+Ran 2 tests in 14.289s
+
+FAILED (failures=2)
+Process exit: 1

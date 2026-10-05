@@ -1,0 +1,22 @@
+$ python3 docs/rounds/029-successor-review-records/attachments/reproduce.py
+Original delivery: 0
+origin/verifier/210-reviewed (6bf819ea0725): delivered
+  verifier: report describes 6332b8e1f33d (written 2026-10-05T09:43:57Z on macOS 27.0.1)
+  worker: report describes d6c39a6abb66 (written 2026-10-05T09:43:55Z on macOS 27.0.1)
+
+Successor brief alone: 0
+origin/verifier/210-reviewed (6bf819ea0725): delivered
+  verifier: report describes 6332b8e1f33d (written 2026-10-05T09:43:57Z on macOS 27.0.1)
+  worker: report describes d6c39a6abb66 (written 2026-10-05T09:43:55Z on macOS 27.0.1)
+
+Successor plus Brain review record: 1
+origin/brain/211-next (508ac86536e4): NOT delivered
+  problem: origin/brain/211-next changed after the verifier report (docs/rounds/211-next/brief.md); the report describes an older commit, so the verifier must rewrite it
+  problem: origin/brain/211-next changed after the worker report (docs/rounds/211-next/brief.md); the report describes an older commit, so the worker must rewrite it
+
+Explicit unchanged delivery: 0
+origin/verifier/210-reviewed (6bf819ea0725): delivered
+  verifier: report describes 6332b8e1f33d (written 2026-10-05T09:43:57Z on macOS 27.0.1)
+  worker: report describes d6c39a6abb66 (written 2026-10-05T09:43:55Z on macOS 27.0.1)
+
+Process exit: 1
