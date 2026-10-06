@@ -54,10 +54,10 @@ rolling it out and measuring whether it pays for itself in each project.
 - **A per-clone report inbox** (removed in 3.0.0). Reports are committed with
   the work instead, so they reach every machine.
 - **Automatic launching of seats by Brain.** The owner keeps the relay.
-- **Recording which model ran each seat.** Reports record the operating
-  system automatically instead.
+- **Recording which model ran each seat.** It does not change what the
+  evidence shows.
 
-## Lessons that shape briefs
+## Lessons that shape prompts
 
 - Executors fix the listed examples rather than the class: ask for cases
   beyond the examples, and re-derive with cases of your own.

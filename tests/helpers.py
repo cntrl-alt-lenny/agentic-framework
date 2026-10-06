@@ -123,9 +123,10 @@ class BatchTest(TempDirTest):
         self.origin = self.adopted_origin()
         self.brain = self.clone(self.origin, "brain-mac")
 
-    def deliver_worker(self, clone: str, batch: str, *, summary: bool = True) -> Path:
+    def deliver_worker(self, clone: str, batch: str, *, summary: bool = True, branch: str = "") -> Path:
+        branch = branch or f"worker/{batch}"
         worker = self.clone(self.origin, clone)
-        git(worker, "switch", "-q", "-c", f"worker/{batch}")
+        git(worker, "switch", "-q", "-c", branch)
         (worker / "feature.txt").write_text(f"feature {batch}\n", encoding="utf-8")
         git(worker, "add", "feature.txt")
         git(worker, "commit", "-q", "-m", "Add the feature")
@@ -134,7 +135,7 @@ class BatchTest(TempDirTest):
             (worker / "docs/batches" / f"{batch}.md").write_text(WORKER_SUMMARY, encoding="utf-8")
             git(worker, "add", "-A")
             git(worker, "commit", "-q", "-m", f"Batch {batch}: summary")
-        git(worker, "push", "-q", "-u", "origin", f"worker/{batch}")
+        git(worker, "push", "-q", "-u", "origin", branch)
         return worker
 
     def deliver_review(self, clone: str, batch: str) -> Path:
@@ -146,9 +147,10 @@ class BatchTest(TempDirTest):
         git(verifier, "push", "-q", "origin", f"worker/{batch}")
         return verifier
 
-    def squash_merge(self, branch: str) -> None:
+    def squash_merge(self, branch: str, *, delete: bool = True) -> None:
         git(self.brain, "fetch", "-q", "origin")
         git(self.brain, "merge", "-q", "--squash", f"origin/{branch}")
         git(self.brain, "commit", "-q", "-m", f"{branch} (squashed)")
         git(self.brain, "push", "-q", "origin", "main")
-        git(self.brain, "push", "-q", "origin", "--delete", branch)
+        if delete:
+            git(self.brain, "push", "-q", "origin", "--delete", branch)

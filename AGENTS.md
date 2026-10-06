@@ -20,8 +20,8 @@ so a mistake here spreads.
 | Seat | Card | Scope |
 |---|---|---|
 | Brain | `framework/roles/brain.md` | Triages feedback, plans releases, judges, merges after the owner's yes. |
-| Builder | `framework/roles/worker.md` | Changes the framework as one brief says. |
-| Verifier | `framework/roles/verifier.md` | Reviews every batch that changes `tools/` (the Checked path). |
+| Builder | `framework/roles/worker.md` | Changes the framework as one prompt says. |
+| Verifier | `framework/roles/verifier.md` | Reviews every batch that changes `framework/`, `tools/` or `templates/` (the Checked path). |
 
 ## Invariants
 

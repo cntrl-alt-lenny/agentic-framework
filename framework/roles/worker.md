@@ -7,7 +7,8 @@ or a specialist name; this card still applies.
 ## Work
 
 1. Read `AGENTS.md`, `docs/agents/FRAMEWORK.md`, this card and the prompt.
-   Branch `worker/<batch>` from the latest default branch.
+   Branch `worker/<batch>` from the latest default branch, run
+   `python3 tools/fw.py status`, and act on any warning it prints.
 2. If the prompt conflicts with `AGENTS.md` or its assumptions are false, stop
    and report `BLOCKED` with the question and its options for Brain.
 3. Stay in scope. Commit small. Run the required checks, fix what fails, and

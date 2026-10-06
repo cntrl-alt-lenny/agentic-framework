@@ -43,8 +43,62 @@ class WorkNotMerged(BatchTest):
     def test_a_squash_merged_batch_is_not_listed(self) -> None:
         self.deliver_worker("worker", "02-done")
         self.assertIn("worker/02-done", self.status())
-        self.squash_merge("worker/02-done")
+        self.squash_merge("worker/02-done", delete=False)
         self.assertIn("nothing waiting", self.status())
+
+    def test_a_merged_branch_left_behind_is_not_shown_as_working(self) -> None:
+        # Review of 4.0: once main changes the same file, content no longer matches.
+        self.deliver_worker("worker", "12-sq")
+        self.squash_merge("worker/12-sq", delete=False)
+        (self.brain / "feature.txt").write_text("changed later on main\n", encoding="utf-8")
+        self.commit_all(self.brain, "later change")
+        git(self.brain, "push", "-q", "origin", "main")
+        out = self.status()
+        self.assertIn("worker/12-sq: merged earlier", out)
+        self.assertIn("next: nothing is waiting on you", out)
+
+    def test_a_cloud_named_branch_is_read_by_its_files(self) -> None:
+        # Review of 4.0: cloud tools pick their own branch names.
+        self.deliver_worker("cloud", "07-menus", branch="claude/project-thread-abc")
+        out = self.status()
+        self.assertIn("claude/project-thread-abc: 2 commit(s)", out)
+        self.assertIn("batch 07-menus: Worker summary in", out)
+        self.assertIn("next: ask Brain to review batch 07-menus", out)
+
+    def test_fixes_after_a_review_are_not_shown_as_judged(self) -> None:
+        self.deliver_worker("worker", "09-fix")
+        self.deliver_review("verifier", "09-fix")
+        fixer = self.clone(self.origin, "fixer")
+        git(fixer, "switch", "-q", "worker/09-fix")
+        (fixer / "feature.txt").write_text("fixed\n", encoding="utf-8")
+        self.commit_all(fixer, "Fix the finding")
+        git(fixer, "push", "-q")
+        out = self.status()
+        self.assertIn("batch 09-fix: 1 commit(s) after the Verifier's review", out)
+        self.assertIn("next: ask Brain to check the fixes in batch 09-fix", out)
+
+    def test_brains_own_branch_waits_for_the_owner(self) -> None:
+        # Review of 4.0: a Small-path branch must never read as "nothing waiting".
+        git(self.brain, "switch", "-q", "-c", "brain/state-notes")
+        (self.brain / "docs/state.md").write_text("# State\n\nA decision.\n", encoding="utf-8")
+        self.commit_all(self.brain, "state")
+        git(self.brain, "push", "-q", "-u", "origin", "brain/state-notes")
+        git(self.brain, "switch", "-q", "main")
+        self.assertIn("next: ask Brain whether brain/state-notes is ready for your yes", self.status())
+
+    def test_work_in_progress_is_not_called_nothing(self) -> None:
+        self.deliver_worker("worker", "10-wip", summary=False)
+        self.assertIn("next: nothing needs you yet: 1 branch(es) still being worked on", self.status())
+
+    def test_this_machines_copy_ahead_of_a_merged_github_copy_is_listed(self) -> None:
+        worker = self.deliver_worker("worker", "11-ahead")
+        self.squash_merge("worker/11-ahead", delete=False)
+        (worker / "more.txt").write_text("more\n", encoding="utf-8")
+        self.commit_all(worker, "More, never pushed")
+        git(worker, "fetch", "-q", "origin")
+        result = fw(worker, "status", "--offline")
+        self.assertIn("worker/11-ahead (this machine's copy): 3 commit(s)", result.stdout)
+        self.assertIn("its batch was merged, but 1 later commit(s) are not", result.stdout)
 
     def test_a_branch_here_and_on_github_is_listed_once(self) -> None:
         self.deliver_worker("worker", "03-twice")

@@ -3,7 +3,7 @@
 Each entry states what changed, why, and what an adopting project must do to
 move to it. `tools/adopt.py --update` prints the "What an adopter must do"
 section of every release between a project's pinned release and the new one.
-Releases are tagged by Brain after the round that produces them merges.
+Releases are tagged by Brain after the batch that produces them merges.
 
 ## 4.0.0 — the slim framework
 
@@ -40,14 +40,16 @@ Size: the core went from 1,687 to 651 words and the three role cards from
 
 ### What an adopter must do
 
-1. Brain runs `tools/adopt.py <project> --update` from a clone of the
+1. Finish or close any 3.x round still in flight; the old `fw.py status`
+   lists it.
+2. Brain runs `tools/adopt.py <project> --update` from a clone of the
    framework at 4.0.0, on a `brain/` branch, and opens it for the owner's yes.
-2. Finish or close any 3.x round still in flight first; `fw.py status` lists
-   its branch. Merged `docs/rounds/` folders stay as history; nothing reads
-   them any more except the personal-data check.
+   Merged `docs/rounds/` folders stay as history; delete or rewrite
+   `docs/rounds/README.md`, which still describes the old commands.
 3. In `AGENTS.md` and guides such as `docs/contributing.md`, replace
    mentions of the removed commands (start, report, delivery, prompt), of
-   Tier 0/1/2, and of round reports with the batch words:
+   Tier 0/1/2, of round reports, and of the core's rule numbers (the
+   evidence rule is now rule 3) with the batch words:
    Small, Normal or Checked, and `docs/batches/`. Say which kinds of change
    take the Checked path in this project, judged by how strong its checks are.
 4. Add `## Scorecard` to `docs/state.md` and its first line after two weeks.

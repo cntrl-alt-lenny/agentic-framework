@@ -286,15 +286,49 @@ def merge_rule(root: Path) -> str | None:
     return match.group(1) if match else None
 
 
-def batch_name(branch: str) -> str:
-    """worker/07-menus -> 07-menus; a branch with no seat prefix is its own name."""
-    return branch.split("/", 1)[1] if "/" in branch else branch
-
-
 def changed_on(root: Path, base: str, ref: str, path: str) -> set[str]:
     """Files under ``path`` that differ between ``base`` and ``ref``."""
     here, there = tree_files(root, base, path), tree_files(root, ref, path)
     return {name for name, blob in there.items() if here.get(name) != blob}
+
+
+def batch_papers(changed: set[str]) -> tuple[list[str], list[str]]:
+    """Batch names with a summary, and with a review, among changed files. Read
+    from the files, not the branch name: cloud tools name branches themselves."""
+    summaries, reviews = [], []
+    for path in sorted(changed):
+        name = path[len(BATCHES) + 1:]
+        if "/" in name or not name.endswith(".md") or name == "README.md" or name.endswith("-brief.md"):
+            continue
+        if name.endswith("-review.md"):
+            reviews.append(name[:-len("-review.md")])
+        else:
+            summaries.append(name[:-len(".md")])
+    return summaries, reviews
+
+
+def batch_state(root: Path, ref: str, name: str, changed: set[str]) -> tuple[str, str]:
+    """What a branch not yet merged holds, and the owner's next action for it
+    ("" while it is still being worked on)."""
+    summaries, reviews = batch_papers(changed)
+    for batch in reviews:
+        last = out(["log", "-1", "--format=%H", ref, "--", f"{BATCHES}/{batch}-review.md"], root)
+        later = out(["rev-list", "--count", f"{last}..{ref}"], root)
+        if later != "0":
+            return (f"batch {batch}: {later} commit(s) after the Verifier's review -- Brain checks them",
+                    f"ask Brain to check the fixes in batch {batch}")
+        return f"batch {batch}: Verifier review in -- Brain judges it", f"ask Brain to judge batch {batch}"
+    if summaries:
+        batch = ", ".join(summaries)
+        return (f"batch {batch}: Worker summary in -- Brain reviews it, or sends the Verifier prompt "
+                "if this is a Checked batch", f"ask Brain to review batch {batch}")
+    if any(path.startswith(LEGACY_ROUNDS + "/") for path in changed):
+        return (f"a release 3.x round (reports under {LEGACY_ROUNDS}/) -- Brain finishes it the old way or closes it",
+                f"ask Brain what to do with {name}")
+    if name.startswith("brain/"):
+        return ("Brain's own change (Small path): ready for your yes, or still being written",
+                f"ask Brain whether {name} is ready for your yes")
+    return "no summary yet: still working, or stopped without one", ""
 
 
 def batches_lines(root: Path) -> tuple[list[str], str]:
@@ -302,31 +336,42 @@ def batches_lines(root: Path) -> tuple[list[str], str]:
     holds: a batch summary, a Verifier review, or a 3.x round folder."""
     base = base_ref(root)
     refs = [r for r in branch_refs(root) if r not in (base, default_branch(root))]
-    remote = {r[len("origin/"):] for r in refs if r.startswith("origin/")}
-    lines, actions = [], []
+    tips = {ref: out(["rev-parse", ref], root) for ref in refs}
+    on_base = set(tree_files(root, base, BATCHES))
+    lines, actions, working = [], [], 0
     for ref in refs:
-        name = ref[len("origin/"):] if ref.startswith("origin/") else ref
-        if (ref == name and name in remote) or is_ancestor(root, ref, base) or merged_by_content(root, base, ref):
+        local = not ref.startswith("origin/")
+        name = ref if local else ref[len("origin/"):]
+        twin = f"origin/{name}"
+        if local and twin in tips and (tips[twin] == tips[ref] or is_ancestor(root, ref, twin)):
+            continue  # GitHub's copy holds all of it
+        if is_ancestor(root, ref, base) or merged_by_content(root, base, ref):
             continue
-        batch = batch_name(name)
-        changed = changed_on(root, base, ref, BATCHES)
-        summary, review = f"{BATCHES}/{batch}.md" in changed, f"{BATCHES}/{batch}-review.md" in changed
-        if review:
-            state = "Verifier review in -- Brain judges it"
-            actions.append(f"ask Brain to judge batch {batch}")
-        elif summary:
-            state = "Worker summary in -- Brain reviews it, or sends the Verifier prompt if this is a Checked batch"
-            actions.append(f"ask Brain to review batch {batch}")
-        elif changed_on(root, base, ref, LEGACY_ROUNDS):
-            state = f"a release 3.x round (reports under {LEGACY_ROUNDS}/) -- Brain finishes it the old way or closes it"
-            actions.append(f"ask Brain what to do with {name}")
+        label = f"{name} (this machine's copy)" if local and twin in tips else name
+        changed = changed_on(root, base, ref, BATCHES) | changed_on(root, base, ref, LEGACY_ROUNDS)
+        fork = git(["merge-base", base, ref], root).stdout.strip()
+        papers = set(out(["diff", "--name-only", "--no-renames", fork, ref, "--", BATCHES], root).split()) if fork else set()
+        if papers and papers <= on_base:
+            last = out(["log", "-1", "--format=%H", ref, "--", *sorted(papers)], root)
+            later = out(["rev-list", "--count", f"{last}..{ref}"], root)
+            if later == "0":
+                lines.append(f"{label}: merged earlier (its batch files are on {base}) -- delete the branch")
+                continue
+            state = f"its batch was merged, but {later} later commit(s) are not"
+            action = f"ask Brain about the later work on {label}"
         else:
-            state = "no summary yet: still working, or stopped without one"
+            state, action = batch_state(root, ref, label, changed)
+        if action:
+            actions.append(action)
+        else:
+            working += 1
         count = out(["rev-list", "--count", f"{base}..{ref}"], root)
         when = out(["log", "-1", "--format=%cd", "--date=short", ref], root)
-        lines.append(f"{name}: {count} commit(s), last {when}; {state}")
+        lines.append(f"{label}: {count} commit(s), last {when}; {state}")
     if not lines:
         lines.append("nothing waiting: every branch is merged")
+    if not actions and working:
+        actions.append(f"nothing needs you yet: {working} branch(es) still being worked on")
     return lines, (actions or [""])[0]
 
 
