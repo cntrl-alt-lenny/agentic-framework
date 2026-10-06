@@ -23,34 +23,28 @@ ENV = {
     "GIT_CONFIG_COUNT": "2",
     "GIT_CONFIG_KEY_0": "maintenance.auto", "GIT_CONFIG_VALUE_0": "false",
     "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "0",
-    # The prompt header's '·' and '—' arrive intact from a child Python on Windows too.
+    # Non-ASCII output arrives intact from a child Python on Windows too.
     "PYTHONIOENCODING": "utf-8",
 }
 
-WORKER_REPORT = """## Verified
-- feature works -- `python3 -c "print(1)"` -> exit 0
-  1
+WORKER_SUMMARY = """# Batch summary
 
-## Not verified
-None.
-
-## Changed
+## Done
 - feature.txt: the feature.
 
-## Open questions
+## Checked
+- `python3 -c "print(1)"` -> exit 0
+
+## Not checked
+None.
+
+## Failed or blocked
 None.
 """
 
-VERIFIER_REPORT = """Reviewed commit: see stamp.
+REVIEW = """# Review
 
-## Findings
-None.
-
-## Not verified
-None.
-
-## Verdict
-The change does what the brief asks.
+Reviewed commit: the Worker's last. No findings.
 """
 
 
@@ -109,7 +103,7 @@ class TempDirTest(unittest.TestCase):
         data["framework"]["repository"] = str(ROOT)
         record.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         self.commit_all(seed, "Adopt the framework")
-        origin = self.tmp / "Demo.git"  # the prompt header names the project after its repository
+        origin = self.tmp / "Demo.git"
         git(self.tmp, "clone", "-q", "--bare", str(seed), str(origin))
         return origin
 
@@ -120,7 +114,7 @@ class TempDirTest(unittest.TestCase):
         return path
 
 
-class RoundTest(TempDirTest):
+class BatchTest(TempDirTest):
     """An adopted project on a shared remote, with Brain's clone; each seat
     works in a clone of its own, as on another machine."""
 
@@ -129,36 +123,32 @@ class RoundTest(TempDirTest):
         self.origin = self.adopted_origin()
         self.brain = self.clone(self.origin, "brain-mac")
 
-    def write_brief(self, round_id: str, *, tier: int = 2, supersedes: str = "none",
-                    start: str = "main") -> None:
-        git(self.brain, "fetch", "-q", "origin")
-        git(self.brain, "switch", "-q", "-c", f"brain/{round_id}", start)
-        folder = self.brain / "docs" / "rounds" / round_id
-        folder.mkdir(parents=True)
-        (folder / "brief.md").write_text(
-            f"# {round_id}\n\nTier: {tier}\nMode: implementation\nSupersedes: {supersedes}\n", encoding="utf-8")
-        git(self.brain, "add", "-A")
-        git(self.brain, "commit", "-q", "-m", f"Brief {round_id}")
-        git(self.brain, "push", "-q", "-u", "origin", f"brain/{round_id}")
-        git(self.brain, "switch", "-q", "main")
-
-    def deliver_worker(self, clone: str, round_id: str) -> tuple:
+    def deliver_worker(self, clone: str, batch: str, *, summary: bool = True) -> Path:
         worker = self.clone(self.origin, clone)
-        result = fw(worker, "start", "--role", "worker", "--round", round_id)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        (worker / "feature.txt").write_text("feature\n", encoding="utf-8")
+        git(worker, "switch", "-q", "-c", f"worker/{batch}")
+        (worker / "feature.txt").write_text(f"feature {batch}\n", encoding="utf-8")
         git(worker, "add", "feature.txt")
         git(worker, "commit", "-q", "-m", "Add the feature")
-        (worker / "docs" / "rounds" / round_id / "worker.md").write_text(WORKER_REPORT, encoding="utf-8")
-        result = fw(worker, "report", "--role", "worker", "--round", round_id, "--push")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        return worker, result
+        if summary:
+            (worker / "docs/batches").mkdir(parents=True, exist_ok=True)
+            (worker / "docs/batches" / f"{batch}.md").write_text(WORKER_SUMMARY, encoding="utf-8")
+            git(worker, "add", "-A")
+            git(worker, "commit", "-q", "-m", f"Batch {batch}: summary")
+        git(worker, "push", "-q", "-u", "origin", f"worker/{batch}")
+        return worker
 
-    def deliver_verifier(self, clone: str, round_id: str) -> Path:
+    def deliver_review(self, clone: str, batch: str) -> Path:
         verifier = self.clone(self.origin, clone)
-        result = fw(verifier, "start", "--role", "verifier", "--round", round_id)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        (verifier / "docs" / "rounds" / round_id / "verifier.md").write_text(VERIFIER_REPORT, encoding="utf-8")
-        result = fw(verifier, "report", "--role", "verifier", "--round", round_id, "--push")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        git(verifier, "switch", "-q", f"worker/{batch}")
+        (verifier / "docs/batches" / f"{batch}-review.md").write_text(REVIEW, encoding="utf-8")
+        git(verifier, "add", "-A")
+        git(verifier, "commit", "-q", "-m", f"Batch {batch}: review")
+        git(verifier, "push", "-q", "origin", f"worker/{batch}")
         return verifier
+
+    def squash_merge(self, branch: str) -> None:
+        git(self.brain, "fetch", "-q", "origin")
+        git(self.brain, "merge", "-q", "--squash", f"origin/{branch}")
+        git(self.brain, "commit", "-q", "-m", f"{branch} (squashed)")
+        git(self.brain, "push", "-q", "origin", "main")
+        git(self.brain, "push", "-q", "origin", "--delete", branch)

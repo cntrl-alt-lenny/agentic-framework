@@ -15,10 +15,10 @@ import unittest
 from tests.helpers import ROOT
 
 BUDGETS = {
-    "framework/FRAMEWORK.md": 2500,
-    "framework/roles/brain.md": 750,
-    "framework/roles/worker.md": 750,
-    "framework/roles/verifier.md": 750,
+    "framework/FRAMEWORK.md": 1000,
+    "framework/roles/brain.md": 500,
+    "framework/roles/worker.md": 400,
+    "framework/roles/verifier.md": 300,
     "templates/AGENTS.md": 600,
     "templates/docs/state.md": 200,
     "docs/state.md": 1000,
@@ -31,7 +31,7 @@ fw = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(fw)
 
 
-COMMANDS = {"status", "start", "report", "delivery", "prompt", "check"}
+COMMANDS = {"status", "check"}
 FENCE = re.compile(r"^```.*?^```", re.S | re.M)
 #: fw.py's command where one is written: after an interpreter, or followed by
 #: a flag, a placeholder or the end of a code span. Prose that names the file
@@ -48,6 +48,18 @@ def markdown_files():
     for base in ("framework", "templates", "adapters", "docs"):
         yield from sorted((ROOT / base).rglob("*.md"))
     yield from (ROOT / name for name in ("README.md", "AGENTS.md", "CLAUDE.md", "CHANGELOG.md"))
+
+
+def current_instructions():
+    """What agents act on today: not past rounds, and only this release's
+    CHANGELOG entry (older entries name commands since removed)."""
+    for path in markdown_files():
+        if "rounds" in path.relative_to(ROOT).parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if path.name == "CHANGELOG.md":
+            text = text.split("\n## ", 2)[1] if "\n## " in text else text
+        yield path, text
 
 
 class Budgets(unittest.TestCase):
@@ -71,8 +83,8 @@ class Budgets(unittest.TestCase):
 
 class Consistency(unittest.TestCase):
     def test_every_documented_command_exists(self) -> None:
-        for path in markdown_files():
-            for word in written_commands(path.read_text(encoding="utf-8")):
+        for path, text in current_instructions():
+            for word in written_commands(text):
                 self.assertIn(word, COMMANDS, f"{path}: fw.py {word}")
 
     def test_a_command_is_told_from_prose(self) -> None:
@@ -105,11 +117,12 @@ class Consistency(unittest.TestCase):
         self.assertIsNotNone(match, f"CHANGELOG.md has no entry for {version}")
         self.assertIn("### What an adopter must do", match.group(0))
 
-    def test_report_sections_match_the_role_cards(self) -> None:
-        for role, card in (("worker", "worker"), ("verifier", "verifier")):
-            text = (ROOT / f"framework/roles/{card}.md").read_text(encoding="utf-8")
-            for section in fw.sections_for(role):
-                self.assertIn(f"## {section}", text, f"{card}.md report template lacks ## {section}")
+    def test_summary_parts_match_the_worker_card(self) -> None:
+        core = (ROOT / "framework/FRAMEWORK.md").read_text(encoding="utf-8")
+        card = (ROOT / "framework/roles/worker.md").read_text(encoding="utf-8")
+        for part in ("Done", "Checked", "Not checked", "Failed or blocked"):
+            self.assertIn(f"**{part}**", core)
+            self.assertIn(part, card)
 
     def test_legacy_fingerprints_are_well_formed(self) -> None:
         data = json.loads((ROOT / "tools/legacy_installs.json").read_text(encoding="utf-8"))
