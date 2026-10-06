@@ -37,6 +37,7 @@ MANIFEST = "docs/agents/framework.json"
 STATE_DOC = "docs/state.md"
 DEFAULT_STATE_WORDS = 1000
 AGENTS_WORDS_WARNING = 2500
+PAPER_WORDS = 500  # a prompt, summary or review: prose only, not output or tables
 MERGE_RULES = ("owner-approves", "brain-merges")
 
 
@@ -571,6 +572,14 @@ def check_project(root: Path) -> list[tuple[str, str]]:
                     f"{rel}:{number} contains {what}; the documents agents read ({SCANNED}) must work "
                     "on every machine and are public",
                 ))
+
+    if (root / BATCHES).is_dir():
+        for path in sorted((root / BATCHES).glob("*.md")):
+            text = re.sub(r"(?ms)^```.*?^```", "", path.read_text(encoding="utf-8", errors="replace"))
+            prose = words("\n".join(line for line in text.splitlines() if not line.lstrip().startswith("|")))
+            if path.name != "README.md" and prose > PAPER_WORDS:
+                findings.append(("warning", f"{BATCHES}/{path.name} has {prose} words of prose; "
+                                 f"the cap is {PAPER_WORDS} -- split the work, or move detail into the commits"))
 
     attributes = root / ".gitattributes"
     if manifest is not None and (not attributes.is_file() or "eol=lf" not in attributes.read_text(encoding="utf-8")):

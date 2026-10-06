@@ -28,25 +28,26 @@ Nothing else is a queue. An issue closed with a reason is the reply.
 | `wontfix` | A deliberate boundary, or not worth its cost | Close with the reason |
 
 Add `required` only for a defect that makes projects produce wrong results or
-lose work. Only `required` issues skip the batching and the freeze.
+lose work. A `required` fix ships at once.
 
 ## The gates
 
 1. **Reproduce first.** Run the reporter's commands at their project commit
    and framework release. An issue that cannot be reproduced is labelled
    `cannot-reproduce` and waits for more evidence; it changes nothing.
-2. **Fix the class, not the example**, and say in the brief what the class is.
+2. **Fix the class, not the example**, and say in the prompt what the class is.
 3. **Stay in budget.** `tests/test_docs.py` fails when the core or a role card
    grows past its word budget. Each release note states how many words and
    lines it added and removed.
 4. **Prove it on a project shape.** `tests/test_adopt.py` migrates a
    2.x-shaped project on every run; add to that fixture when a defect came
    from a real project's layout.
-5. **Batch.** At most one release every two weeks, then ten product rounds
-   before the next, unless an issue is `required`.
+5. **Group fixes.** Every release costs each project an update, so small
+   fixes wait for something worth shipping. There is no fixed freeze; the
+   owner decides when.
 6. **Release.** The owner says yes to the merge; Brain tags `vX.Y.Z` and adds
    the CHANGELOG entry with "What an adopter must do". Projects see the
    release in `fw.py status`; nobody needs to announce it.
 
-Major versions change contracts or files and need an update before a
-project's next round. Minor and patch releases can wait.
+Major versions change how work runs and need an update before a project's
+next batch. Minor and patch releases can wait.

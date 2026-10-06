@@ -157,3 +157,14 @@ class ScanScope(TempDirTest):
         (project / "docs/batches/04-x.md").write_text("ran /home/someone/x\n", encoding="utf-8")
         result = fw(project, "check")
         self.assertIn("docs/batches/04-x.md:1 contains", result.stdout)
+
+    def test_long_batch_paperwork_is_flagged_but_output_is_not_counted(self) -> None:
+        project = self.init_repo(self.tmp / "project")
+        adopt(project, "--project", "Demo")
+        output = "```text\n" + "line " * 2000 + "\n```\n" + "| a | b |\n" * 600
+        (project / "docs/batches/05-ok.md").write_text("## Done\nShort.\n" + output, encoding="utf-8")
+        (project / "docs/batches/06-long.md").write_text("word " * 501, encoding="utf-8")
+        result = fw(project, "check")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("warning: docs/batches/06-long.md has 501 words of prose", result.stdout)
+        self.assertNotIn("05-ok", result.stdout)

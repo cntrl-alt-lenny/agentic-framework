@@ -4,9 +4,10 @@ The repository's presentation house standard is [standards/readme.md](standards/
 
 A small operating model for building software and research projects with AI
 agents when the person in charge is not a programmer. The owner says what they
-want. A Brain agent plans the work and checks it. Worker agents do it, and an
-optional Verifier agent reviews it. Nothing counts as done unless the evidence
-shows it.
+want. A Brain agent plans the work and checks it. Worker agents do it in
+batches and check their own work; a Verifier agent is called in only for
+mistakes the automatic checks cannot catch. Nothing counts as done unless the
+evidence shows it.
 
 It works with any AI tool that can run git and Python 3.9+, on Windows, macOS
 and Linux. Everything a later session needs is committed to git, so work
@@ -18,11 +19,11 @@ weeks away.
 | File | What it is |
 |---|---|
 | `AGENTS.md` | The project's own rules and its merge rule. Every tool reads this first. |
-| `docs/agents/FRAMEWORK.md` | The operating model: 14 rules, the round, tiers, reports, updates. About 1,700 words. |
+| `docs/agents/FRAMEWORK.md` | The operating model: 10 rules, how a batch runs, the merge rule, updates. About 650 words. |
 | `docs/agents/roles/` | One short card each for Brain, Worker and Verifier. |
 | `docs/state.md` | The owner's standing decisions. Short, and checked to stay short. |
-| `docs/rounds/<id>/` | One folder per round: the brief and each seat's committed report. |
-| `tools/fw.py` | The one tool: `status`, `start`, `report`, `delivery`, `prompt`, `check`. |
+| `docs/batches/` | One short summary per batch of work, and a review when a Verifier was called. |
+| `tools/fw.py` | The one tool: `status` (what waits on whom, and is this machine safe to leave) and `check`. |
 | `tests/test_framework.py` | Runs the project checks with the project's own tests. |
 | `docs/agents/framework.json` | The pinned release and a fingerprint of every framework file. |
 
@@ -44,13 +45,13 @@ Add `--verifier` to list the Verifier seat, `--workers builder` to name the
 executor, `--hooks` for a sample pre-push hook, `--dry-run` to preview.
 Existing files are never overwritten. Then fill in `AGENTS.md`.
 
-**Run:** open a fresh session in the project and paste the start prompt from
-[FRAMEWORK.md](framework/FRAMEWORK.md#the-round). Brain gives you every prompt
-after that.
+**Run:** open a fresh session in the project and say *"You are the Brain for
+this project. Follow AGENTS.md."* (Claude Code users can type `/status`). Brain
+gives you every prompt after that.
 
 **Update:** `python3 tools/fw.py status` in a project says when a newer
-release exists. The update is one command, from a clone of this repository at
-the new release, run as a reviewed round:
+release exists. Brain applies it, from a clone of this repository at the new
+release, with one command:
 
 ```
 python3 tools/adopt.py <project> --update
@@ -71,7 +72,7 @@ from before 3.0.0 migrate with the same command.
 | [`adapters/`](adapters/) | Optional pointer files for particular tools. |
 | [`docs/`](docs/) | This repository's own state and its feedback process. |
 | [`history/`](history/) | The failures and case studies the framework grew from. Record, not rules. |
-| [`tests/`](tests/) | Includes a whole round run across three separate clones, and a 2.x project migrated to this release. |
+| [`tests/`](tests/) | Includes batches run across separate clones, and a 2.x project migrated to this release. |
 
 `python3 -m unittest discover -s tests -t .` runs everything in under a
 minute. Framework problems found in projects are reported as issues, handled
@@ -80,9 +81,9 @@ as described in [docs/feedback.md](docs/feedback.md).
 ## Honest limits
 
 Everything here guides agents; nothing forces them. The tool checks what can
-be checked mechanically: that a report exists, has the required sections, and
-describes the exact commit under review; that state documents stay small; that
-tool entry files point at the rules. Whether an agent obeys the rules is shown
+be checked mechanically: which batches are waiting and on whom, whether a
+machine is safe to leave, that state documents and batch summaries stay small,
+and that tool entry files point at the rules. Whether an agent obeys the rules is shown
 only by the evidence it leaves, which is why Brain re-checks it. When every
 agent uses the owner's GitHub account, GitHub cannot tell them apart.
 

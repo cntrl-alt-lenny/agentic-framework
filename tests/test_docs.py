@@ -15,10 +15,10 @@ import unittest
 from tests.helpers import ROOT
 
 BUDGETS = {
-    "framework/FRAMEWORK.md": 1000,
-    "framework/roles/brain.md": 500,
-    "framework/roles/worker.md": 400,
-    "framework/roles/verifier.md": 300,
+    "framework/FRAMEWORK.md": 800,
+    "framework/roles/brain.md": 400,
+    "framework/roles/worker.md": 250,
+    "framework/roles/verifier.md": 200,
     "templates/AGENTS.md": 600,
     "templates/docs/state.md": 200,
     "docs/state.md": 1000,
@@ -119,7 +119,7 @@ class Consistency(unittest.TestCase):
 
     def test_summary_parts_match_the_worker_card(self) -> None:
         core = (ROOT / "framework/FRAMEWORK.md").read_text(encoding="utf-8")
-        card = (ROOT / "framework/roles/worker.md").read_text(encoding="utf-8")
+        card = " ".join((ROOT / "framework/roles/worker.md").read_text(encoding="utf-8").split())
         for part in ("Done", "Checked", "Not checked", "Failed or blocked"):
             self.assertIn(f"**{part}**", core)
             self.assertIn(part, card)
