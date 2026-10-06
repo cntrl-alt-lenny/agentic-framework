@@ -1,6 +1,6 @@
 # README standard
 
-One consistent house style for every public repository. This is the active standard: each project's Brain applies it in its presentation round.
+One consistent house style for every public repository. This is the active standard: each project's Brain applies it as a batch of its own.
 
 The repository names and planning table below are a dated snapshot from
 2026-09-15, retained as historical planning context rather than current state.

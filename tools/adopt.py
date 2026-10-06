@@ -31,7 +31,8 @@ which files are unedited copies.
 
 It then prints every release's "what an adopter must do" steps between the old
 and new release, and the project checks that still fail. Nothing is committed:
-the result is reviewed and merged like any other batch.
+Brain commits the result on a brain/ branch (Small path) and merges it after
+the owner's yes.
 """
 
 from __future__ import annotations
@@ -563,7 +564,7 @@ def describe(plan: Plan, *, update: bool, old_release: str | None) -> str:
     if plan.sidecars:
         lines.append("")
         lines.append("Edited framework files were left alone. Review each difference, move any")
-        lines.append("project-specific content into AGENTS.md or docs/agents/local/, then replace the")
+        lines.append("project-specific content into AGENTS.md, then replace the")
         lines.append("file with its .framework copy:")
         for rel, side in plan.sidecars:
             lines.append(f"  {rel}  <-  {side}")

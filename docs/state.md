@@ -35,6 +35,11 @@ rolling it out and measuring whether it pays for itself in each project.
 - **One standing chat per seat** may be reused across batches; a fresh chat is
   better after a rejected batch or when a chat has grown long.
 
+## Scorecard
+
+The framework's scorecard is its projects' scorecards. First review due
+2026-10-20, two weeks after 4.0.0.
+
 ## Queued, in order
 
 1. **Try 4.0 on mgs-mc-modkit first**, then the other projects.
@@ -43,7 +48,7 @@ rolling it out and measuring whether it pays for itself in each project.
 2. **Two-week scorecards** in each project decide what 4.x changes next.
    Issues #31, #32 and #36 wait for that review.
 
-## Deliberately not done
+## Parked, and why
 
 - **Server-enforced owner approval.** GitHub cannot tell the owner from an
   agent that uses the same account. A separate account for agents would

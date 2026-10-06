@@ -15,7 +15,7 @@
 #
 # The guarantee, where the hosting provides one, is server-side branch
 # protection. Treat a green run here as "I probably did not just waste a CI
-# round", never as "this is enforced".
+# run", never as "this is enforced".
 #
 # This hook lives at git's pre-push layer deliberately. A tool-level hook that
 # inspects the shell command text is the wrong layer: it fires for one tool
