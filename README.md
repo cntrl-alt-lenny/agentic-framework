@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/banner.svg" alt="agentic-framework — You decide. AI agents build. Evidence decides what is done." width="100%">
-</p>
-
 <h1 align="center">agentic-framework</h1>
 
 <p align="center"><strong>You decide. AI agents build. Evidence decides what is done.</strong></p>
@@ -22,16 +18,6 @@ work, and a **Verifier** joins only for mistakes the automatic checks cannot
 catch. Nothing counts as done until the evidence shows it, and everything lives
 in git, so work started in one tool or on one machine can finish on another,
 even weeks later.
-
-```mermaid
-flowchart LR
-  you([You]) -- what you want --> brain[Brain<br/>plans and checks]
-  brain -- short prompt --> worker[Worker<br/>does and checks the work]
-  worker -- summary in git --> brain
-  worker -. Checked path only .-> verifier[Verifier<br/>reviews the commit]
-  verifier -. findings .-> brain
-  brain -- merge card --> you
-```
 
 ## Quick start
 
@@ -58,8 +44,8 @@ flowchart LR
   words, and a two-week scorecard that says whether it is paying for itself.
 - **Independent review.** The Brain re-checks the exact commit itself, and a
   Verifier joins for costly mistakes the checks cannot catch.
-- **Safe updates.** Projects see new releases on their own, and an update never
-  overwrites a file you edited.
+- **Safe updates.** The status command says when a newer release exists, and
+  an update never overwrites a file you edited.
 - **Honest limits.** It guides agents; it cannot force them. That is why every
   claim needs evidence.
 
