@@ -5,10 +5,10 @@ was decided against. No live state: run `python3 tools/fw.py status`.
 
 ## Where we are going
 
-Release 3.0.0 cut the framework to one core document, three role cards and
-one tool, moved every handoff into git, and added safe one-command updates.
-The next job is not more framework: it is migrating the three projects and
-then running real product rounds on it.
+Release 4.0.0 replaces rounds with batches: a short prompt, a Worker that
+checks its own work, Brain's review, and a Verifier only on the Checked path.
+The rules shrank from about 3,100 words to about 1,300. The next job is
+rolling it out and measuring whether it pays for itself in each project.
 
 ## Owner decisions
 
@@ -26,20 +26,22 @@ then running real product rounds on it.
   is no longer part of the framework: it cannot be reached from Linux or the
   Steam Decks, and its location differed per machine. Anything still in it is
   moved to issues when next read.
-- **Releases are batched**: at most one every two weeks, and none for ten
-  product rounds after a release, unless an issue is marked `required`.
-  The owner lifted this once (2026-09-28) for 3.1.0: after six product rounds,
-  the coordination issues (#18-#29) were costing the owner time every day.
+- **Slim the framework** (2026-10-06). Under 3.x, six projects wrote about
+  206,000 words of briefs and reports in 39 rounds, and gx-spirit-caller's
+  progress stood still for five weeks; its light batches then moved it in a
+  day. The owner chose to slim rather than drop the framework, and lifted the
+  release freeze: releases ship when the owner says yes.
 - **The README standard** lives here at `standards/readme.md`.
-- **One standing chat per seat** may be reused across rounds; a fresh chat is
-  better after a rejected round or when a chat has grown long.
+- **One standing chat per seat** may be reused across batches; a fresh chat is
+  better after a rejected batch or when a chat has grown long.
 
 ## Queued, in order
 
-1. **Each project takes 3.1.0** in its own Tier 1 update round, as the 3.1.0
-   CHANGELOG entry describes (released 2026-09-28, rounds 025 and 026).
-2. **Ten product rounds with no framework release.** Then review where time
-   actually went, with numbers. Issues #31 and #32 wait for that batch.
+1. **Try 4.0 on mgs-mc-modkit first**, then the other projects.
+   gx-spirit-caller finishes its light-workflow trial (ends 2026-10-20)
+   before it updates.
+2. **Two-week scorecards** in each project decide what 4.x changes next.
+   Issues #31, #32 and #36 wait for that review.
 
 ## Deliberately not done
 
@@ -52,10 +54,10 @@ then running real product rounds on it.
 - **A per-clone report inbox** (removed in 3.0.0). Reports are committed with
   the work instead, so they reach every machine.
 - **Automatic launching of seats by Brain.** The owner keeps the relay.
-- **Recording which model ran each seat.** Reports record the operating
-  system automatically instead.
+- **Recording which model ran each seat.** It does not change what the
+  evidence shows.
 
-## Lessons that shape briefs
+## Lessons that shape prompts
 
 - Executors fix the listed examples rather than the class: ask for cases
   beyond the examples, and re-derive with cases of your own.

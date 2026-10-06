@@ -17,10 +17,10 @@ Codex (CLI and cloud) reads `AGENTS.md` directly and needs no adapter.
 | Tool | Brain | Worker / Verifier | Notes |
 |---|---|---|---|
 | Claude Code (terminal or desktop) | yes | yes | any OS |
-| Claude Code on the web | yes | yes | starts from a fresh clone; `fw.py start` handles that |
+| Claude Code on the web | yes | yes | starts from a fresh clone; the Worker makes its branch from the latest default branch |
 | Codex CLI / Codex cloud | yes | yes | reads `AGENTS.md` natively |
 | Google Antigravity | yes | yes | not tested by this repository; install the `gemini` adapter if it ignores `AGENTS.md` |
-| ChatGPT in a browser | advisor only | no | cannot run commands; with a GitHub connection it can read a round's brief and reports |
+| ChatGPT in a browser | advisor only | no | cannot run commands; with a GitHub connection it can read a batch's prompt and summary |
 
 ## Which device can run what
 
@@ -32,7 +32,7 @@ Codex (CLI and cloud) reads `AGENTS.md` directly and needs no adapter.
 | SteamOS (Steam Deck) | via a cloud tool; locally inside a container | the system is read-only, so install tools in a `distrobox` container rather than the base system; not tested by this repository |
 
 Any seat can also run in a cloud tool from any device with a browser, because
-everything a round needs is on GitHub.
+everything a batch needs is on GitHub.
 
 ## Writing an adapter
 

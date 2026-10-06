@@ -8,7 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from tests.helpers import PYTHON, ROOT, WORKER_REPORT, RoundTest, TempDirTest, adopt, fw, git, run
+from tests.helpers import PYTHON, ROOT, BatchTest, TempDirTest, adopt, fw, git, run
 
 FIXTURE = ROOT / "tests" / "fixtures" / "v2_adopter"
 
@@ -26,7 +26,7 @@ class FreshAdoption(TempDirTest):
         for rel in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "docs/agents/FRAMEWORK.md",
                     "docs/agents/roles/brain.md", "docs/agents/roles/worker.md",
                     "docs/agents/roles/verifier.md", "tools/fw.py", "tests/test_framework.py",
-                    "docs/state.md", "docs/rounds/README.md", ".claude/agents/worker.md",
+                    "docs/state.md", "docs/batches/README.md", ".claude/agents/worker.md",
                     ".githooks/pre-push", ".gitattributes"):
             self.assertTrue((target / rel).is_file(), rel)
         agents = (target / "AGENTS.md").read_text(encoding="utf-8")
@@ -302,12 +302,11 @@ class UpdateOutput(TempDirTest):
         self.assertFalse((own / ".worktrees/.gitignore").exists())
 
 
-class RealProjectLayouts(RoundTest):
+class RealProjectLayouts(BatchTest):
     """The layouts real projects had when these defects were found, each
     rebuilt here: a seat file named for the project's executor (#21), a
-    deleted seed (#25), a squash-merged round on a seat's machine (#18),
-    archive tags (#18), a superseded round (#27), a round attachment (#24) and
-    a finished seat checkout (#29)."""
+    deleted seed (#25), a squash-merged batch on a seat's machine (#18),
+    archive tags (#18) and a finished seat checkout (#29)."""
 
     def test_a_seat_file_named_for_the_projects_executor_is_named(self) -> None:
         (self.brain / ".claude/agents/builder.md").write_text("Builder seat: see AGENTS.md.\n", encoding="utf-8")
@@ -337,20 +336,9 @@ class RealProjectLayouts(RoundTest):
         result = adopt(self.brain, "--update", "--hooks", "--dry-run")
         self.assertIn("create  .githooks/pre-push", result.stdout)
 
-    def squash_merge(self, round_id: str, branch: str) -> None:
-        git(self.brain, "fetch", "-q", "origin")
-        git(self.brain, "merge", "-q", "--squash", f"origin/{branch}")
-        git(self.brain, "commit", "-q", "-m", f"Round {round_id} (squashed)")
-        git(self.brain, "push", "-q", "origin", "main")
-        for name in git(self.brain, "ls-remote", "--heads", "origin").split("\n"):
-            ref = name.split("refs/heads/")[-1]
-            if ref.endswith(round_id):
-                git(self.brain, "push", "-q", "origin", "--delete", ref)
-
-    def test_a_squash_merged_round_is_safe_to_leave_on_the_seats_machine(self) -> None:
-        self.write_brief("050-squash", tier=1)
-        worker, _ = self.deliver_worker("worker-mac", "050-squash")
-        self.squash_merge("050-squash", "worker/050-squash")
+    def test_a_squash_merged_batch_is_safe_to_leave_on_the_seats_machine(self) -> None:
+        worker = self.deliver_worker("worker-mac", "050-squash")
+        self.squash_merge("worker/050-squash")
         git(worker, "switch", "-q", "main")
         git(worker, "pull", "-q")
         git(worker, "fetch", "-q", "--prune")
@@ -388,56 +376,16 @@ class RealProjectLayouts(RoundTest):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("not on GitHub yet: tag local-only", result.stdout)
 
-    def test_a_superseded_round_is_not_in_flight(self) -> None:
-        self.write_brief("060-a", tier=1)
-        self.deliver_worker("worker", "060-a")
-        self.write_brief("061-b", tier=1, supersedes="060-a, rejected: the export was wrong", start="origin/worker/060-a")
-        git(self.brain, "fetch", "-q", "origin")
-        result = fw(self.brain, "status", "--offline")
-        self.assertIn("superseded: 060-a, by 061-b -- not in flight", result.stdout)
-        self.assertNotIn("in flight: 060-a", result.stdout)
-        self.assertIn("in flight: 061-b (Tier 1)", result.stdout)
-        self.assertIn("worker: not started", result.stdout)
-        result = fw(self.brain, "delivery", "--round", "060-a")
-        self.assertIn("superseded by round 061-b", result.stdout)
-        self.assertNotIn("must rewrite", result.stdout)
-        seat = self.clone(self.origin, "late-seat")
-        result = fw(seat, "start", "--role", "worker", "--round", "060-a")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("superseded by round 061-b", result.stderr)
-
-    def test_a_round_attachment_is_not_a_report(self) -> None:
-        self.write_brief("070-attach")
-        worker = self.clone(self.origin, "worker")
-        fw(worker, "start", "--role", "worker", "--round", "070-attach")
-        folder = worker / "docs/rounds/070-attach"
-        (folder / "state-changes.md").write_text("# Every sentence\n\nA long list.\n", encoding="utf-8")
-        (folder / "attachments").mkdir()
-        (folder / "attachments/log.md").write_text("log\n", encoding="utf-8")
-        self.commit_all(worker, "Attachments")
-        git(worker, "push", "-q", "-u", "origin", "worker/070-attach")
-        second = self.clone(self.origin, "worker-2")
-        result = fw(second, "start", "--role", "worker", "--round", "070-attach")
-        self.assertIn("continuing earlier work", result.stdout)
-        (second / "docs/rounds/070-attach/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
-        self.assertEqual(fw(second, "report", "--role", "worker", "--round", "070-attach", "--push").returncode, 0)
-        result = fw(self.brain, "delivery", "--round", "070-attach")
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertNotIn("state-changes", result.stdout)
-        verifier = self.deliver_verifier("verifier", "070-attach")
-        self.assertTrue((verifier / "docs/rounds/070-attach/state-changes.md").is_file())
-
     def test_a_finished_seat_checkout_is_listed_as_removable(self) -> None:
-        self.write_brief("080-tree", tier=1)
         seat = self.brain / ".worktrees/worker-080"
-        git(self.brain, "worktree", "add", "-q", "--detach", ".worktrees/worker-080", "origin/main")
-        self.assertEqual(fw(seat, "start", "--role", "worker", "--round", "080-tree").returncode, 0)
-        (seat / "docs/rounds/080-tree/worker.md").write_text(WORKER_REPORT, encoding="utf-8")
-        self.assertEqual(fw(seat, "report", "--role", "worker", "--round", "080-tree", "--push").returncode, 0)
+        git(self.brain, "worktree", "add", "-q", "-b", "worker/080-tree", ".worktrees/worker-080", "origin/main")
+        (seat / "tree.txt").write_text("tree\n", encoding="utf-8")
+        self.commit_all(seat, "Batch 080")
+        git(seat, "push", "-q", "-u", "origin", "worker/080-tree")
         self.assertEqual(git(self.brain, "status", "--porcelain"), "")
         result = fw(self.brain, "status", "--offline")
         self.assertNotIn("can be removed", result.stdout)
-        self.squash_merge("080-tree", "worker/080-tree")
+        self.squash_merge("worker/080-tree")
         result = fw(self.brain, "status", "--offline", "--leaving")
         self.assertIn("can be removed: .worktrees/worker-080", result.stdout)
         self.assertEqual(result.returncode, 0, result.stdout)

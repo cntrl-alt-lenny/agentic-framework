@@ -13,6 +13,12 @@ word budget is checked by `tools/fw.py check`.
 
 <!-- Decisions that would otherwise be re-argued, one line of reason each. -->
 
+## Scorecard
+
+<!-- Every two weeks, Brain adds one line: dates, product progress in the
+     project's own measure, prompts the owner relayed, and batches that only
+     fixed an earlier batch. If the framework stops paying for itself, say so. -->
+
 ## Parked, and why
 
 <!-- Things deliberately not being done. A fresh session cannot derive this. -->

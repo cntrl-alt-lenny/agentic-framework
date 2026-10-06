@@ -18,7 +18,7 @@ framework file. That record is what makes an update safe:
   never edited and no kept code or configuration file visibly names it (by
   path, quoted file name, or Python import); removals are listed, and anything
   missed is recoverable from git;
-- project-owned files (AGENTS.md, docs/state.md, rounds, CLAUDE.md, ...) are
+- project-owned files (AGENTS.md, docs/state.md, batches, CLAUDE.md, ...) are
   created when missing and otherwise never touched;
 - a project-owned or tool-adapter file an earlier run installed and the project
   then deleted stays deleted (--hooks or --adapter NAME brings it back);
@@ -31,7 +31,7 @@ which files are unedited copies.
 
 It then prints every release's "what an adopter must do" steps between the old
 and new release, and the project checks that still fail. Nothing is committed:
-the result is reviewed and merged like any other round.
+the result is reviewed and merged like any other batch.
 """
 
 from __future__ import annotations
@@ -68,6 +68,8 @@ HOLDER_SUFFIXES = {".py", ".sh", ".json", ".toml", ".yml", ".yaml", ".cfg", ".in
 HOLDER_NAMES = {"Makefile", "justfile"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox", ".wine-lane", ".worktrees"}
 MAX_HOLDER_BYTES = 2_000_000
+ROLE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
+WINDOWS_RESERVED = {"con", "prn", "aux", "nul"} | {f"{p}{n}" for p in ("com", "lpt") for n in range(1, 10)}
 
 
 def _load_fw():
@@ -133,14 +135,14 @@ class Item:
 
 def role_table(workers: list[str], verifier: bool) -> str:
     rows = ["| Seat | Card | Scope |", "|---|---|---|",
-            "| Brain | `docs/agents/roles/brain.md` | Plans, briefs, judges, merges under the merge rule. |"]
+            "| Brain | `docs/agents/roles/brain.md` | Plans batches, writes prompts, judges, merges under the merge rule. |"]
     for name in workers:
         rows.append(
             f"| {name.capitalize()} | `docs/agents/roles/worker.md` | "
             "<!-- what this executor may change --> |"
         )
     if verifier:
-        rows.append("| Verifier | `docs/agents/roles/verifier.md` | Reviews Tier 2 rounds at one exact commit. |")
+        rows.append("| Verifier | `docs/agents/roles/verifier.md` | Reviews Checked batches at one exact commit. |")
     return "\n".join(rows)
 
 
@@ -148,7 +150,7 @@ def adapter_dirs() -> list[str]:
     return sorted(p.name for p in ADAPTERS.iterdir() if (p / "adapter.json").is_file())
 
 
-WORKTREES_IGNORE = """# Seats' linked checkouts (git worktree add .worktrees/<role>-<round>) live
+WORKTREES_IGNORE = """# Seats' linked checkouts (git worktree add .worktrees/<role>-<batch>) live
 # here, inside the project, and are never part of it. Installed by the
 # agentic framework; delete this file if .gitignore already covers .worktrees/.
 *
@@ -178,8 +180,8 @@ def release_items(*, project: str, workers: list[str], verifier: bool, adapters:
     agents = agents.replace("{{PROJECT}}", project).replace("{{ROLE_TABLE}}", role_table(workers, verifier))
     items.append(Item("AGENTS.md", agents, "seed"))
     items.append(Item("docs/state.md", (TEMPLATES / "docs" / "state.md").read_text(encoding="utf-8"), "seed"))
-    items.append(Item("docs/rounds/README.md",
-                      (TEMPLATES / "docs" / "rounds" / "README.md").read_text(encoding="utf-8"), "seed"))
+    items.append(Item("docs/batches/README.md",
+                      (TEMPLATES / "docs" / "batches" / "README.md").read_text(encoding="utf-8"), "seed"))
     items.append(Item(".gitattributes", (TEMPLATES / "gitattributes").read_text(encoding="utf-8"), "seed"))
     if not worktrees_covered:
         items.append(Item(".worktrees/.gitignore", WORKTREES_IGNORE, "seed"))
@@ -610,7 +612,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("adopt: --project is required when adopting")
     workers = [w.strip() for w in args.workers.split(",") if w.strip()]
     for name in workers:
-        fw.check_role(name)
+        if not ROLE_NAME.match(name) or name in WINDOWS_RESERVED:
+            raise SystemExit(f"adopt: role {name!r} must be lower-case letters, digits, '-' or '_', "
+                             "starting with a letter")
     old = load_manifest(target)
     old_release = (old or {}).get("framework", {}).get("release") if old else ("2.x (no record)" if is_legacy(target) else None)
 
@@ -635,7 +639,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {level}: {message}")
     if not args.update:
         print("\nNext: fill in AGENTS.md (what the project is, roles, invariants, evidence,")
-        print("what is enforced), then commit this as the project's first round.")
+        print("what is enforced), then commit this as the project's first batch.")
     return 0
 
 

@@ -20,15 +20,15 @@ so a mistake here spreads.
 | Seat | Card | Scope |
 |---|---|---|
 | Brain | `framework/roles/brain.md` | Triages feedback, plans releases, judges, merges after the owner's yes. |
-| Builder | `framework/roles/worker.md` | Changes the framework as one brief says. |
-| Verifier | `framework/roles/verifier.md` | Reviews every round that changes `framework/`, `tools/` or `templates/` (all Tier 2). |
+| Builder | `framework/roles/worker.md` | Changes the framework as one prompt says. |
+| Verifier | `framework/roles/verifier.md` | Reviews every batch that changes `framework/`, `tools/` or `templates/` (the Checked path). |
 
 ## Invariants
 
 - **The framework serves the projects, not itself.** Change it only for a
-  triaged issue, as [`docs/feedback.md`](docs/feedback.md) describes. After a
-  release, no further release for ten product rounds unless an issue is
-  marked `required`.
+  triaged issue or the owner's request, as [`docs/feedback.md`](docs/feedback.md)
+  describes. A release ships when the owner says yes; there is no freeze.
+  Judge it by the projects' scorecards, not by its own paperwork.
 - **The word budgets hold** (`tests/test_docs.py`). A change that adds words
   removes as many, or raises a budget visibly with the owner's agreement.
 - **Updates stay safe.** `tools/adopt.py --update` never overwrites an edited
@@ -58,4 +58,4 @@ account, so GitHub cannot tell roles apart.
 
 - Standing decisions and the queue: [`docs/state.md`](docs/state.md)
 - How feedback becomes a release: [`docs/feedback.md`](docs/feedback.md)
-- Rounds: `docs/rounds/`
+- Batches: `docs/batches/` (3.x rounds: `docs/rounds/`)

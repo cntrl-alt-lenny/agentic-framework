@@ -33,7 +33,8 @@ Merge rule: owner-approves
 ## Evidence
 
 Run what is relevant to what you changed and paste the real output with its
-exit status (see the framework's rule 7).
+exit status (see the framework's rule 3). The stronger these checks, the less
+work needs a Verifier.
 
 | Changed | Required evidence |
 |---|---|
@@ -52,4 +53,4 @@ exit status (see the framework's rule 7).
 ## Where to look
 
 - Standing decisions and what is parked: [`docs/state.md`](docs/state.md)
-- Rounds, one folder each: [`docs/rounds/`](docs/rounds/)
+- Batch summaries and reviews: [`docs/batches/`](docs/batches/)
