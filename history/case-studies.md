@@ -108,7 +108,7 @@ independent review is not ceremony — it is the only thing that catches them.
 
 ## What the three have in common
 
-Everything in the [constitution](CONSTITUTION.md) that is not topology:
+Everything in the 2.x constitution (since replaced by [the core rules](../framework/FRAMEWORK.md)) that is not topology:
 
 - the owner as product owner, not reviewer;
 - routine technical acceptance delegated to Brain;

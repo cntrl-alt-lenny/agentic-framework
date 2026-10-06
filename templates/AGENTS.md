@@ -36,6 +36,9 @@ Run what is relevant to what you changed and paste the real output with its
 exit status (see the framework's rule 3). The stronger these checks, the less
 work needs a Verifier.
 
+<!-- Checked path: list the kinds of change that also need a Verifier
+     (shared tools, outside facts, anything hard to undo). -->
+
 | Changed | Required evidence |
 |---|---|
 | <!-- path or area --> | <!-- the exact command(s) --> |

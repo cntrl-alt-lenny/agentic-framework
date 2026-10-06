@@ -98,13 +98,13 @@ class ReleaseCheck(TempDirTest):
         path.write_text(json.dumps(record), encoding="utf-8")
         result = fw(project, "status")
         self.assertIn("newer release available: 4.0.0 -- major", result.stdout)
-        self.assertIn("next: ask Brain to plan the update to framework release 4.0.0", result.stdout)
+        self.assertIn("next: ask Brain to apply framework release 4.0.0 (Small path: adopt.py --update)", result.stdout)
         record["framework"]["release"] = "4.0.0"
         tag = self.tmp / "framework"
         git(tag, "tag", "v4.0.1")
         path.write_text(json.dumps(record), encoding="utf-8")
         result = fw(project, "status")
-        # A patch release is proposed too, as a light round (no release is missed).
+        # A patch release is proposed too, as Small-path work (no release is missed).
         self.assertIn("newer release available: 4.0.1 -- minor or patch: update between batches; Brain proposes it",
                       result.stdout)
 

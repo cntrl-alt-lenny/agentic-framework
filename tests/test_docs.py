@@ -1,6 +1,6 @@
 """The framework's text stays small, consistent with its tool, and portable.
 
-The word budgets are the brake on growth: every feedback round that adds a
+The word budgets are the brake on growth: every feedback batch that adds a
 sentence must fit it or remove one. Raising a budget is a visible, reviewed
 change to this file.
 """

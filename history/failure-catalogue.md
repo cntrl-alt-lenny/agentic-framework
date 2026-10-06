@@ -8,7 +8,7 @@ Each entry states the general design lesson, not just the anecdote.
 **This is a historical document.** It names tools and quotes broken text
 deliberately, so that the guards can be shown rejecting real examples rather than
 invented ones. It is out of scope for the provider-neutrality rules that govern
-the normative documents — see [`CONSTITUTION.md`](CONSTITUTION.md).
+the normative documents — see the core rules, now [`framework/FRAMEWORK.md`](../framework/FRAMEWORK.md).
 
 ---
 
