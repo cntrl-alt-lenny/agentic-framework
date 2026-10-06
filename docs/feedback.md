@@ -46,7 +46,9 @@ lose work. A `required` fix ships at once.
    fixes wait for something worth shipping. There is no fixed freeze; the
    owner decides when.
 6. **Release.** The owner says yes to the merge; Brain tags `vX.Y.Z` and adds
-   the CHANGELOG entry with "What an adopter must do". Projects see the
+   the CHANGELOG entry with "What an adopter must do", and publishes that
+   entry as the GitHub release for the tag (the Releases page shows only
+   published releases, not bare tags). Projects see the
    release in `fw.py status`; nobody needs to announce it.
 
 Major versions change how work runs and need an update before a project's
