@@ -65,6 +65,29 @@ class WorkNotMerged(BatchTest):
         self.assertIn("batch 07-menus: Worker summary in", out)
         self.assertIn("next: ask Brain to review batch 07-menus", out)
 
+    def test_a_branch_editing_an_existing_batch_file_is_not_called_merged(self) -> None:
+        # Re-review of 4.0: an edit to a merged summary is new, unmerged work.
+        self.deliver_worker("worker", "05-old")
+        self.squash_merge("worker/05-old")
+        fixer = self.clone(self.origin, "fixer")
+        git(fixer, "switch", "-q", "-c", "brain/fix-05")
+        (fixer / "docs/batches/05-old.md").write_text("# Corrected summary\n", encoding="utf-8")
+        self.commit_all(fixer, "Correct the summary")
+        git(fixer, "push", "-q", "-u", "origin", "brain/fix-05")
+        out = self.status()
+        self.assertNotIn("merged earlier", out)
+        self.assertIn("next: ask Brain to review batch 05-old", out)
+
+    def test_a_verifier_on_its_own_branch_is_found(self) -> None:
+        self.deliver_worker("worker", "08-split")
+        verifier = self.clone(self.origin, "verifier")
+        git(verifier, "switch", "-q", "-c", "claude/verify-xyz", "origin/worker/08-split")
+        (verifier / "docs/batches/08-split-review.md").write_text("# Review\n", encoding="utf-8")
+        self.commit_all(verifier, "Review")
+        git(verifier, "push", "-q", "-u", "origin", "claude/verify-xyz")
+        self.assertIn("claude/verify-xyz: 3 commit(s)", self.status())
+        self.assertIn("batch 08-split: Verifier review in", self.status())
+
     def test_fixes_after_a_review_are_not_shown_as_judged(self) -> None:
         self.deliver_worker("worker", "09-fix")
         self.deliver_review("verifier", "09-fix")

@@ -350,7 +350,10 @@ def batches_lines(root: Path) -> tuple[list[str], str]:
         label = f"{name} (this machine's copy)" if local and twin in tips else name
         changed = changed_on(root, base, ref, BATCHES) | changed_on(root, base, ref, LEGACY_ROUNDS)
         fork = git(["merge-base", base, ref], root).stdout.strip()
-        papers = set(out(["diff", "--name-only", "--no-renames", fork, ref, "--", BATCHES], root).split()) if fork else set()
+        # The batch files this branch created; all of them on the base means
+        # the batch was merged. Editing or deleting existing ones proves nothing.
+        papers = set(out(["diff", "--name-only", "--no-renames", "--diff-filter=A", fork, ref, "--", BATCHES],
+                         root).split()) if fork else set()
         if papers and papers <= on_base:
             last = out(["log", "-1", "--format=%H", ref, "--", *sorted(papers)], root)
             later = out(["rev-list", "--count", f"{last}..{ref}"], root)
