@@ -39,7 +39,9 @@ then running real product rounds on it.
 1. **Each project takes 3.1.0** in its own Tier 1 update round, as the 3.1.0
    CHANGELOG entry describes (released 2026-09-28, rounds 025 and 026).
 2. **Ten product rounds with no framework release.** Then review where time
-   actually went, with numbers. Issues #31 and #32 wait for that batch.
+   actually went, with numbers. Issues #31, #32 and #36 wait for that batch,
+   along with round 027's Brain card wording for #37 (merged 2026-10-03, not
+   yet released).
 
 ## Deliberately not done
 
