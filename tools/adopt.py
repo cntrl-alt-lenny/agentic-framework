@@ -5,7 +5,10 @@
                            [--verifier] [--adapter NAME]... [--hooks] [--dry-run]
     python3 tools/adopt.py <project> --update [--adapter NAME]... [--dry-run]
 
-Run it from a clone of the framework checked out at the release you want.
+Run it from a clone of the framework checked out at the release you want. It
+writes nothing unless that checkout is exactly the tag its VERSION names, so a
+project never gets unreleased files under a release's name (--unreleased
+overrides this, for testing the framework itself).
 
 What it installs is recorded in the project's docs/agents/framework.json: the
 release, the repository, the options chosen, and a SHA-256 fingerprint of every
@@ -92,6 +95,24 @@ def framework_version() -> str:
     if not fw.version_tuple(text):
         raise SystemExit(f"adopt: VERSION {text!r} is not X.Y.Z")
     return text
+
+
+def release_problem() -> str | None:
+    """Why this checkout is not exactly the release VERSION names, or None."""
+    tag = f"v{framework_version()}"
+
+    def git_out(*args: str) -> str | None:
+        result = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=False)
+        return result.stdout if result.returncode == 0 else None
+
+    tags = git_out("tag", "--points-at", "HEAD")
+    if tags is None:
+        return f"this framework folder is not a git clone, so it cannot be confirmed as release {tag}"
+    if tag not in tags.split():
+        return f"this framework checkout is not at the {tag} tag that its VERSION names"
+    if git_out("status", "--porcelain", "--untracked-files=no"):
+        return f"this framework checkout has uncommitted changes on top of {tag}"
+    return None
 
 
 def framework_repository() -> str:
@@ -604,7 +625,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hooks", action="store_true", help="install a sample pre-push hook")
     parser.add_argument("--update", action="store_true", help="update an adopted project to this release")
     parser.add_argument("--dry-run", action="store_true", help="print the plan and write nothing")
+    parser.add_argument("--unreleased", action="store_true",
+                        help="allow a checkout that is not exactly a release tag (framework tests only)")
     args = parser.parse_args(argv)
+    problem = None if args.unreleased else release_problem()
+    if problem and not args.dry_run:
+        raise SystemExit(f"adopt: {problem}. Check out the release first (git checkout "
+                         f"v{framework_version()}), so the project gets exactly the files its record names.")
 
     target = Path(args.target).resolve()
     if not target.is_dir():
@@ -630,6 +657,8 @@ def main(argv: list[str] | None = None) -> int:
             for version, text in steps:
                 print(f"\n--- {version} ---\n{text}")
     if args.dry_run:
+        if problem:
+            print(f"\nwarning: {problem}; a real run would refuse.")
         print("\ndry run: nothing written")
         return 0
     apply(plan)

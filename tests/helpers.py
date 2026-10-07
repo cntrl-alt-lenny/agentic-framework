@@ -60,8 +60,11 @@ def git(cwd: Path, *args: str, check: bool = True) -> str:
     return run(["git", *args], cwd, check=check).stdout.strip()
 
 
-def adopt(target: Path, *extra: str) -> subprocess.CompletedProcess:
-    return run([PYTHON, str(ROOT / "tools" / "adopt.py"), str(target), *extra], ROOT, check=False)
+def adopt(target: Path, *extra: str, root: Path = ROOT, unreleased: bool = True) -> subprocess.CompletedProcess:
+    """Run adopt.py from ``root``. Tests run from a working tree, not a release
+    tag, so they pass --unreleased unless a test is about that check."""
+    flags = ["--unreleased"] if unreleased else []
+    return run([PYTHON, str(root / "tools" / "adopt.py"), str(target), *extra, *flags], root, check=False)
 
 
 def fw(cwd: Path, *args: str) -> subprocess.CompletedProcess:

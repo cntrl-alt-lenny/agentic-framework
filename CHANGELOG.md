@@ -5,6 +5,28 @@ move to it. `tools/adopt.py --update` prints the "What an adopter must do"
 section of every release between a project's pinned release and the new one.
 Releases are tagged by Brain after the batch that produces them merges.
 
+## 4.0.1 — the release projects already have
+
+The 4.0 rollout on 2026-10-06 ran `adopt.py` from the framework's main branch
+after the 3.x wording sweep (#46) had merged, so five projects got that later
+`fw.py` while their record said 4.0.0. This release is that same content, so
+their files now match a real release. The differences from 4.0.0 are wording
+only: `fw.py`'s docstring and two `status` messages, the template's batches
+README and Checked-path comment, and one line `adopt.py` prints.
+
+- **`adopt.py` installs only a release.** It writes nothing unless the
+  framework checkout is exactly the tag its `VERSION` names, with no
+  uncommitted changes; a dry run says so and continues. `--unreleased`
+  overrides it, for the framework's own tests.
+
+Size: `fw.py` and the role cards unchanged; `adopt.py` 30 lines added.
+
+### What an adopter must do
+
+Nothing beyond the update itself. Brain runs `tools/adopt.py <project>
+--update` from a clone of the framework at `v4.0.1`. A project that got the
+later `fw.py` on 2026-10-06 sees only its record change to 4.0.1.
+
 ## 4.0.0 — the slim framework
 
 Under 3.x the paperwork outweighed the work. Six projects wrote about 206,000

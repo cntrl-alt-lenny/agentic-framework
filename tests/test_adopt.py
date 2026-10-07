@@ -389,3 +389,40 @@ class RealProjectLayouts(BatchTest):
         result = fw(self.brain, "status", "--offline", "--leaving")
         self.assertIn("can be removed: .worktrees/worker-080", result.stdout)
         self.assertEqual(result.returncode, 0, result.stdout)
+
+
+class ReleaseCheck(TempDirTest):
+    """A project's record names a release, so its files must be that release's
+    (2026-10-07: five projects got later main's fw.py labelled 4.0.0)."""
+
+    def framework_copy(self) -> Path:
+        copy = self.tmp / "framework"
+        shutil.copytree(ROOT, copy, ignore=shutil.ignore_patterns(".git", "__pycache__", ".ruff_cache"))
+        self.init_repo(copy)
+        self.commit_all(copy, "framework")
+        return copy
+
+    def test_only_an_exact_release_tag_is_installed(self) -> None:
+        framework = self.framework_copy()
+        target = self.init_repo(self.tmp / "project")
+        tag = "v" + (ROOT / "VERSION").read_text().strip()
+
+        result = adopt(target, "--project", "Demo", root=framework, unreleased=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"not at the {tag} tag", result.stderr)
+        self.assertFalse((target / "tools/fw.py").exists())
+
+        result = adopt(target, "--project", "Demo", "--dry-run", root=framework, unreleased=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("a real run would refuse", result.stdout)
+
+        git(framework, "tag", "-a", tag, "-m", "release")
+        with (framework / "framework/FRAMEWORK.md").open("a", encoding="utf-8") as handle:
+            handle.write("Edited.\n")
+        result = adopt(target, "--project", "Demo", root=framework, unreleased=False)
+        self.assertIn("uncommitted changes", result.stderr)
+
+        git(framework, "checkout", "--", "framework/FRAMEWORK.md")
+        result = adopt(target, "--project", "Demo", root=framework, unreleased=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((target / "tools/fw.py").is_file())
