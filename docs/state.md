@@ -5,7 +5,7 @@ was decided against. No live state: run `python3 tools/fw.py status`.
 
 ## Where we are going
 
-Release 4.0.0 replaces rounds with batches: a short prompt, a Worker that
+Release 4.0 replaces rounds with batches: a short prompt, a Worker that
 checks its own work, Brain's review, and a Verifier only on the Checked path.
 The rules shrank from about 3,100 words to about 1,300. The next job is
 rolling it out and measuring whether it pays for itself in each project.
@@ -42,11 +42,36 @@ The framework's scorecard is its projects' scorecards. First review due
 
 ## Queued, in order
 
-1. **Try 4.0 on mgs-mc-modkit first**, then the other projects.
-   gx-spirit-caller finishes its light-workflow trial (ends 2026-10-20)
-   before it updates.
-2. **Two-week scorecards** in each project decide what 4.x changes next.
-   Issues #31, #32 and #36 wait for that review.
+1. **Finish release-pin alignment between product batches.** Each project's
+   Brain applies published releases from their exact clean tag, preserves
+   project-owned guidance, checks the result, and seeks its owner's merge
+   approval. Do not duplicate another Brain's update.
+2. **Recheck outstanding feedback against 4.0.1**, without changing shared
+   tools or shipping a release: UTF-16 privacy scanning (#31), retired-hook
+   manifest wording (#36), and submodule checkout cleanup (#43). Keep
+   reproductions synthetic and separate a missed scan from actual disclosure.
+   Brain judges the evidence before proposing any fix.
+3. **Two-week scorecards** in each project decide what changes next. Keep
+   2026-10-20 as the first evaluation date, including Spirit Caller's light
+   workflow results. Product progress, owner relay counts and corrective
+   batches are separate measures; missing measurements remain unknown.
+
+## Historical anchors
+
+- **Rollout refresh, 2026-10-08.** GitHub's default branches for edopro-next,
+  edopro-retro-formats, fe6-next, fire-emblem-awakening-assistant,
+  gx-spirit-caller and mgs-mc-modkit all recorded 4.0.0 when inspected.
+  Spirit Caller has adopted 4.0; the earlier instruction to defer adoption
+  until 20 October is obsolete. Its evaluation date still stands.
+- **Published release, 2026-10-07.** 4.0.1 aligns release records with the
+  rollout's files and restricts installation to a clean release tag.
+- **Old rounds closed, 2026-10-06.** Rounds 028 and 029 were closed unmerged
+  when 4.0 removed the commands they repaired, as recorded in issue #32.
+  Their branches remain historical evidence, even when `status` lists them.
+  Preserve their work and checkouts; deletion needs the owner's decision.
+- **Pilot evidence.** The separate Spirit Caller findings branch records
+  early results before the 4.0 decision. It is historical evidence, not a
+  pending instruction to repeat or delay adoption. It remains preserved.
 
 ## Parked, and why
 
