@@ -1,0 +1,380 @@
+Source baseline: 06a7d45e45751c40809d6644ea4503ec61cef709
+Platform: Darwin arm64 Python 3.9.6
+$ (cwd=<SOURCE>) git --version
+git version 2.55.0
+exit: 0
+$ (cwd=<FIXTURES>) git clone --local --no-hardlinks <SOURCE> <FIXTURES>/release
+Cloning into '<FIXTURES>/release'...
+done.
+exit: 0
+$ (cwd=<FIXTURES>/release) git checkout --detach v4.0.1
+HEAD is now at 06a7d45 Release 4.0.1: match what projects got; adopt.py installs only a release tag (#48)
+exit: 0
+$ (cwd=<FIXTURES>/release) git rev-parse HEAD
+06a7d45e45751c40809d6644ea4503ec61cef709
+exit: 0
+$ (cwd=<FIXTURES>/release) git status --porcelain
+
+exit: 0
+
+ISSUE 31: one payload per independent check; BOM on both UTF-16 variants
+$ (cwd=<FIXTURES>/privacy) git init -b main
+Initialized empty Git repository in /private<FIXTURES>/privacy/.git/
+exit: 0
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/privacy --project "Synthetic fixture"
+adopt: /private<FIXTURES>/privacy -> agentic-framework 4.0.1
+  create  docs/agents/FRAMEWORK.md
+  create  docs/agents/roles/brain.md
+  create  docs/agents/roles/worker.md
+  create  docs/agents/roles/verifier.md
+  create  tools/fw.py
+  create  tests/test_framework.py
+  create  AGENTS.md
+  create  docs/state.md
+  create  docs/batches/README.md
+  create  .gitattributes
+  create  .worktrees/.gitignore
+  create  tests/__init__.py
+  record  docs/agents/framework.json
+
+Next: fill in AGENTS.md (what the project is, roles, invariants, evidence,
+what is enforced), then commit this as the project's first batch.
+exit: 0
+$ (cwd=<FIXTURES>/privacy) git add .
+
+exit: 0
+$ (cwd=<FIXTURES>/privacy) git commit -m "Adopt published baseline"
+[main (root-commit) 70d003d] Adopt published baseline
+ 13 files changed, 1068 insertions(+)
+ create mode 100644 .gitattributes
+ create mode 100644 .worktrees/.gitignore
+ create mode 100644 AGENTS.md
+ create mode 100644 docs/agents/FRAMEWORK.md
+ create mode 100644 docs/agents/framework.json
+ create mode 100644 docs/agents/roles/brain.md
+ create mode 100644 docs/agents/roles/verifier.md
+ create mode 100644 docs/agents/roles/worker.md
+ create mode 100644 docs/batches/README.md
+ create mode 100644 docs/state.md
+ create mode 100644 tests/__init__.py
+ create mode 100644 tests/test_framework.py
+ create mode 100755 tools/fw.py
+exit: 0
+CASE: docs/batches/03-probe/attachments/log.txt utf-8 synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+error: docs/batches/03-probe/attachments/log.txt:1 contains a Windows user folder; the documents agents read (AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md, docs/batches/**, and 3.x rounds: docs/rounds/*/*.md and docs/rounds/*/attachments/**) must work on every machine and are public
+error: docs/batches/03-probe/attachments/log.txt:2 contains an email address; the documents agents read (AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md, docs/batches/**, and 3.x rounds: docs/rounds/*/*.md and docs/rounds/*/attachments/**) must work on every machine and are public
+2 error(s), 0 warning(s)
+exit: 1
+CASE: docs/batches/03-probe/attachments/log.txt utf-16-le synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+0 error(s), 0 warning(s)
+exit: 0
+CASE: docs/batches/03-probe/attachments/log.txt utf-16-be synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+0 error(s), 0 warning(s)
+exit: 0
+CASE: docs/rounds/003-probe/attachments/log.txt utf-8 synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+error: docs/rounds/003-probe/attachments/log.txt:1 contains a Windows user folder; the documents agents read (AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md, docs/batches/**, and 3.x rounds: docs/rounds/*/*.md and docs/rounds/*/attachments/**) must work on every machine and are public
+error: docs/rounds/003-probe/attachments/log.txt:2 contains an email address; the documents agents read (AGENTS.md, CLAUDE.md, GEMINI.md, docs/state.md, docs/agents/**/*.md, docs/batches/**, and 3.x rounds: docs/rounds/*/*.md and docs/rounds/*/attachments/**) must work on every machine and are public
+2 error(s), 0 warning(s)
+exit: 1
+CASE: docs/rounds/003-probe/attachments/log.txt utf-16-le synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+0 error(s), 0 warning(s)
+exit: 0
+CASE: docs/rounds/003-probe/attachments/log.txt utf-16-be synthetic Windows path and reserved-domain email
+$ (cwd=<FIXTURES>/privacy) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py check
+0 error(s), 0 warning(s)
+exit: 0
+Payload remains decodable; check neither publishes nor removes it. No real disclosure tested.
+
+ISSUE 36: deletion followed by two dry-run/apply cycles
+$ (cwd=<FIXTURES>/hooks) git init -b main
+Initialized empty Git repository in /private<FIXTURES>/hooks/.git/
+exit: 0
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/hooks --project "Synthetic fixture" --hooks
+adopt: /private<FIXTURES>/hooks -> agentic-framework 4.0.1
+  create  docs/agents/FRAMEWORK.md
+  create  docs/agents/roles/brain.md
+  create  docs/agents/roles/worker.md
+  create  docs/agents/roles/verifier.md
+  create  tools/fw.py
+  create  tests/test_framework.py
+  create  AGENTS.md
+  create  docs/state.md
+  create  docs/batches/README.md
+  create  .gitattributes
+  create  .worktrees/.gitignore
+  create  tests/__init__.py
+  create  .githooks/pre-push
+  record  docs/agents/framework.json
+
+Next: fill in AGENTS.md (what the project is, roles, invariants, evidence,
+what is enforced), then commit this as the project's first batch.
+exit: 0
+$ (cwd=<FIXTURES>/hooks) git add .
+
+exit: 0
+$ (cwd=<FIXTURES>/hooks) git commit -m "Adopt published baseline"
+[main (root-commit) f2fff05] Adopt published baseline
+ 14 files changed, 1124 insertions(+)
+ create mode 100644 .gitattributes
+ create mode 100755 .githooks/pre-push
+ create mode 100644 .worktrees/.gitignore
+ create mode 100644 AGENTS.md
+ create mode 100644 docs/agents/FRAMEWORK.md
+ create mode 100644 docs/agents/framework.json
+ create mode 100644 docs/agents/roles/brain.md
+ create mode 100644 docs/agents/roles/verifier.md
+ create mode 100644 docs/agents/roles/worker.md
+ create mode 100644 docs/batches/README.md
+ create mode 100644 docs/state.md
+ create mode 100644 tests/__init__.py
+ create mode 100644 tests/test_framework.py
+ create mode 100755 tools/fw.py
+exit: 0
+$ (cwd=<FIXTURES>/hooks) git add -u
+
+exit: 0
+$ (cwd=<FIXTURES>/hooks) git commit -m "Retire synthetic hook"
+[main c896610] Retire synthetic hook
+ 1 file changed, 53 deletions(-)
+ delete mode 100755 .githooks/pre-push
+exit: 0
+UPDATE CYCLE: 1
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/hooks --update --dry-run
+update: /private<FIXTURES>/hooks -> agentic-framework 4.0.1 (from 4.0.1)
+  same    docs/agents/FRAMEWORK.md
+  same    docs/agents/roles/brain.md
+  same    docs/agents/roles/worker.md
+  same    docs/agents/roles/verifier.md
+  same    tools/fw.py
+  same    tests/test_framework.py
+  same    docs/state.md
+  same    docs/batches/README.md
+  same    .gitattributes
+  same    .worktrees/.gitignore
+  keep    AGENTS.md  (project-owned)
+  gone    .githooks/pre-push  (deleted in this project, so not re-created)
+nothing to do: this project already matches agentic-framework 4.0.1
+
+dry run: nothing written
+exit: 0
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/hooks --update
+update: /private<FIXTURES>/hooks -> agentic-framework 4.0.1 (from 4.0.1)
+  same    docs/agents/FRAMEWORK.md
+  same    docs/agents/roles/brain.md
+  same    docs/agents/roles/worker.md
+  same    docs/agents/roles/verifier.md
+  same    tools/fw.py
+  same    tests/test_framework.py
+  same    docs/state.md
+  same    docs/batches/README.md
+  same    .gitattributes
+  same    .worktrees/.gitignore
+  keep    AGENTS.md  (project-owned)
+  gone    .githooks/pre-push  (deleted in this project, so not re-created)
+nothing to do: this project already matches agentic-framework 4.0.1
+exit: 0
+hook exists: False hooks option: True hook record: {'kind': 'seed'}
+UPDATE CYCLE: 2
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/hooks --update --dry-run
+update: /private<FIXTURES>/hooks -> agentic-framework 4.0.1 (from 4.0.1)
+  same    docs/agents/FRAMEWORK.md
+  same    docs/agents/roles/brain.md
+  same    docs/agents/roles/worker.md
+  same    docs/agents/roles/verifier.md
+  same    tools/fw.py
+  same    tests/test_framework.py
+  same    docs/state.md
+  same    docs/batches/README.md
+  same    .gitattributes
+  same    .worktrees/.gitignore
+  keep    AGENTS.md  (project-owned)
+  gone    .githooks/pre-push  (deleted in this project, so not re-created)
+nothing to do: this project already matches agentic-framework 4.0.1
+
+dry run: nothing written
+exit: 0
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/hooks --update
+update: /private<FIXTURES>/hooks -> agentic-framework 4.0.1 (from 4.0.1)
+  same    docs/agents/FRAMEWORK.md
+  same    docs/agents/roles/brain.md
+  same    docs/agents/roles/worker.md
+  same    docs/agents/roles/verifier.md
+  same    tools/fw.py
+  same    tests/test_framework.py
+  same    docs/state.md
+  same    docs/batches/README.md
+  same    .gitattributes
+  same    .worktrees/.gitignore
+  keep    AGENTS.md  (project-owned)
+  gone    .githooks/pre-push  (deleted in this project, so not re-created)
+nothing to do: this project already matches agentic-framework 4.0.1
+exit: 0
+hook exists: False hooks option: True hook record: {'kind': 'seed'}
+$ (cwd=<FIXTURES>/hooks) git status --porcelain
+
+exit: 0
+
+ISSUE 43: tracked initialized submodule, clean merged seat
+$ (cwd=<FIXTURES>/sub-source) git init -b main
+Initialized empty Git repository in /private<FIXTURES>/sub-source/.git/
+exit: 0
+$ (cwd=<FIXTURES>/sub-source) git add .
+
+exit: 0
+$ (cwd=<FIXTURES>/sub-source) git commit -m "Submodule fixture"
+[main (root-commit) 32f2f93] Submodule fixture
+ 1 file changed, 1 insertion(+)
+ create mode 100644 data.txt
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git init -b main
+Initialized empty Git repository in /private<FIXTURES>/submodules/.git/
+exit: 0
+$ (cwd=<FIXTURES>/release) /Library/Developer/CommandLineTools/usr/bin/python3 <FIXTURES>/release/tools/adopt.py <FIXTURES>/submodules --project "Synthetic fixture"
+adopt: /private<FIXTURES>/submodules -> agentic-framework 4.0.1
+  create  docs/agents/FRAMEWORK.md
+  create  docs/agents/roles/brain.md
+  create  docs/agents/roles/worker.md
+  create  docs/agents/roles/verifier.md
+  create  tools/fw.py
+  create  tests/test_framework.py
+  create  AGENTS.md
+  create  docs/state.md
+  create  docs/batches/README.md
+  create  .gitattributes
+  create  .worktrees/.gitignore
+  create  tests/__init__.py
+  record  docs/agents/framework.json
+
+Next: fill in AGENTS.md (what the project is, roles, invariants, evidence,
+what is enforced), then commit this as the project's first batch.
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git add .
+
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git commit -m "Adopt published baseline"
+[main (root-commit) 6a5c85c] Adopt published baseline
+ 13 files changed, 1068 insertions(+)
+ create mode 100644 .gitattributes
+ create mode 100644 .worktrees/.gitignore
+ create mode 100644 AGENTS.md
+ create mode 100644 docs/agents/FRAMEWORK.md
+ create mode 100644 docs/agents/framework.json
+ create mode 100644 docs/agents/roles/brain.md
+ create mode 100644 docs/agents/roles/verifier.md
+ create mode 100644 docs/agents/roles/worker.md
+ create mode 100644 docs/batches/README.md
+ create mode 100644 docs/state.md
+ create mode 100644 tests/__init__.py
+ create mode 100644 tests/test_framework.py
+ create mode 100755 tools/fw.py
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git -c protocol.file.allow=always submodule add <FIXTURES>/sub-source module
+Cloning into '/private<FIXTURES>/submodules/module'...
+done.
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git commit -am "Track submodule"
+[main f8980a1] Track submodule
+ 2 files changed, 4 insertions(+)
+ create mode 100644 .gitmodules
+ create mode 160000 module
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git add .gitignore
+
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git commit -m "Ignore fixture seats"
+[main 9f35d9d] Ignore fixture seats
+ 1 file changed, 1 insertion(+)
+ create mode 100644 .gitignore
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git worktree add -b worker/03-probe <FIXTURES>/submodules/.worktrees/worker-03-probe
+Preparing worktree (new branch 'worker/03-probe')
+HEAD is now at 9f35d9d Ignore fixture seats
+exit: 0
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git -c protocol.file.allow=always submodule update --init
+Cloning into '/private<FIXTURES>/submodules/.worktrees/worker-03-probe/module'...
+done.
+Submodule path 'module': checked out '32f2f93258d0913a640dd8680f0f6eddf9271fe6'
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git add .
+
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git commit -m "Advance main"
+[main 469c776] Advance main
+ 1 file changed, 1 insertion(+)
+ create mode 100644 advance.txt
+exit: 0
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git status --porcelain --untracked-files=all
+
+exit: 0
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git rev-parse HEAD
+9f35d9d7b47504ea35d0a7da16df1f9c3ed24dd0
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git merge-base --is-ancestor 9f35d9d7b47504ea35d0a7da16df1f9c3ed24dd0 main
+
+exit: 0
+$ (cwd=<FIXTURES>/submodules) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py status --offline
+Framework
+  pinned to agentic-framework 4.0.1 (https://github.com/cntrl-alt-lenny/agentic-framework)
+  newer releases: not checked
+Merge rule
+  owner-approves
+Work not merged yet
+  nothing waiting: every branch is merged
+This machine
+  on main; no uncommitted changes
+  no 'origin' remote: nothing here is backed up anywhere else
+  finished checkouts (clean, and their work is merged) that can be removed: .worktrees/worker-03-probe -- git worktree remove <folder>
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: nothing is waiting on you; ask Brain for the next batch
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git worktree remove <FIXTURES>/submodules/.worktrees/worker-03-probe
+fatal: working trees containing submodules cannot be moved or removed
+exit: 128
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git submodule deinit module
+Cleared directory 'module'
+Submodule 'module' (<FIXTURES>/sub-source) unregistered for path 'module'
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git worktree remove <FIXTURES>/submodules/.worktrees/worker-03-probe
+fatal: working trees containing submodules cannot be moved or removed
+exit: 128
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git -c protocol.file.allow=always submodule update --init
+Submodule 'module' (<FIXTURES>/sub-source) registered for path 'module'
+Submodule path 'module': checked out '32f2f93258d0913a640dd8680f0f6eddf9271fe6'
+exit: 0
+$ (cwd=<FIXTURES>/submodules/.worktrees/worker-03-probe) git status --porcelain --untracked-files=all
+ M module
+exit: 0
+$ (cwd=<FIXTURES>/submodules) /Library/Developer/CommandLineTools/usr/bin/python3 tools/fw.py status --offline
+Framework
+  pinned to agentic-framework 4.0.1 (https://github.com/cntrl-alt-lenny/agentic-framework)
+  newer releases: not checked
+Merge rule
+  owner-approves
+Work not merged yet
+  nothing waiting: every branch is merged
+This machine
+  on main; no uncommitted changes
+  no 'origin' remote: nothing here is backed up anywhere else
+  uncommitted changes in linked checkout /private<FIXTURES>/submodules/.worktrees/worker-03-probe
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: nothing is waiting on you; ask Brain for the next batch
+exit: 0
+$ (cwd=<FIXTURES>/submodules) git worktree remove <FIXTURES>/submodules/.worktrees/worker-03-probe
+fatal: working trees containing submodules cannot be moved or removed
+exit: 128
+Dirty work preserved; no forced worktree removal attempted.
+Guidance in release Brain card:
+4. Show the merge card, merge, delete the branch, and remove finished
+   checkouts `status` lists.
+All issue assertions passed. Temporary synthetic fixtures are discarded on exit.
