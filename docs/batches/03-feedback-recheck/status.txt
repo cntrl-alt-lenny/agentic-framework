@@ -1,0 +1,26 @@
+Checked commit: 228c8fdc304c05c4624a84926c2e6f1f6cc210b2
+$ python3 tools/fw.py status
+Framework
+  this is the framework repository itself, at release 4.0.1
+Merge rule
+  owner-approves
+Work not merged yet
+  worker/03-feedback-recheck: 1 commit(s), last 2026-10-09; batch 03-feedback-recheck: Worker summary in -- Brain reviews it, or sends the Verifier prompt if this is a Checked batch
+  brain/project-refresh-2026-10-08: 1 commit(s), last 2026-10-08; batch 02-project-refresh: Worker summary in -- Brain reviews it, or sends the Verifier prompt if this is a Checked batch
+  claude/project-thread-b0dq7j: 1 commit(s), last 2026-10-06; no summary yet: still working, or stopped without one
+  brain/spirit-caller-pilot-findings: 1 commit(s), last 2026-10-06; Brain's own change (Small path): ready for your yes, or still being written
+  verifier/029-successor-review-records: 19 commit(s), last 2026-10-05; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+  builder/029-successor-review-records: 18 commit(s), last 2026-10-05; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+  brain/029-successor-review-records: 15 commit(s), last 2026-10-03; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+  verifier/028-reliable-handoffs: 13 commit(s), last 2026-10-03; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+  builder/028-reliable-handoffs: 12 commit(s), last 2026-10-03; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+  brain/028-reliable-handoffs: 1 commit(s), last 2026-10-03; a release 3.x round (reports under docs/rounds/) -- Brain finishes it the old way or closes it
+This machine
+  on worker/03-feedback-recheck; no uncommitted changes
+  not on GitHub yet: worker/03-feedback-recheck (1 commit(s))
+  safe to leave this machine: NO -- push or deal with the items above first
+Checks
+  all project checks pass
+Command form on this machine: python3 tools/fw.py <command>
+next: ask Brain to review batch 03-feedback-recheck
+exit: 0

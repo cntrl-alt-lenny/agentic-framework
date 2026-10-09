@@ -38,9 +38,13 @@ and discards only its temporary fixtures. No network is needed.
   A dirty-submodule control is reported dirty, omitted from the removable
   list, and retains its contents after refused removal. No force was tried.
 
-Required suite, lint and framework-check results are recorded separately in
-`checks.txt`, naming the literal checked snapshot. Initial status passed;
-its historical branches were left alone as instructed by Brain's state.
+Required checks passed at evidence snapshot
+`228c8fdc304c05c4624a84926c2e6f1f6cc210b2`: 69 tests, required ruff selection,
+and framework check (zero errors/warnings). `checks.txt` retains commands,
+outputs and exit statuses; `status.txt` records the same snapshot's status.
+Initial status also passed; historical branches were preserved as instructed
+by Brain's state. The final documentation commit adds these transcripts and
+this validation paragraph; it changes no reproduction or product code.
 
 ## Not checked
 
