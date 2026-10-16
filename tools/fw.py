@@ -326,8 +326,11 @@ def batch_state(root: Path, ref: str, name: str, changed: set[str]) -> tuple[str
         return (f"a release 3.x round (reports under {LEGACY_ROUNDS}/) -- Brain finishes it the old way or closes it",
                 f"ask Brain what to do with {name}")
     if name.startswith("brain/"):
-        return ("Brain's own change (Small path): ready for your yes, or still being written",
-                f"ask Brain whether {name} is ready for your yes")
+        if merge_rule(root) == "owner-approves":
+            return ("Brain's own change (Small path): ready for your yes, or still being written",
+                    f"ask Brain whether {name} is ready for your yes")
+        return ("Brain's own change (Small path): Brain merges it when done",
+                f"ask Brain to finish and merge {name}")
     return "no summary yet: still working, or stopped without one", ""
 
 
