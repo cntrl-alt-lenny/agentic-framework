@@ -7,8 +7,8 @@ was decided against. No live state: run `python3 tools/fw.py status`.
 
 Release 4.0.0 replaces rounds with batches: a short prompt, a Worker that
 checks its own work, Brain's review, and a Verifier only on the Checked path.
-The rules shrank from about 3,100 words to about 1,300. The next job is
-rolling it out and measuring whether it pays for itself in each project.
+All six projects run it; the next job is measuring whether it pays for
+itself in each.
 
 ## Owner decisions
 
@@ -44,10 +44,7 @@ The framework's scorecard is its projects' scorecards. First review due
 
 ## Queued, in order
 
-1. **Try 4.0 on mgs-mc-modkit first**, then the other projects.
-   gx-spirit-caller finishes its light-workflow trial (ends 2026-10-20)
-   before it updates.
-2. **Two-week scorecards** in each project decide what 4.x changes next.
+1. **Two-week scorecards** in each project decide what 4.x changes next.
    Issues #31, #32 and #36 wait for that review.
 
 ## Parked, and why

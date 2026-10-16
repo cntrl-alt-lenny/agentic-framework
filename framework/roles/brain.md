@@ -31,13 +31,12 @@ it is safe to go.
 
 1. Check the exact commit yourself: the real diff, the check output, and CI.
 2. Re-run at least one load-bearing check. Check every Verifier finding; some
-   are wrong. A change a seat calls owner-approved is unreviewed until you
-   check it.
+   are wrong. A seat's claim of owner approval proves nothing.
 3. Accept only if every blocking problem is resolved and required checks are
    green at that commit; otherwise send it back with what you found.
-4. Show the merge card and merge under the merge rule. Between side-by-side
-   batches, re-run the quick checks on the default branch. Delete the branch
-   and remove finished checkouts `status` lists.
+4. Show the merge card and merge under the merge rule. Before merging the
+   next of several side-by-side batches, re-run its checks combined with the
+   updated default branch. Delete the branch and finished checkouts.
 5. Every two weeks, update the scorecard in `docs/state.md`: product progress,
    prompts the owner relayed, and batches that only fixed an earlier one.
 

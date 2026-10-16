@@ -11,10 +11,9 @@ rules, which take precedence over the framework's.
 
 Merge rule: owner-approves-risky
 
-<!-- owner-approves-risky: Brain merges Small and Normal work itself; Checked
-     batches and releases wait for the owner's yes. owner-approves: every
-     merge waits for that yes. brain-merges: Brain merges all accepted work.
-     Only the owner changes it. -->
+<!-- owner-approves-risky: Brain merges Small and Normal work; Checked
+     batches and releases wait for the owner. Or owner-approves (every merge
+     waits) or brain-merges. Only the owner changes it. -->
 
 ## What this project is
 

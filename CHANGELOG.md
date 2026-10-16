@@ -26,8 +26,8 @@ below on 2026-10-16.
 - **Ship what is ready first.** Finished work that can be merged or released
   goes out before a large new feature starts on top of it.
 
-Size: the core grew from 657 to 671 words and Brain's card from 321 to 376;
-no budget changed. `fw.py` gains one merge rule name.
+Size: the core grew from 657 to 671 words and Brain's card from 321 to 375;
+no budget changed. Net across budgeted files, about 50 words added. `fw.py` gains one merge rule name.
 
 ### What an adopter must do
 
