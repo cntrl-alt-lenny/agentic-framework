@@ -34,8 +34,8 @@ which files are unedited copies.
 
 It then prints every release's "what an adopter must do" steps between the old
 and new release, and the project checks that still fail. Nothing is committed:
-Brain commits the result on a brain/ branch (Small path) and merges it after
-the owner's yes.
+Brain commits the result on a brain/ branch (Small path) and merges it under
+the merge rule.
 """
 
 from __future__ import annotations

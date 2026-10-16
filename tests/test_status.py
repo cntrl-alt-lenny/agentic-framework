@@ -107,6 +107,11 @@ class WorkNotMerged(BatchTest):
         self.commit_all(self.brain, "state")
         git(self.brain, "push", "-q", "-u", "origin", "brain/state-notes")
         git(self.brain, "switch", "-q", "main")
+        self.assertIn("next: ask Brain to finish and merge brain/state-notes", self.status())
+        # Under owner-approves, Small work still waits for the owner's yes.
+        agents = self.brain / "AGENTS.md"
+        agents.write_text(agents.read_text(encoding="utf-8").replace(
+            "Merge rule: owner-approves-risky", "Merge rule: owner-approves"), encoding="utf-8")
         self.assertIn("next: ask Brain whether brain/state-notes is ready for your yes", self.status())
 
     def test_work_in_progress_is_not_called_nothing(self) -> None:

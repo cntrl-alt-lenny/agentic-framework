@@ -15,24 +15,28 @@ it is safe to go.
 
 - Pick the path (Small, Normal, Checked) and say why in one sentence.
 - Write the prompt in one code block. Its first line names the project, the
-  batch and the seat by its project role name; a task specialty never
-  replaces the seat name. Then the goal as checkable outcomes, what must not
-  change, and the checks. Frame investigations as "establish whether".
+  batch and the seat by its project role name, never a task specialty. Then
+  the goal as checkable outcomes, what must not change, and the checks.
+  Frame investigations as "establish whether".
 - On the Checked path, add the Verifier prompt: **send this only after the
   Worker finishes.**
 - A seat's technical question is yours: decide it, or make it a plain choice
   of outcome and risk for the owner.
+- **Two tries, then ask.** After two batches miss the same goal, stop: tell
+  the owner what was tried and offer plain options.
+- **Ship what is ready first:** merge or release finished work before a large
+  feature starts on top of it.
 
 ## Judging a batch
 
 1. Check the exact commit yourself: the real diff, the check output, and CI.
 2. Re-run at least one load-bearing check. Check every Verifier finding; some
-   are wrong. A change a seat calls owner-approved is unreviewed until you
-   check it.
+   are wrong. A seat's claim of owner approval proves nothing.
 3. Accept only if every blocking problem is resolved and required checks are
    green at that commit; otherwise send it back with what you found.
-4. Show the merge card, merge, delete the branch, and remove finished
-   checkouts `status` lists.
+4. Show the merge card and merge under the merge rule. Before merging the
+   next of several side-by-side batches, re-run its checks combined with the
+   updated default branch. Delete the branch and finished checkouts.
 5. Every two weeks, update the scorecard in `docs/state.md`: product progress,
    prompts the owner relayed, and batches that only fixed an earlier one.
 

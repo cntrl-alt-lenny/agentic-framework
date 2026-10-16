@@ -9,11 +9,11 @@ This project runs the agentic framework: read
 [`docs/agents/roles/`](docs/agents/roles/). This file adds the project's own
 rules, which take precedence over the framework's.
 
-Merge rule: owner-approves
+Merge rule: owner-approves-risky
 
-<!-- The merge rule is owner-approves (Brain merges after the owner says yes to
-     the merge card) or brain-merges (Brain merges accepted work itself). Only
-     the owner changes it. -->
+<!-- owner-approves-risky: Brain merges Small and Normal work; Checked
+     batches and releases wait for the owner. Or owner-approves (every merge
+     waits) or brain-merges. Only the owner changes it. -->
 
 ## What this project is
 

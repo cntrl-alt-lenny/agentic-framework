@@ -7,13 +7,15 @@ was decided against. No live state: run `python3 tools/fw.py status`.
 
 Release 4.0.0 replaces rounds with batches: a short prompt, a Worker that
 checks its own work, Brain's review, and a Verifier only on the Checked path.
-The rules shrank from about 3,100 words to about 1,300. The next job is
-rolling it out and measuring whether it pays for itself in each project.
+All six projects run it; the next job is measuring whether it pays for
+itself in each.
 
 ## Owner decisions
 
-- **Merges need the owner's yes** (2026-09-16). This is now the framework's
-  default merge rule, `owner-approves`, with a four-line merge card.
+- **Routine merges are Brain's** (2026-10-16, replacing 2026-09-16's "every
+  merge needs the owner's yes"). The default merge rule is now
+  `owner-approves-risky`: Checked batches and releases still wait for the
+  owner. This repository keeps `owner-approves`.
 - **The owner is not a programmer.** Plain English, no commit ids or git
   jargon unless they matter. Prompts are code blocks, one line per paragraph,
   with the send order stated.
@@ -42,10 +44,7 @@ The framework's scorecard is its projects' scorecards. First review due
 
 ## Queued, in order
 
-1. **Try 4.0 on mgs-mc-modkit first**, then the other projects.
-   gx-spirit-caller finishes its light-workflow trial (ends 2026-10-20)
-   before it updates.
-2. **Two-week scorecards** in each project decide what 4.x changes next.
+1. **Two-week scorecards** in each project decide what 4.x changes next.
    Issues #31, #32 and #36 wait for that review.
 
 ## Parked, and why

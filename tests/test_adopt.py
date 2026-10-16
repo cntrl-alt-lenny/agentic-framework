@@ -32,7 +32,7 @@ class FreshAdoption(TempDirTest):
         agents = (target / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("# Demo", agents)
         self.assertIn("| Builder |", agents)
-        self.assertIn("Merge rule: owner-approves", agents)
+        self.assertIn("Merge rule: owner-approves-risky", agents)
         record = manifest(target)
         self.assertEqual(record["framework"]["release"], (ROOT / "VERSION").read_text().strip())
         self.assertEqual(record["options"], {"adapters": ["claude-code", "gemini"], "hooks": True})
