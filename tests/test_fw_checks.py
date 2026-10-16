@@ -67,8 +67,12 @@ class ProjectChecks(TempDirTest):
 
     def test_merge_rule_must_be_known(self) -> None:
         agents = self.project / "AGENTS.md"
-        agents.write_text(agents.read_text(encoding="utf-8").replace("owner-approves", "whenever"), encoding="utf-8")
+        seeded = agents.read_text(encoding="utf-8")
+        agents.write_text(seeded.replace("owner-approves-risky", "whenever"), encoding="utf-8")
         self.assertIn("merge rule 'whenever'", self.errors())
+        # Projects adopted before 4.1 declare owner-approves; it stays valid.
+        agents.write_text(seeded.replace("owner-approves-risky", "owner-approves"), encoding="utf-8")
+        self.assertNotIn("merge rule", self.errors())
 
     def test_status_names_uninitialised_submodules(self) -> None:
         sub = self.init_repo(self.tmp / "engine")

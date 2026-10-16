@@ -12,8 +12,10 @@ rolling it out and measuring whether it pays for itself in each project.
 
 ## Owner decisions
 
-- **Merges need the owner's yes** (2026-09-16). This is now the framework's
-  default merge rule, `owner-approves`, with a four-line merge card.
+- **Routine merges are Brain's** (2026-10-16, replacing 2026-09-16's "every
+  merge needs the owner's yes"). The default merge rule is now
+  `owner-approves-risky`: Checked batches and releases still wait for the
+  owner. This repository keeps `owner-approves`.
 - **The owner is not a programmer.** Plain English, no commit ids or git
   jargon unless they matter. Prompts are code blocks, one line per paragraph,
   with the send order stated.

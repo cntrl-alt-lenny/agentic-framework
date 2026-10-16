@@ -35,11 +35,13 @@ project's `AGENTS.md` adds its own rules and wins over this file.
 
 ## Merge rule
 
-`AGENTS.md` declares `owner-approves` (the default: Brain merges after the
-owner says yes) or `brain-merges`. Either way Brain shows a four-line
-**merge card**: what changed, what was checked, what was not, and the risk.
-Anything destructive, repository settings, softer checks, licensing and
-large redesigns are always the owner's call.
+`AGENTS.md` declares `owner-approves-risky` (the default: Brain merges
+accepted Small and Normal work; Checked batches and releases wait for the
+owner's yes), `owner-approves` (every merge waits) or `brain-merges`. Brain
+shows a four-line **merge card** for every merge: what changed, what was
+checked, what was not, and the risk. Anything destructive, repository
+settings, softer checks, licensing and large redesigns are always the owner's
+call.
 
 ## How work runs
 

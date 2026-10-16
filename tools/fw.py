@@ -38,7 +38,7 @@ STATE_DOC = "docs/state.md"
 DEFAULT_STATE_WORDS = 1000
 AGENTS_WORDS_WARNING = 2500
 PAPER_WORDS = 500  # a prompt, summary or review: prose only, not output or tables
-MERGE_RULES = ("owner-approves", "brain-merges")
+MERGE_RULES = ("owner-approves-risky", "owner-approves", "brain-merges")
 
 
 class FwError(Exception):
@@ -491,7 +491,7 @@ def cmd_status(root: Path, *, offline: bool, leaving: bool) -> int:
         print(f"  {line}")
     rule = merge_rule(root)
     print("Merge rule")
-    print(f"  {rule or 'not declared in AGENTS.md (the framework default is owner-approves)'}")
+    print(f"  {rule or 'not declared in AGENTS.md (the framework default is owner-approves-risky)'}")
     print("Work not merged yet")
     if warning:
         print(f"  note: {warning}")
@@ -602,7 +602,7 @@ def check_project(root: Path) -> list[tuple[str, str]]:
         text = agents.read_text(encoding="utf-8")
         rule = merge_rule(root)
         if rule is None:
-            findings.append(("warning", "AGENTS.md has no 'Merge rule:' line (owner-approves or brain-merges)"))
+            findings.append(("warning", "AGENTS.md has no 'Merge rule:' line (owner-approves-risky, owner-approves or brain-merges)"))
         elif rule not in MERGE_RULES:
             findings.append(("error", f"AGENTS.md merge rule {rule!r} is not one of {', '.join(MERGE_RULES)}"))
         if words(text) > AGENTS_WORDS_WARNING:

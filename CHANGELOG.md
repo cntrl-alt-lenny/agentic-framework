@@ -5,6 +5,37 @@ move to it. `tools/adopt.py --update` prints the "What an adopter must do"
 section of every release between a project's pinned release and the new one.
 Releases are tagged by Brain after the batch that produces them merges.
 
+## 4.1.0 — Brain merges routine work; two tries, then ask
+
+A week of 4.0 in six projects showed that finished work mostly waited on the
+owner: one project's main branch stood still for six days with two finished
+batches waiting, another had three pull requests open for four days. It also
+showed a third attempt at the same failing goal, and finished fixes held back
+while a new feature was added on top. The owner said yes to both changes
+below on 2026-10-16.
+
+- **New default merge rule, `owner-approves-risky`.** Brain merges Small and
+  Normal work it accepted, with required checks green, and shows the merge
+  card as before. Checked batches and releases still wait for the owner's
+  yes. `owner-approves` (every merge waits) and `brain-merges` stay valid.
+- **Re-check between side-by-side merges.** After merging one of several
+  batches that ran side by side, Brain re-runs the quick checks on the
+  default branch before merging the next.
+- **Two tries, then ask.** After two batches miss the same goal, Brain sends
+  no third; it tells the owner what was tried and offers plain options.
+- **Ship what is ready first.** Finished work that can be merged or released
+  goes out before a large new feature starts on top of it.
+
+Size: the core grew from 657 to 671 words and Brain's card from 321 to 376;
+no budget changed. `fw.py` gains one merge rule name.
+
+### What an adopter must do
+
+Brain runs `tools/adopt.py <project> --update` from a clone of the framework
+at `v4.1.0`, then changes the `AGENTS.md` line to `Merge rule:
+owner-approves-risky`; the owner agreed this for every project on 2026-10-16.
+A project whose owner wants every merge to wait keeps `owner-approves`.
+
 ## 4.0.1 — the release projects already have
 
 The 4.0 rollout on 2026-10-06 ran `adopt.py` from the framework's main branch
